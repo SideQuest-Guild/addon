@@ -54,12 +54,14 @@ class Config:
 
     def save(self) -> None:
         path = config_path()
-        path.write_text(
-            json.dumps({"site_url": self.site_url, "token": self.token}, indent=2),
-            encoding="utf-8",
-        )
-        if os.name != "nt":
-            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)  # 0600
+        payload = json.dumps({"site_url": self.site_url, "token": self.token}, indent=2)
+        # Create the file as 0600 so the token is never readable by other users, even briefly. O_CREAT keeps an
+        # existing file's mode, so tighten that too. Windows ignores the mode; the file sits in the user's own %APPDATA%.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            if os.name != "nt":
+                os.fchmod(f.fileno(), stat.S_IRUSR | stat.S_IWUSR)
+            f.write(payload)
 
 
 @dataclass
