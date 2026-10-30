@@ -95,6 +95,10 @@ local function resetAddon()
     SideQuest.Recorder.ended = false
     SideQuest.Loot.activeBid = nil
     SideQuest.Comm.ResetAnswers()
+    SideQuest.Sync.ResetInboxState()
+    WowStub.isOfficer = false
+    WowStub.officerNoteCalls = 0
+    WowStub.officerKnownAfterCalls = nil
     WowStub.chatLog = {}
     WowStub.addonMessages = {}
 end
@@ -753,6 +757,82 @@ test("console: switching sub-tabs shows only the chosen sub-view (regression for
     SideQuest.UI.ShowConsoleSub("Roster")
     assertTrue(subs["Roster"]:IsShown(), "switching shows Roster")
     assertTrue(not subs["Loot"]:IsShown(), "switching hides the previous sub-view (Loot)")
+end)
+
+--------------------------------------------------------------------------
+-- 9. Staged import ("inbox") from SideQuest Companion
+--------------------------------------------------------------------------
+
+local function buildInboxPayload(generatedAt)
+    return SideQuest.Codec.EncodeImport({
+        v = 1,
+        generated_at = generatedAt,
+        rules = nil,
+        standings = SideQuestJSON.EMPTY_ARRAY,
+        killed_encounters = SideQuestJSON.EMPTY_ARRAY,
+        events = SideQuestJSON.EMPTY_ARRAY,
+    })
+end
+
+local function lastChatLine()
+    return WowStub.chatLog[#WowStub.chatLog]
+end
+
+test("inbox: officer applies the staged import and it is cleared", function()
+    resetAddon()
+    WowStub.isOfficer = true
+    SideQuestDB.standings.generated_at = 100
+    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    assertEq(SideQuestDB.inbox, nil, "inbox cleared")
+    assertEq(SideQuestDB.standings.generated_at, 200, "standings updated from the staged import")
+    assertTrue(lastChatLine():find("Applied the import SideQuest Companion staged") ~= nil, "prints an applied line")
+end)
+
+test("inbox: an import older than current standings is skipped and cleared", function()
+    resetAddon()
+    WowStub.isOfficer = true
+    SideQuestDB.standings.generated_at = 500
+    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    assertEq(SideQuestDB.inbox, nil, "inbox cleared")
+    assertEq(SideQuestDB.standings.generated_at, 500, "standings untouched: the staged import was older")
+    assertTrue(lastChatLine():find("older than what the addon already has") ~= nil, "explains why it was skipped")
+end)
+
+test("inbox: a non-officer never applies it and leaves it for an officer alt", function()
+    resetAddon()
+    WowStub.isOfficer = false
+    SideQuestDB.standings.generated_at = 100
+    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    assertTrue(SideQuestDB.inbox ~= nil, "inbox kept for an officer on the same account")
+    assertEq(SideQuestDB.standings.generated_at, 100, "standings untouched: never applied")
+    assertTrue(lastChatLine():find("Log in on an officer") ~= nil, "says an officer has to apply it")
+    local lines = #WowStub.chatLog
+    SideQuest.Fire("GUILD_ROSTER_UPDATE")
+    assertEq(#WowStub.chatLog, lines, "doesn't repeat itself on later roster updates")
+end)
+
+test("inbox: a malformed payload is discarded with a message", function()
+    resetAddon()
+    WowStub.isOfficer = true
+    SideQuestDB.inbox = { payload = "not an import string", generated_at = 200, staged_at = 250 }
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    assertEq(SideQuestDB.inbox, nil, "inbox cleared")
+    assertTrue(lastChatLine():find("could not be read") ~= nil, "explains it could not be read")
+end)
+
+test("inbox: officer status unknown at first, then known on retry", function()
+    resetAddon()
+    SideQuestDB.standings.generated_at = 100
+    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    -- guild roster/officer-note perms take a couple of ticks to load after login
+    WowStub.officerKnownAfterCalls = 3
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    assertEq(SideQuestDB.inbox, nil, "inbox cleared once officer status resolves")
+    assertEq(SideQuestDB.standings.generated_at, 200, "staged import applied once officer status was known")
+    assertTrue(WowStub.officerNoteCalls >= 3, "retried until officer status was known")
 end)
 
 --------------------------------------------------------------------------

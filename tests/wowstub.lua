@@ -120,6 +120,12 @@ end
 
 C_GuildInfo = {
     CanEditOfficerNote = function()
+        -- officerKnownAfterCalls simulates guild roster/officer-note perms
+        -- not being known for the first few calls after login.
+        WowStub.officerNoteCalls = (WowStub.officerNoteCalls or 0) + 1
+        if WowStub.officerKnownAfterCalls then
+            return WowStub.officerNoteCalls >= WowStub.officerKnownAfterCalls
+        end
         return WowStub.isOfficer
     end,
 }

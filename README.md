@@ -107,14 +107,19 @@ The other Console tabs:
 
 After the raid, the record has to reach the website. Pick whichever is easiest:
 
-1. Type `/sq export`, copy the text and paste it on the [sync page](https://sidequest-guild.com/officers/sync/).
-2. Upload the addon's save file on the same page. It is at
+1. Run [SideQuest Companion](https://github.com/SideQuest-Guild/companion/releases), a tray app for Windows, macOS
+   and Linux. It watches the save file and uploads a new export the moment WoW writes it, so there's nothing to copy
+   or paste. While WoW is closed it also checks the website for a new import and leaves it ready for an officer, so
+   the next login picks up the new points on its own.
+2. Type `/sq export`, copy the text and paste it on the [sync page](https://sidequest-guild.com/officers/sync/).
+3. Upload the addon's save file on the same page. It is at
    `_classic_beta_/WTF/Account/<your account>/SavedVariables/SideQuest.lua`, and WoW writes it when you log out or type
    `/reload`.
-3. Let `sidequest-sync` upload it for you, as below.
+4. Let `sidequest-sync` upload it for you, as below.
 
-When the website confirms the import, type `/sq export clear` so the next night starts empty. Then click **Import** on
-the sync page's text and paste it with `/sq import`. Once one officer imports, the addon shares the new points with
+When the website confirms the import, type `/sq export clear` so the next night starts empty. SideQuest Companion
+stages the new import on its own, so an officer running it just needs to log in; everyone else clicks **Import** on
+the sync page's text and pastes it with `/sq import`. Once one officer imports, the addon shares the new points with
 every member online.
 
 ### sidequest-sync

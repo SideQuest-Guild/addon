@@ -135,4 +135,92 @@ SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, _sender)
     end
 end)
 
+--------------------------------------------------------------------------
+-- Staged import ("inbox"): SideQuest Companion, the desktop tray app, can
+-- write SideQuestDB.inbox while WoW is closed so officers pick up the
+-- website's newest points at their next login without pasting anything.
+-- See the companion's "staged import" contract.
+--------------------------------------------------------------------------
+
+local INBOX_MAX_ATTEMPTS = 20
+local INBOX_RETRY_DELAY = 1 -- seconds; officer-note perms/guild roster can lag a few seconds after login
+
+local inboxAttempts = 0
+
+function Sync.ResetInboxState()
+    inboxAttempts = 0
+end
+
+local function formatStagedTime(ts)
+    ts = tonumber(ts)
+    if not ts then
+        return "at an unknown time"
+    end
+    return os.date("%Y-%m-%d %H:%M", ts)
+end
+
+local function applyInbox(inbox)
+    SideQuest.WhenOutOfCombat(function()
+        if Sync.ImportString(inbox.payload) then
+            SideQuest.Print("Applied the import SideQuest Companion staged (generated "
+                .. formatStagedTime(inbox.generated_at) .. ").")
+        end
+    end)
+end
+
+--- Runs at PLAYER_ENTERING_WORLD and GUILD_ROSTER_UPDATE, retrying briefly
+-- off a timer, until officer status is known; then applies or discards the
+-- staged inbox exactly once. Safe to call repeatedly: it is a no-op once
+-- SideQuestDB.inbox has been cleared. SavedVariables are per account, so a
+-- non-officer character leaves the inbox in place for an officer alt.
+function Sync.ProcessInbox()
+    local inbox = SideQuestDB and SideQuestDB.inbox
+    if type(inbox) ~= "table" then
+        return
+    end
+    if type(inbox.payload) ~= "string" or inbox.payload:sub(1, 5) ~= "SQI1:" then
+        SideQuest.Print("SideQuest Companion staged an import, but it could not be read. It has been discarded.")
+        SideQuestDB.inbox = nil
+        return
+    end
+
+    if SideQuest.IsOfficer() then
+        local stagedAt = tonumber(inbox.generated_at) or 0
+        local haveAt = (SideQuestDB.standings and SideQuestDB.standings.generated_at) or 0
+        if stagedAt < haveAt then
+            SideQuest.Print("SideQuest Companion's staged import was older than what the addon already has; it has"
+                .. " been discarded.")
+        else
+            applyInbox(inbox)
+        end
+        SideQuestDB.inbox = nil
+        return
+    end
+
+    -- Guild info (and so officer status) may not be known yet right after
+    -- login; retry briefly before concluding the character really isn't an
+    -- officer. A non-officer leaves the inbox for an officer on this account.
+    if inboxAttempts >= INBOX_MAX_ATTEMPTS then
+        return -- already told the player; GUILD_ROSTER_UPDATE keeps calling in
+    end
+    inboxAttempts = inboxAttempts + 1
+    if inboxAttempts == INBOX_MAX_ATTEMPTS then
+        SideQuest.Print("SideQuest Companion staged an import. Log in on an officer to apply it.")
+        return
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(INBOX_RETRY_DELAY, Sync.ProcessInbox)
+    end
+end
+
+SideQuest.On("PLAYER_ENTERING_WORLD", function()
+    Sync.ProcessInbox()
+end)
+
+SideQuest.On("GUILD_ROSTER_UPDATE", function()
+    Sync.ProcessInbox()
+end)
+SideQuest.RegisterGameEvent("GUILD_ROSTER_UPDATE")
+
 return Sync
