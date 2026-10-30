@@ -80,7 +80,7 @@ local reassembly = {} -- key (sender..msgType) -> { total=n, got={}, [i]=piece }
 --- Feed one received chunk; returns the fully reassembled payload string
 -- once every piece has arrived, otherwise nil.
 function Comm.ReceiveChunk(sender, rawMessage)
-    local msgType, idxStr, totalStr, piece = rawMessage:match("^(%a+)|(%d+)|(%d+)|(.*)$")
+    local msgType, idxStr, totalStr, piece = rawMessage:match("^([%a_]+)|(%d+)|(%d+)|(.*)$")
     if not msgType then
         return nil, nil
     end
@@ -130,6 +130,137 @@ function Comm.SendBidResponse(response)
     Comm.SendRaw("BID_RESP|" .. response, "RAID")
 end
 
+--------------------------------------------------------------------------
+-- v2: chunked JSON messages on GUILD/OFFICER/RAID channels (contract v2
+-- "Addon messages" section). Every v2 message type below carries a JSON
+-- string payload and is always sent chunked (even single-chunk) so the
+-- receiver only needs one reassembly path.
+--------------------------------------------------------------------------
+
+function Comm.SendJSON(msgType, payload, channel, target)
+    local json = SideQuestJSON.encode(payload)
+    for _, chunk in ipairs(Comm.ChunkMessage(msgType, json)) do
+        Comm.Queue(chunk, channel, target)
+    end
+end
+
+function Comm.BroadcastRosterPub(payload)
+    Comm.SendJSON("ROSTERPUB", payload, "GUILD")
+end
+
+function Comm.BroadcastNews(payload)
+    Comm.SendJSON("NEWS", payload, "GUILD")
+end
+
+function Comm.BroadcastAnnounce(payload)
+    Comm.SendJSON("ANN", payload, "GUILD")
+end
+
+function Comm.SendSignup(payload)
+    Comm.SendJSON("SIGNUP", payload, "GUILD")
+end
+
+function Comm.SendSignupAck(payload)
+    Comm.SendJSON("SIGNUP_ACK", payload, "GUILD")
+end
+
+function Comm.SendCraftQuery(payload)
+    Comm.SendJSON("CRAFT_Q", payload, "GUILD")
+end
+
+function Comm.SendCraftAnswer(payload)
+    Comm.SendJSON("CRAFT_A", payload, "GUILD")
+end
+
+function Comm.SendSheetQuery(payload)
+    Comm.SendJSON("SHEET_Q", payload, "GUILD")
+end
+
+function Comm.SendSheetAnswer(payload)
+    Comm.SendJSON("SHEET_A", payload, "GUILD")
+end
+
+function Comm.SendHello(payload)
+    Comm.SendJSON("HELLO", payload, "GUILD")
+end
+
+function Comm.SendOfficerData(payload)
+    Comm.SendJSON("OFFDATA", payload, "OFFICER")
+end
+
+function Comm.SendNote(payload)
+    Comm.SendJSON("NOTE", payload, "OFFICER")
+end
+
+function Comm.SendVote(payload)
+    Comm.SendJSON("VOTE", payload, "OFFICER")
+end
+
+function Comm.SendRecruit(payload)
+    Comm.SendJSON("RECRUIT", payload, "OFFICER")
+end
+
+function Comm.SendPrepQuery(payload)
+    Comm.SendJSON("PREP_Q", payload, "RAID")
+end
+
+function Comm.SendPrepAnswer(payload)
+    Comm.SendJSON("PREP_A", payload, "RAID")
+end
+
+--------------------------------------------------------------------------
+-- Request/answer suppression: every request/answer pair in the contract
+-- waits a random 0-2s delay before answering, and an answer seen from
+-- someone else first cancels our own pending answer, so only one
+-- responder (crafter, officer) replies per request.
+--------------------------------------------------------------------------
+
+local pendingAnswers = {} -- requestKey -> { done=bool } for the in-flight timer, if any
+local answeredKeys = {} -- requestKey -> true once any answer (ours or someone else's) has been seen/sent
+
+--- Schedule `answerFn` after a random 0-2s delay under `requestKey`; call
+-- Comm.SuppressAnswer(requestKey) from the handler for the matching answer
+-- message type (including our own, which is a harmless no-op) to cancel it
+-- before it fires, or to stop a not-yet-scheduled answer from ever firing.
+function Comm.ScheduleAnswer(requestKey, answerFn)
+    if answeredKeys[requestKey] or pendingAnswers[requestKey] then
+        return -- already answered, or already about to
+    end
+    local delay = math.random(0, 2000) / 1000
+    local fired = { done = false }
+    pendingAnswers[requestKey] = fired
+    local function run()
+        pendingAnswers[requestKey] = nil
+        if fired.done or answeredKeys[requestKey] then
+            return
+        end
+        fired.done = true
+        answeredKeys[requestKey] = true
+        answerFn()
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay, run)
+    else
+        run()
+    end
+end
+
+--- Mark `requestKey` as answered (by us or someone else), suppressing any
+-- answer scheduled for it, pending or future.
+function Comm.SuppressAnswer(requestKey)
+    answeredKeys[requestKey] = true
+    local fired = pendingAnswers[requestKey]
+    if fired then
+        fired.done = true
+    end
+end
+
+--- Test/reset helper: clear suppression state between scenarios.
+function Comm.ResetAnswers()
+    pendingAnswers = {}
+    answeredKeys = {}
+end
+
 if CreateFrame then
     local frame = CreateFrame("Frame", "SideQuestCommFrame")
     frame:RegisterEvent("CHAT_MSG_ADDON")
@@ -142,7 +273,7 @@ if CreateFrame then
             SideQuest.Fire("SQ_COMM_MESSAGE", msgType, full, sender)
         else
             -- unchunked single-piece control messages (RECORDER|, STANDBY_REQ|, BID_*)
-            local kind, rest = message:match("^(%a+)|(.*)$")
+            local kind, rest = message:match("^([%a_]+)|(.*)$")
             if kind then
                 SideQuest.Fire("SQ_COMM_MESSAGE", kind, rest, sender)
             end

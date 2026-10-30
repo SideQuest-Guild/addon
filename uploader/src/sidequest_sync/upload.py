@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class UploadError(Exception):
@@ -21,6 +21,13 @@ class UploadResult:
     awards: dict
     unlinked_characters: list[str]
     attendance: dict | None
+    roster: dict = field(default_factory=dict)
+    professions: dict = field(default_factory=dict)
+    signups: dict = field(default_factory=dict)
+    bank: dict = field(default_factory=dict)
+    announcements: dict = field(default_factory=dict)
+    recruits: dict = field(default_factory=dict)
+    member_notes: dict = field(default_factory=dict)
 
     @classmethod
     def from_json(cls, data: dict) -> "UploadResult":
@@ -32,6 +39,13 @@ class UploadResult:
             awards=data.get("awards", {}),
             unlinked_characters=data.get("unlinked_characters", []),
             attendance=data.get("attendance"),
+            roster=data.get("roster", {}),
+            professions=data.get("professions", {}),
+            signups=data.get("signups", {}),
+            bank=data.get("bank", {}),
+            announcements=data.get("announcements", {}),
+            recruits=data.get("recruits", {}),
+            member_notes=data.get("member_notes", {}),
         )
 
 

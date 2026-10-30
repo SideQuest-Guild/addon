@@ -21,6 +21,13 @@ read_globals = {
     "C_GuildInfo", "C_ChatInfo", "C_Item", "C_Timer", "Enum",
     "issecretvalue", "DEFAULT_CHAT_FRAME",
     "StaticPopup_Show", "StaticPopupDialogs",
+    -- v2: roster, professions, bank, prep, group placement
+    "GetNumGuildMembers", "GetGuildRosterInfo",
+    "C_TradeSkillUI", "GetTradeSkillLine", "GetNumTradeSkills", "GetTradeSkillInfo",
+    "C_GuildBank",
+    "InCombatLockdown", "SendChatMessage", "ChatFrame_SendTell",
+    "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
+    "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo", "IsRaidLeader", "IsPartyLeader", "GameTooltip",
 }
 
 -- Test files additionally define/read the WoW API stub and its control table.
@@ -32,9 +39,19 @@ files["tests/wowstub.lua"] = {
         "GetInstanceInfo", "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
         "C_Item", "ConvertToRaid", "InviteUnit", "Enum", "C_ChatInfo",
         "C_Timer", "CreateFrame", "UIParent", "DEFAULT_CHAT_FRAME",
+        "GetNumGuildMembers", "GetGuildRosterInfo", "C_TradeSkillUI",
+        "GetTradeSkillLine", "GetNumTradeSkills", "GetTradeSkillInfo",
+        "C_GuildBank", "InCombatLockdown", "SendChatMessage",
+        "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
+        "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
     },
 }
 
+
 files["tests/run_tests.lua"] = {
     globals = { "WowStub", "SideQuestDB", "ROOT" },
+}
+
+files["tests/preview/record.lua"] = {
+    globals = { "WowStub" },
 }

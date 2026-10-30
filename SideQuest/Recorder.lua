@@ -256,6 +256,7 @@ function Recorder.OnEncounterEnd(encounterID, encounterName, difficultyID, group
 
     if row.success then
         awardToSessionMembers(session, SideQuest.Rules.Get().ep.boss_kill, "boss_kill", encounterName)
+        SideQuest.Fire("SQ_ENCOUNTER_RECORDED", row, not alreadyKilled)
         if not alreadyKilled then
             table.insert(SideQuestDB.killed_encounters, encounterID)
         end

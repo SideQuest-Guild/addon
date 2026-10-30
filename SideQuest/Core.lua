@@ -24,6 +24,15 @@ local function defaultDB()
             encounters = {},
             loot = {},
             awards = {},
+            -- v2 sections (contract v2): accumulate here, cleared by /sq export clear
+            -- like v1 pending.
+            roster = nil, -- { taken_at, members = {} } single latest snapshot, or nil
+            professions = {}, -- list of { character, profession, skill, max_skill, scanned_at, recipes }
+            signups = {}, -- relayed member sign-ups awaiting export
+            bank = {}, -- guild bank log rows
+            announcements = {}, -- officer-composed announcements awaiting export
+            recruits = {}, -- officer recruit records
+            member_notes = {}, -- officer member notes
         },
         standings = {
             generated_at = 0,
@@ -37,6 +46,28 @@ local function defaultDB()
             officerRankIndex = nil, -- 1-based guild rank index fallback for officer detection
             standingsBroadcastThrottle = 2, -- seconds between standings chunk sends
         },
+        -- v2: cached imported state (SQI1: "v":2), see addon-contract-v2.md.
+        guild = {
+            generated_at = 0,
+            members = {}, -- public import "members": roster/EP/badges, broadcast to everyone
+            news = {}, -- public import "news" + live NEWS items, newest first
+        },
+        onDemand = {
+            sheets = {}, -- member_id (string key) -> { ledger = {}, loot = {} }; officer-held, answers SHEET_Q
+            crafters = {}, -- list of { character, member_id, profession, skill, recipes = {ids} }
+            recipe_names = {}, -- id (string key) -> name
+        },
+        officerData = {
+            recruits = {},
+            member_notes = {},
+            inactive = {},
+        },
+        roster = { taken_at = 0, members = {} }, -- this character's own latest GuildRoster sweep
+        professions = {}, -- this character's own latest profession scans, keyed "Character|Profession"
+        mySignups = {}, -- event_id -> { status, sentAt, acked }
+        addonVersions = {}, -- character -> { version, seenAt } learned from HELLO
+        prepAnswers = {}, -- character -> prep report, cleared each time an officer opens a new PREP_Q
+        ui = { pos = nil, width = nil, height = nil, scale = nil, tab = nil },
     }
 end
 
@@ -117,6 +148,38 @@ if CreateFrame then
 else
     function SQ.RegisterGameEvent() end
 end
+
+--------------------------------------------------------------------------
+-- Combat deferral
+--------------------------------------------------------------------------
+
+-- UI must never open, flash or animate in combat. Anything that would do
+-- so calls SQ.WhenOutOfCombat(fn) instead of running directly; fn runs
+-- immediately if we're not in combat, otherwise it is queued and flushed
+-- on PLAYER_REGEN_ENABLED (in FIFO order, each run resets combat status).
+local combatQueue = {}
+
+function SQ.InCombat()
+    return InCombatLockdown and InCombatLockdown() or false
+end
+
+function SQ.WhenOutOfCombat(fn)
+    if not SQ.InCombat() then
+        fn()
+        return
+    end
+    table.insert(combatQueue, fn)
+end
+
+SQ.On("PLAYER_REGEN_ENABLED", function()
+    local queued = combatQueue
+    combatQueue = {}
+    for _, fn in ipairs(queued) do
+        pcall(fn)
+    end
+end)
+SQ.RegisterGameEvent("PLAYER_REGEN_ENABLED")
+SQ.RegisterGameEvent("PLAYER_REGEN_DISABLED")
 
 --------------------------------------------------------------------------
 -- Output

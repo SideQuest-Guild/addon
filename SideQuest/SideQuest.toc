@@ -6,12 +6,7 @@
 ## SavedVariables: SideQuestDB
 ## X-License: MIT
 ## X-Website: https://sidequest-guild.com
-## X-Curse-Project-ID:
-# ^ Leave the line above present but empty until CurseForge issues a project
-#   id for this addon; the release workflow (.github/workflows/release.yml)
-#   only publishes to CurseForge once X-Curse-Project-ID has a value, and
-#   @project-version@ above is substituted by the BigWigsMods packager from
-#   the git tag at release time.
+## X-Curse-Project-ID: 1773662
 
 Libs\Json.lua
 Libs\Base64.lua
@@ -23,6 +18,16 @@ Recorder.lua
 Loot.lua
 Standings.lua
 Events.lua
+Roster.lua
+Professions.lua
+News.lua
+Signups.lua
+Sheet.lua
+Crafters.lua
+Announce.lua
+Recruits.lua
+Bank.lua
+Prep.lua
 Sync.lua
 UI\Main.lua
 UI\BidPopup.lua

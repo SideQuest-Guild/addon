@@ -19,6 +19,16 @@ WowStub = {
     lootItems = {},
     invites = {},
     convertToRaidCalls = 0,
+    -- v2
+    guildRoster = {}, -- list of { name, rank, rankIndex, level, class, zone, online }
+    tradeSkill = nil, -- { name, skill, maxSkill, recipes = { { id, name, type } } } or nil (window closed)
+    bankTransactions = {}, -- tabIndex -> list of { type, name, itemID, itemLink, count, money, year, month, day }
+    inCombat = false,
+    buffs = {}, -- list of buff names on "player"
+    durability = nil, -- 0-100 or nil (unknown)
+    itemCounts = {}, -- itemId -> count
+    raidSubgroups = {}, -- unit ("raid1"...) -> current subgroup
+    subgroupCalls = {}, -- recorded SetRaidSubgroup(index, group) calls
 }
 
 --------------------------------------------------------------------------
@@ -118,6 +128,18 @@ function GetGuildInfo(unit)
     return WowStub.guildName, "Officer", 0
 end
 
+function GetNumGuildMembers()
+    return #WowStub.guildRoster
+end
+
+function GetGuildRosterInfo(index)
+    local m = WowStub.guildRoster[index]
+    if not m then
+        return nil
+    end
+    return m.name, m.rank, m.rankIndex, m.level, m.class, m.zone, "", "", m.online, "", m.classFile or m.class
+end
+
 --------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------
@@ -154,9 +176,97 @@ C_Item = {
         if not item then
             return nil
         end
-        return item.itemId, item.itemType, item.itemSubType, item.equipLoc, item.icon, item.classID, item.subclassID
+        return item.itemId or itemId, item.itemType, item.itemSubType, item.equipLoc, item.icon, item.classID, item.subclassID
+    end,
+    GetItemCount = function(itemId)
+        return WowStub.itemCounts[itemId] or 0
     end,
 }
+
+-- GetItemInfo/C_Item.GetItemInfo: unlike GetItemInfoInstant (id/type/equipLoc,
+-- always available), name/quality/icon need the full item data; accepts
+-- either an item id or an "item:<id>[:...]" link string.
+function GetItemInfo(itemLinkOrId)
+    local id = tonumber(itemLinkOrId)
+    if not id and type(itemLinkOrId) == "string" then
+        id = tonumber(itemLinkOrId:match("item:(%d+)"))
+    end
+    local item = id and WowStub.items and WowStub.items[id]
+    if not item then
+        return nil
+    end
+    return item.name, item.link or ("item:" .. id), item.quality or 1, item.ilvl or 1, item.minLevel or 1,
+        item.itemType, item.itemSubType, item.stackCount or 1, item.equipLoc, item.icon, item.sellPrice or 0,
+        item.classID, item.subclassID
+end
+C_Item.GetItemInfo = GetItemInfo
+
+--------------------------------------------------------------------------
+-- Professions (v2)
+--------------------------------------------------------------------------
+
+function GetTradeSkillLine()
+    if not WowStub.tradeSkill then
+        return nil
+    end
+    return WowStub.tradeSkill.name, WowStub.tradeSkill.skill, WowStub.tradeSkill.maxSkill
+end
+
+function GetNumTradeSkills()
+    return WowStub.tradeSkill and #WowStub.tradeSkill.recipes or 0
+end
+
+function GetTradeSkillInfo(i)
+    local r = WowStub.tradeSkill and WowStub.tradeSkill.recipes[i]
+    if not r then
+        return nil
+    end
+    return r.name, r.type or "trade", nil, nil, nil, r.id
+end
+
+--------------------------------------------------------------------------
+-- Guild bank (v2)
+--------------------------------------------------------------------------
+
+C_GuildBank = {
+    GetNumTransactions = function(tabIndex)
+        return #(WowStub.bankTransactions[tabIndex] or {})
+    end,
+    GetTransaction = function(tabIndex, i)
+        local list = WowStub.bankTransactions[tabIndex] or {}
+        return list[i]
+    end,
+}
+
+--------------------------------------------------------------------------
+-- Combat lockdown + chat (v2)
+--------------------------------------------------------------------------
+
+function InCombatLockdown()
+    return WowStub.inCombat
+end
+
+function SendChatMessage(msg, channel)
+    table.insert(WowStub.chatLog, { msg = msg, channel = channel })
+end
+
+--------------------------------------------------------------------------
+-- Auras + durability (v2, raid prep)
+--------------------------------------------------------------------------
+
+function UnitBuff(unit, index)
+    if unit ~= "player" then
+        return nil
+    end
+    return WowStub.buffs[index]
+end
+
+function GetInventoryItemDurability(slot)
+    if not WowStub.durability then
+        return nil
+    end
+    return WowStub.durability, 100
+end
 
 --------------------------------------------------------------------------
 -- Group management
@@ -170,6 +280,34 @@ end
 function InviteUnit(name)
     table.insert(WowStub.invites, name)
 end
+
+function SetRaidSubgroup(raidIndex, group)
+    table.insert(WowStub.subgroupCalls, { index = raidIndex, group = group })
+    WowStub.raidSubgroups["raid" .. raidIndex] = group
+    return true
+end
+
+function SwapRaidSubgroup(raidIndex, raidIndex2)
+    local a, b = WowStub.raidSubgroups["raid" .. raidIndex], WowStub.raidSubgroups["raid" .. raidIndex2]
+    WowStub.raidSubgroups["raid" .. raidIndex] = b
+    WowStub.raidSubgroups["raid" .. raidIndex2] = a
+    return true
+end
+
+C_UnitAuras = {
+    GetBuffDataByIndex = function(unit, index, _filter)
+        if unit ~= "player" then
+            return nil
+        end
+        local name = WowStub.buffs[index]
+        if not name then
+            return nil
+        end
+        return { name = name }
+    end,
+}
+
+C_DurabilityInfo = nil -- Forever's modern durability API is unverified; left absent so the legacy path is exercised
 
 --------------------------------------------------------------------------
 -- Addon comm
@@ -234,10 +372,11 @@ local function newMockRegion(kind, name, parent, template)
         return newMockRegion("Texture", texName, self, tmpl)
     end
 
-    local shown = false
+    local shown = true -- real WoW Frame/Texture/FontString default to shown; Hide() is explicit
     self.Show = function() shown = true end
     self.Hide = function() shown = false end
     self.IsShown = function() return shown end
+    self.SetShown = function(_, cond) shown = cond and true or false end
 
     self.SetScrollChild = function(_, child) self.__scrollChild = child end
     self.GetScrollChild = function() return self.__scrollChild end
@@ -253,11 +392,19 @@ local function newMockRegion(kind, name, parent, template)
     return self
 end
 
+-- Only PascalCase keys (the WoW API convention: SetPoint, CreateTexture,
+-- IsShown, ...) fall back to a chainable no-op; addon code also stores its
+-- own lowerCamelCase data fields directly on these tables (panel.rows,
+-- chamber.emptyText, ...) and those must read back as real nil when unset,
+-- exactly like a real Frame, or "if not x.field then" guards never fire.
 FrameMeta.__index = function(t, k)
-    return function(self, ...)
-        -- generic chainable no-op; returns the object itself for method chains
-        return t
+    if type(k) == "string" and k:match("^%u") then
+        return function(self, ...)
+            -- generic chainable no-op; returns the object itself for method chains
+            return t
+        end
     end
+    return nil
 end
 
 function CreateFrame(kind, name, parent, template)
@@ -277,5 +424,6 @@ end
 function WowStub.DeliverAddonMessage(sender, message)
     WowStub.FireEvent("CHAT_MSG_ADDON", "SideQuest1", message, "RAID", sender)
 end
+WowStub.FrameMeta = FrameMeta -- exposed so tests/preview can wrap method dispatch to record geometry
 
 return WowStub

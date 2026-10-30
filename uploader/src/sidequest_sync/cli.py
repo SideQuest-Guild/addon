@@ -92,6 +92,22 @@ def _upload_one(config: Config, state: State, path: Path, *, quiet: bool = False
         f"awards new={result.awards.get('new', 0)} updated={result.awards.get('updated', 0)} "
         f"voided={result.awards.get('voided', 0)}"
     )
+    if any([result.roster, result.professions, result.signups, result.bank,
+            result.announcements, result.recruits, result.member_notes]):
+        print(
+            f"  roster updated={result.roster.get('updated', 0)}  "
+            f"professions updated={result.professions.get('updated', 0)}  "
+            f"signups applied={result.signups.get('applied', 0)} "
+            f"skipped_older={result.signups.get('skipped_older', 0)} "
+            f"unlinked={result.signups.get('unlinked', 0)}"
+        )
+        print(
+            f"  bank new={result.bank.get('new', 0)}  "
+            f"announcements new={result.announcements.get('new', 0)}  "
+            f"recruits new={result.recruits.get('new', 0)} updated={result.recruits.get('updated', 0)}  "
+            f"member_notes new={result.member_notes.get('new', 0)} "
+            f"updated={result.member_notes.get('updated', 0)} voided={result.member_notes.get('voided', 0)}"
+        )
     if result.unlinked_characters:
         print(f"  unlinked characters: {', '.join(result.unlinked_characters)}")
     if result.attendance:

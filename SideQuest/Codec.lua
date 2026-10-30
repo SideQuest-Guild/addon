@@ -60,6 +60,28 @@ local function exportEncounters(encounters)
     end
     return out
 end
+-- Professions keep recipes as a sub-array per entry; ensure it stays `[]` when empty.
+local function exportProfessions(professions)
+    local out = {}
+    for _, row in ipairs(professions) do
+        local copied = copy(row)
+        copied.recipes = arr(row.recipes or {})
+        table.insert(out, copied)
+    end
+    return out
+end
+
+-- Recruits keep votes as a sub-array and checklist as an object map.
+local function exportRecruits(recruits)
+    local out = {}
+    for _, row in ipairs(recruits) do
+        local copied = copy(row)
+        copied.votes = arr(row.votes or {})
+        copied.checklist = row.checklist or {}
+        table.insert(out, copied)
+    end
+    return out
+end
 
 --- Build the export payload table (contract-shaped) from the addon's pending
 --- data. Does not mutate SideQuestDB; callers decide when to clear `pending`.
@@ -70,8 +92,8 @@ function Codec.BuildExportPayload(recorderName, guildName, realmName)
     local db = SideQuestDB
     local pending = db.pending or { sessions = {}, encounters = {}, loot = {}, awards = {} }
 
-    return {
-        v = 1,
+    local payload = {
+        v = 2,
         addon_version = SideQuest.ADDON_VERSION,
         exported_at = GetServerTime and GetServerTime() or 0,
         guild = guildName or "",
@@ -81,7 +103,19 @@ function Codec.BuildExportPayload(recorderName, guildName, realmName)
         encounters = arr(exportEncounters(pending.encounters)),
         loot = arr(pending.loot),
         awards = arr(pending.awards),
+        -- v2 sections: every one is optional per the site, but the addon
+        -- always sends the arrays it has (even empty) for a stable shape.
+        professions = arr(exportProfessions(pending.professions or {})),
+        signups = arr(pending.signups or {}),
+        bank = arr(pending.bank or {}),
+        announcements = arr(pending.announcements or {}),
+        recruits = arr(exportRecruits(pending.recruits or {})),
+        member_notes = arr(pending.member_notes or {}),
     }
+    if pending.roster then
+        payload.roster = { taken_at = pending.roster.taken_at, members = arr(pending.roster.members or {}) }
+    end
+    return payload
 end
 
 function Codec.EncodeExport(payload)

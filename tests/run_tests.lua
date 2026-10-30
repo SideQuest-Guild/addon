@@ -19,6 +19,16 @@ local ADDON_FILES = {
     "SideQuest/Loot.lua",
     "SideQuest/Standings.lua",
     "SideQuest/Events.lua",
+    "SideQuest/Roster.lua",
+    "SideQuest/Professions.lua",
+    "SideQuest/News.lua",
+    "SideQuest/Signups.lua",
+    "SideQuest/Sheet.lua",
+    "SideQuest/Crafters.lua",
+    "SideQuest/Announce.lua",
+    "SideQuest/Recruits.lua",
+    "SideQuest/Bank.lua",
+    "SideQuest/Prep.lua",
     "SideQuest/Sync.lua",
     "SideQuest/UI/Main.lua",
     "SideQuest/UI/BidPopup.lua",
@@ -83,6 +93,7 @@ local function resetAddon()
     SideQuest.Recorder.started = false
     SideQuest.Recorder.ended = false
     SideQuest.Loot.activeBid = nil
+    SideQuest.Comm.ResetAnswers()
     WowStub.chatLog = {}
     WowStub.addonMessages = {}
 end
@@ -377,7 +388,7 @@ test("simulated raid night produces a contract-shaped export", function()
     assertTrue(str:sub(1, 5) == "SQX1:", "export has prefix")
 
     local decoded = SideQuest.Codec.DecodeExport(str)
-    assertEq(decoded.v, 1, "v")
+    assertEq(decoded.v, 2, "v")
     assertEq(decoded.guild, "SideQuest", "guild")
     assertEq(decoded.realm, "Whitemane", "realm")
     assertEq(decoded.recorder, "Officername-Whitemane", "recorder")
@@ -505,6 +516,242 @@ test("comm: chunk + reassemble a long message", function()
         end
     end
     assertEq(result, payload, "reassembled payload matches original")
+end)
+
+--------------------------------------------------------------------------
+-- 8. v2: export sections, signup relay/ack, crafter suppression, sheet
+--    answer, import public/officer split, combat deferral
+--------------------------------------------------------------------------
+
+local function deliverQueued(fromSender)
+    local queued = WowStub.addonMessages
+    WowStub.addonMessages = {}
+    for _, m in ipairs(queued) do
+        WowStub.DeliverAddonMessage(fromSender, m.message)
+    end
+end
+
+test("v2 export: every v1 and v2 section has at least one row from a simulated night", function()
+    resetAddon()
+    WowStub.realm = "Whitemane"
+
+    -- a member signs up before the officer does anything else, so the
+    -- queued SIGNUP message is waiting when the officer identity logs in
+    WowStub.isOfficer = false
+    WowStub.SetUnit("player", { name = "Tanky", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-BBBB0001" })
+    SideQuest.Signups.Answer("8f2c6a1e-4b7d-4c1a-9e3f-2d5b7a9c1e40", "going", nil, "tank")
+
+    WowStub.isOfficer = true
+    WowStub.SetUnit("player", { name = "Officername", realm = "Whitemane", class = "PRIEST", guid = "Player-1-AAAA1111" })
+    deliverQueued("Tanky-Whitemane")
+    assertEq(#SideQuestDB.pending.signups, 1, "the relayed signup is queued")
+    assertEq(SideQuestDB.pending.signups[1].status, "signed", "status mapped from 'going'")
+    assertEq(SideQuestDB.pending.signups[1].role, "tank", "role carried on the relayed signup")
+    assertEq(SideQuestDB.pending.signups[1].class, "WARRIOR", "class token stays uppercase like the game")
+
+    WowStub.guildRoster = {
+        { name = "Tanky", rank = "Officer", rankIndex = 1, level = 30, class = "WARRIOR", classFile = "WARRIOR", zone = "Ironforge", online = true },
+        { name = "Healy", rank = "Raider", rankIndex = 2, level = 30, class = "PRIEST", classFile = "PRIEST", zone = "Ironforge", online = true },
+        { name = "Dps1", rank = "Member", rankIndex = 3, level = 29, class = "MAGE", classFile = "MAGE", zone = "Stormwind", online = false },
+    }
+    SideQuest.Roster.Sweep()
+
+    table.insert(SideQuestDB.pending.professions, {
+        character = "Tanky-Whitemane", profession = "Blacksmithing", skill = 150, max_skill = 150,
+        scanned_at = WowStub.time, recipes = { { id = 2662, name = "Copper Chain Pants", item_id = 2852 } },
+    })
+
+    WowStub.SetRaid({ { name = "Tanky", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-BBBB0001" } })
+    WowStub.instance = { inInstance = true, instanceType = "raid", instanceID = 534, difficultyID = 3, name = "Hyjal Summit" }
+    local session = SideQuest.Recorder.StartRecording("Hyjal Summit", 534, 3, 20)
+    SideQuest.Recorder.StartRaid()
+    WowStub.FireEvent("ENCOUNTER_START", 652, "Rage Winterchill", 3, 20)
+    WowStub.FireEvent("ENCOUNTER_END", 652, "Rage Winterchill", 3, 20, true)
+    SideQuest.Loot.AwardLoot(
+        { item_id = 30896, item_name = "Glory of the Defender", quality = 4, inv_type = "INVTYPE_CHEST" },
+        "Tanky-Whitemane", "ms", session.id, nil, {})
+    SideQuest.Recorder.EndRaid()
+
+    table.insert(SideQuestDB.pending.bank, {
+        id = "bank-sim-1", at = WowStub.time, character = "Tanky-Whitemane", kind = "deposit",
+        item_id = 2589, item_name = "Linen Cloth", count = 20, money = 0, tab = 1,
+    })
+    table.insert(SideQuestDB.pending.announcements, { id = "ann-1", text = "Flasks please", officer = "Officername-Whitemane", at = WowStub.time })
+
+    local recruit = SideQuest.Recruits.Save({
+        character = "Trialer-Whitemane", class = "MAGE", status = "trial",
+        checklist = { talked = true, gear_check = false, first_raid = false, vouched = true },
+    })
+    SideQuest.Recruits.Vote(recruit.id, "yes")
+    SideQuest.Recruits.AddNote("Tanky-Whitemane", "Prefers tanking over DPS")
+
+    local str = SideQuest.Sync.BuildExport()
+    local decoded = SideQuest.Codec.DecodeExport(str)
+    assertEq(decoded.v, 2, "export v2")
+    assertEq(#decoded.sessions, 1, "session present")
+    assertEq(#decoded.encounters, 1, "encounter present")
+    assertEq(#decoded.loot, 1, "loot present")
+    assertTrue(#decoded.awards > 0, "awards present")
+    assertTrue(#decoded.roster.members >= 3, "roster has at least 3 members")
+    assertEq(#decoded.professions, 1, "professions present")
+    assertEq(#decoded.professions[1].recipes, 1, "profession recipe present")
+    assertEq(#decoded.signups, 1, "signups present")
+    assertEq(decoded.signups[1].role, "tank", "signup role present")
+    assertEq(#decoded.bank, 1, "bank present")
+    assertEq(#decoded.announcements, 1, "announcements present")
+    assertEq(#decoded.recruits, 1, "recruits present")
+    assertEq(#decoded.recruits[1].votes, 1, "recruit vote present")
+    assertEq(#decoded.member_notes, 1, "member_notes present")
+
+    local fixturePath = ROOT .. "tests/fixtures/export_v2.txt"
+    local fh = io.open(fixturePath, "w")
+    fh:write(str)
+    fh:close()
+end)
+
+test("signup relay/ack: member sends, officer queues + acks, member sees sent then saved", function()
+    resetAddon()
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Member", realm = "Whitemane", class = "HUNTER", guid = "Player-1-CCCC0001" })
+    WowStub.isOfficer = false
+
+    SideQuest.Signups.Answer("1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d", "going")
+    local state = SideQuest.Signups.MyState("1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d")
+    assertEq(state, "sent", "answer starts as sent")
+
+    WowStub.isOfficer = true
+    deliverQueued("Member-Whitemane")
+    assertEq(#SideQuestDB.pending.signups, 1, "officer queued the sign-up")
+    assertEq(SideQuestDB.pending.signups[1].status, "signed", "status mapped from 'going'")
+
+    WowStub.isOfficer = false
+    deliverQueued("Officername-Whitemane")
+    state = SideQuest.Signups.MyState("1a2b3c4d-5e6f-4a1b-8c2d-3e4f5a6b7c8d")
+    assertEq(state, "saved", "ack flips sign-up to saved")
+end)
+
+test("crafter query: an already-seen offline answer suppresses a second officer's answer", function()
+    resetAddon()
+    WowStub.isOfficer = true
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Officer2", realm = "Whitemane", class = "PRIEST", guid = "Player-1-DDDD0001" })
+    SideQuestDB.onDemand.crafters = { { character = "Smith-Whitemane", member_id = 1, profession = "Blacksmithing", skill = 150, recipes = { 2662 } } }
+    SideQuestDB.onDemand.recipe_names = { ["2662"] = "Copper Chain Pants" }
+
+    -- another officer's aggregate answer already arrived for this query id
+    SideQuest.Comm.SuppressAnswer("CRAFT_OFFLINE:q-1")
+    SideQuest.Fire("SQ_COMM_MESSAGE", "CRAFT_Q", SideQuestJSON.encode({ id = "q-1", query = "chain" }), "Someone-Whitemane")
+
+    local sawOfflineAnswer = false
+    for _, m in ipairs(WowStub.addonMessages) do
+        if m.message:find("^CRAFT_A") then
+            sawOfflineAnswer = true
+        end
+    end
+    assertTrue(not sawOfflineAnswer, "suppressed officer never sends its own aggregate answer")
+end)
+
+test("sheet query/answer: member asks, officer answers from on-demand sheets", function()
+    resetAddon()
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Member", realm = "Whitemane", class = "HUNTER", guid = "Player-1-EEEE0001" })
+    WowStub.isOfficer = false
+
+    SideQuest.Sheet.Request()
+
+    WowStub.isOfficer = true
+    SideQuestDB.guild.members = { { member_id = 7, name = "Membername", main = "Member-Whitemane",
+        characters = { { name = "Member-Whitemane", class = "HUNTER", is_main = true } } } }
+    SideQuestDB.onDemand.sheets["7"] = { ledger = { { at = WowStub.time, kind = "ep", amount = 10, reason = "boss_kill" } }, loot = {} }
+    deliverQueued("Member-Whitemane")
+
+    WowStub.isOfficer = false
+    deliverQueued("Officer2-Whitemane")
+    assertTrue(SideQuest.Sheet.lastAnswer ~= nil, "member received a sheet answer")
+    assertEq(SideQuest.Sheet.lastAnswer.found, true, "sheet was found")
+    assertEq(#SideQuest.Sheet.lastAnswer.ledger, 1, "ledger entry carried over")
+end)
+
+test("import v2: public part broadcasts on GUILD, officer part only on OFFICER, never mixed", function()
+    resetAddon()
+    WowStub.isOfficer = true
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Officername", realm = "Whitemane", class = "PRIEST", guid = "Player-1-FFFF0001" })
+
+    local payload = {
+        v = 2, generated_at = WowStub.time,
+        rules = nil, standings = {}, killed_encounters = {}, events = {},
+        members = { { member_id = 1, name = "Membername", main = "Member-Whitemane", class = "HUNTER", characters = {} } },
+        news = {},
+        sheets = {}, crafters = {}, recipe_names = {},
+        officer = { recruits = { { id = "r1", character = "Trialer-Whitemane", class = "MAGE", status = "trial" } },
+                    member_notes = {}, inactive = {} },
+    }
+    SideQuest.Sync.ApplyImport(payload)
+
+    assertEq(SideQuestDB.guild.members[1].member_id, 1, "public members cached")
+    assertEq(SideQuestDB.officerData.recruits[1].id, "r1", "officer recruit cached locally")
+
+    local sawOfficerDataOnGuild = false
+    local sawRosterPubOnOfficer = false
+    for _, m in ipairs(WowStub.addonMessages) do
+        if m.channel == "GUILD" and m.message:find("officer", 1, true) then
+            sawOfficerDataOnGuild = true
+        end
+        if m.channel == "OFFICER" and m.message:find("^ROSTERPUB") then
+            sawRosterPubOnOfficer = true
+        end
+    end
+    assertTrue(not sawOfficerDataOnGuild, "officer-only data never appears on a GUILD-channel message")
+    assertTrue(not sawRosterPubOnOfficer, "ROSTERPUB never sent on OFFICER")
+end)
+
+test("UI never opens in combat; opens once combat ends", function()
+    resetAddon()
+    WowStub.inCombat = true
+    SideQuest.UI.main = nil
+    SideQuest.UI.Show()
+    assertTrue(SideQuest.UI.main == nil, "window not built while in combat")
+
+    WowStub.inCombat = false
+    WowStub.FireEvent("PLAYER_REGEN_ENABLED")
+    assertTrue(SideQuest.UI.main ~= nil, "window builds once combat ends")
+    assertTrue(SideQuest.UI.main:IsShown(), "window is shown once combat ends")
+end)
+
+test("bid popup: GP computed from the item's real slot (regression for the hardcoded-nil bug)", function()
+    resetAddon()
+    SideQuest.UI.main = nil
+    SideQuest.UI.bidPopup = nil
+    WowStub.inCombat = false
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Demo1", realm = "Whitemane", class = "PRIEST", guid = "Player-1-GGGG0001" })
+    WowStub.items = {
+        [30896] = { itemId = 30896, name = "Glory of the Defender", quality = 4, equipLoc = "INVTYPE_CHEST",
+            icon = "Interface\\Icons\\INV_Chest_Plate04" },
+    }
+    SideQuest.UI.ShowBidPopup("item:30896:Glory of the Defender", 30)
+    local popup = SideQuest.UI.bidPopup
+    assertTrue(popup ~= nil, "popup built")
+    assertTrue(popup.itemText:GetText() == "Glory of the Defender", "resolved the real item name, not the raw link text")
+    assertTrue(popup.slotGpText:GetText():find("100") ~= nil, "chest main-spec bid computes GP 100, not 0")
+end)
+
+test("console: switching sub-tabs shows only the chosen sub-view (regression for the SetShown stub bug)", function()
+    resetAddon()
+    SideQuest.UI.main = nil
+    WowStub.isOfficer = true
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Officername", realm = "Whitemane", class = "PRIEST", guid = "Player-1-HHHH0001" })
+    SideQuest.UI.Show()
+    SideQuest.UI.ShowTab("Console")
+    SideQuest.UI.ShowConsoleSub("Loot")
+    local subs = SideQuest.UI.panels.Console.subPanels
+    assertTrue(subs["Loot"]:IsShown(), "Loot sub-view is shown once chosen")
+    assertTrue(not subs["Raid Night"]:IsShown(), "Raid Night sub-view is hidden while Loot is active")
+    SideQuest.UI.ShowConsoleSub("Roster")
+    assertTrue(subs["Roster"]:IsShown(), "switching shows Roster")
+    assertTrue(not subs["Loot"]:IsShown(), "switching hides the previous sub-view (Loot)")
 end)
 
 --------------------------------------------------------------------------
