@@ -14,7 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # the packager builds the changelog from tags
+          fetch-depth: 0 # git-cliff reads every tag and commit
+
+      # The release notes are this tag's section of the changelog. The packager reads CHANGELOG.md (manual-changelog
+      # in .pkgmeta) and sends it to CurseForge and GitHub.
+      - name: Write release notes
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: CHANGELOG.md
 
       # Uploads to CurseForge (project id from SideQuest/SideQuest.toc) and creates the GitHub release.
       - name: Package and release

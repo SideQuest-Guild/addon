@@ -1,5 +1,11 @@
 package-as: SideQuest
 
+# CHANGELOG.md is written by git-cliff (cliff.toml). The release workflow replaces it with just the tagged version's
+# notes before packaging, so CurseForge and GitHub show only what's new.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
 # The addon lives in SideQuest/ so the repo root can hold tests, tooling and the uploader. move-folders makes that
 # folder the shipped addon; nothing else in the repo is packaged.
 move-folders:
@@ -14,3 +20,4 @@ ignore:
   - .pkgmeta
   - PRODUCT.md
   - DESIGN.md
+  - cliff.toml

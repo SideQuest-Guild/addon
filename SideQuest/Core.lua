@@ -43,7 +43,7 @@ local function defaultDB()
         events = {},
         standby = {}, -- list of normalized "Name-Realm"
         settings = {
-            officerRankIndex = nil, -- 1-based guild rank index fallback for officer detection
+            officerRankIndex = nil, -- lowest guild rank that counts as officer; 0 is the Guild Master, like GetGuildInfo
             standingsBroadcastThrottle = 2, -- seconds between standings chunk sends
         },
         -- v2: cached imported state (SQI1: "v":2), see addon-contract-v2.md.
