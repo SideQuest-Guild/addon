@@ -1,10 +1,16 @@
 package-as: SideQuest
 
-# Only the addon itself is shipped; tests, tooling and the uploader live in
-# this repo but have nothing to do with the in-game package.
+# The addon lives in SideQuest/ so the repo root can hold tests, tooling and the uploader. move-folders makes that
+# folder the shipped addon; nothing else in the repo is packaged.
+move-folders:
+  SideQuest/SideQuest: SideQuest
+
 ignore:
   - tests
   - uploader
   - .github
+  - .impeccable
   - .luacheckrc
   - .pkgmeta
+  - PRODUCT.md
+  - DESIGN.md
