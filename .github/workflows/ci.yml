@@ -12,16 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install LuaJIT
-        uses: leafo/gh-actions-lua@v10
-        with:
-          luaVersion: "luajit-2.1"
-
-      - name: Install LuaRocks
-        uses: leafo/gh-actions-luarocks@v4
-
-      - name: Install luacheck
-        run: luarocks install luacheck
+      - name: Install LuaJIT and luacheck
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q luajit luarocks
+          sudo luarocks install luacheck
 
       - name: Run addon test suite
         run: luajit tests/run_tests.lua
