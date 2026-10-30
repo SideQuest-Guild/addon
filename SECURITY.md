@@ -17,13 +17,13 @@ once published. To check that a zip came from this repo's release workflow, inst
 and run:
 
 ```sh
-gh attestation verify SideQuest-v0.2.0-forever.zip --repo SideQuest-Guild/sidequest-addon
+gh attestation verify SideQuest-v0.2.0-forever.zip --repo SideQuest-Guild/addon
 ```
 
 To check a zip against the GitHub release it came from:
 
 ```sh
-gh release verify-asset v0.2.0 SideQuest-v0.2.0-forever.zip --repo SideQuest-Guild/sidequest-addon
+gh release verify-asset v0.2.0 SideQuest-v0.2.0-forever.zip --repo SideQuest-Guild/addon
 ```
 
 Each release also carries an SPDX SBOM (`.spdx.json`) listing every file in the zip with its SHA-256, and
