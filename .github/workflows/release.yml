@@ -4,18 +4,27 @@ name: Release
 # it as an immutable GitHub release. CurseForge and GitHub get the same file, so either download can be verified with
 # `gh attestation verify`.
 #
-# Running the workflow by hand is a dry run: it builds and attests the zip and leaves a draft release named
-# dry-run-<run id>. Nothing goes to CurseForge, and the draft can be deleted.
+# Running the workflow by hand:
+# - with a tag (e.g. v0.1.0): builds that tag and publishes it as a GitHub release only, for a version that is already
+#   on CurseForge but has no GitHub release. The tag is built with the release tooling from the branch the workflow
+#   runs on, since older tags predate it.
+# - without a tag: a dry run. It builds and attests the zip and leaves a draft release named dry-run-<run id>. Nothing
+#   goes to CurseForge, and the draft can be deleted.
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing v* tag to publish on GitHub only (blank for a dry run)"
+        required: false
+        default: ""
 
 permissions: {}
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -27,32 +36,48 @@ jobs:
       id-token: write # Sigstore certificate for the attestations
       attestations: write
     env:
-      PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+      CURSEFORGE: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0 # git-cliff and the packager read every tag
           persist-credentials: false
+
+      - name: Check the tag
+        if: inputs.tag != ''
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9] ]] || [ "$(git describe --tags --exact-match)" != "$TAG" ]; then
+            echo "$TAG is not a v* tag" >&2
+            exit 1
+          fi
+
+      # The changelog config comes from the commit the workflow runs on, so tags made before cliff.toml existed still
+      # get notes.
+      - name: Get the changelog config
+        run: git show "$GITHUB_SHA:cliff.toml" > "$RUNNER_TEMP/cliff.toml"
 
       # The release notes are this tag's section of the changelog. The packager reads CHANGELOG.md (manual-changelog in
       # .pkgmeta) and sends it to CurseForge; the GitHub release uses the same file.
       - name: Write release notes
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
-          config: cliff.toml
+          config: ${{ runner.temp }}/cliff.toml
           args: --latest --strip header
         env:
           OUTPUT: CHANGELOG.md
 
       # No GitHub token is passed, so the packager only uploads to CurseForge; the github-release job publishes to
-      # GitHub. -d skips every upload on a dry run.
+      # GitHub. -d skips every upload when the workflow is run by hand.
       - name: Package and upload to CurseForge
         uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
         with:
-          args: ${{ env.PUBLISH != 'true' && '-d' || '' }}
+          args: ${{ env.CURSEFORGE != 'true' && '-d' || '' }}
           pandoc: "false"
         env:
-          CF_API_TOKEN: ${{ env.PUBLISH == 'true' && secrets.CF_API_KEY || '' }}
+          CF_API_TOKEN: ${{ env.CURSEFORGE == 'true' && secrets.CF_API_KEY || '' }}
 
       - name: Find the zip
         id: zip
@@ -127,14 +152,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+          PUSHED_TAG: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           shopt -s nullglob
           assets=(.release/*.zip .release/*.spdx.json .release/SHA256SUMS.txt)
-          if [ "$PUBLISH" = "true" ]; then
-            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "SideQuest $GITHUB_REF_NAME" \
-              --notes-file CHANGELOG.md "${assets[@]}"
-            gh release edit "$GITHUB_REF_NAME" --draft=false
+          tag="${PUSHED_TAG:-$INPUT_TAG}"
+          if [ -n "$tag" ]; then
+            gh release create "$tag" --draft --verify-tag --title "SideQuest $tag" --notes-file CHANGELOG.md "${assets[@]}"
+            gh release edit "$tag" --draft=false
           else
             gh release create "dry-run-$GITHUB_RUN_ID" --draft --target "$GITHUB_SHA" --title "Dry run $GITHUB_RUN_ID" \
               --notes-file CHANGELOG.md "${assets[@]}"

@@ -167,8 +167,10 @@ Pushing the tag starts the release workflow. It writes that version's notes with
 it to CurseForge, signs build provenance and an SBOM for it, and publishes it as a GitHub release. A published
 release's files can't be changed, and `v*` tags can't be moved or deleted, so a bad release is fixed with a new version.
 
-To test the workflow without releasing, run it by hand from the Actions tab. It builds and signs the zip, uploads
-nothing to CurseForge, and leaves a draft release named `dry-run-<run id>` that you can delete.
+To test the workflow without releasing, run it by hand from the Actions tab with the tag left blank. It builds and
+signs the zip, uploads nothing to CurseForge, and leaves a draft release named `dry-run-<run id>` that you can delete.
+Running it by hand with an existing tag, such as `v0.1.0`, publishes that tag as a GitHub release without uploading it
+to CurseForge again.
 
 `main` takes signed commits only, and force pushes and deleting it are blocked.
 
