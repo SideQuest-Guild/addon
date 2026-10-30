@@ -371,6 +371,43 @@ local function newMockRegion(kind, name, parent, template)
     self.CreateTexture = function(_, texName, layer, tmpl)
         return newMockRegion("Texture", texName, self, tmpl)
     end
+    self.CreateMaskTexture = function(_, texName, layer, tmpl)
+        return newMockRegion("MaskTexture", texName, self, tmpl)
+    end
+
+    -- Animations: only the end state matters for a static preview render,
+    -- so Play/Stop/IsPlaying just flip a flag; every Set* on the group or
+    -- its animations (SetFromAlpha, SetScale, SetOffset, SetDegrees, ...)
+    -- is captured generically like any other PascalCase call and read
+    -- back by the renderer for the finished-animation position/alpha.
+    self.CreateAnimationGroup = function(_, agName, tmpl)
+        local ag = newMockRegion("AnimationGroup", agName, self, tmpl)
+        local playing = false
+        ag.Play = function() playing = true end
+        ag.Stop = function() playing = false end
+        ag.IsPlaying = function() return playing end
+        ag.CreateAnimation = function(_, animType, animName)
+            return newMockRegion(animType or "Animation", animName, ag, nil)
+        end
+        return ag
+    end
+
+    -- SetAtlas is explicit (not the generic chainable no-op) because real
+    -- WoW's useAtlasSize=true argument actually resizes the region from
+    -- the atlas's real pixel dimensions (C_Texture.GetAtlasInfo), which
+    -- NineSliceUtil.ApplyLayout and the real UIPanelCloseButton icon both
+    -- rely on for correct sizing without an explicit SetSize call.
+    self.SetAtlas = function(_, atlasName, useAtlasSize, filterMode)
+        self.__geo = self.__geo or {}
+        self.__geo[#self.__geo + 1] = { method = "SetAtlas", args = { atlasName, useAtlasSize, filterMode } }
+        if useAtlasSize and atlasName then
+            local info = C_Texture.GetAtlasInfo(atlasName)
+            if info then
+                self:SetSize(info.width, info.height)
+            end
+        end
+        return self
+    end
 
     local shown = true -- real WoW Frame/Texture/FontString default to shown; Hide() is explicit
     self.Show = function() shown = true end
@@ -392,12 +429,54 @@ local function newMockRegion(kind, name, parent, template)
     return self
 end
 
+-- Getters that real WoW answers with numbers. Sizes come from the region's
+-- last explicit SetSize/SetWidth/SetHeight when the preview recorder logged
+-- them (`__geo`), else 0; string width uses the same codepoint estimate as
+-- the preview renderer, so text-sized widgets (tabs, ribbons) lay out alike.
+local function lastSize(t, axis)
+    local geo = rawget(t, "__geo")
+    if not geo then
+        return 0
+    end
+    for i = #geo, 1, -1 do
+        local c = geo[i]
+        if c.method == "SetSize" then
+            return (axis == "w" and c.args[1] or c.args[2]) or 0
+        elseif axis == "w" and c.method == "SetWidth" or axis == "h" and c.method == "SetHeight" then
+            return c.args[1] or 0
+        end
+    end
+    return 0
+end
+
+local function stringWidth(t)
+    local text = t.GetText and t:GetText() or ""
+    local _, codepoints = text:gsub("[^\128-\191]", "")
+    local size = 13
+    for _, c in ipairs(rawget(t, "__geo") or {}) do
+        if c.method == "SetFont" and c.args[2] then
+            size = c.args[2]
+        end
+    end
+    return codepoints * size * 0.56
+end
+
+local NUMERIC_GETTERS = {
+    GetWidth = function(t) return lastSize(t, "w") end,
+    GetHeight = function(t) return lastSize(t, "h") end,
+    GetStringWidth = stringWidth,
+    GetFrameLevel = function() return 1 end,
+}
+
 -- Only PascalCase keys (the WoW API convention: SetPoint, CreateTexture,
 -- IsShown, ...) fall back to a chainable no-op; addon code also stores its
 -- own lowerCamelCase data fields directly on these tables (panel.rows,
 -- chamber.emptyText, ...) and those must read back as real nil when unset,
 -- exactly like a real Frame, or "if not x.field then" guards never fire.
 FrameMeta.__index = function(t, k)
+    if NUMERIC_GETTERS[k] then
+        return NUMERIC_GETTERS[k]
+    end
     if type(k) == "string" and k:match("^%u") then
         return function(self, ...)
             -- generic chainable no-op; returns the object itself for method chains
@@ -408,10 +487,344 @@ FrameMeta.__index = function(t, k)
 end
 
 function CreateFrame(kind, name, parent, template)
-    return newMockRegion(kind, name, parent, template)
+    local self = newMockRegion(kind, name, parent, template)
+    if template == "UIPanelCloseButton" then
+        -- Real template: a 32x32 button whose Normal texture is the
+        -- red-lacquer Camelot exit button; Pushed/Disabled/Highlight
+        -- states exist in-game but only the resting state matters for a
+        -- static preview render.
+        self:SetSize(32, 32)
+        local icon = self:CreateTexture(nil, "OVERLAY")
+        icon:SetAllPoints(self)
+        icon:SetAtlas("RedButton-Exit", true)
+        self.Icon = icon
+    elseif template == "UIPanelScrollFrameTemplate" then
+        -- Real template: a Slider (UIPanelScrollBarTemplate) beside the
+        -- frame with up/down arrow buttons and a thumb texture. The engine
+        -- places the thumb by scroll value; a static render shows it at the
+        -- top of the slider.
+        local bar = CreateFrame("Slider", nil, self)
+        bar:SetPoint("TOPLEFT", self, "TOPRIGHT", 6, -16)
+        bar:SetPoint("BOTTOMLEFT", self, "BOTTOMRIGHT", 6, 16)
+        bar.ScrollUpButton = CreateFrame("Button", nil, bar)
+        bar.ScrollDownButton = CreateFrame("Button", nil, bar)
+        local thumb = bar:CreateTexture(nil, "OVERLAY")
+        thumb:SetPoint("TOP", bar, "TOP", 0, 0)
+        bar.ThumbTexture = thumb
+        self.ScrollBar = bar
+    end
+    return self
 end
 
 UIParent = newMockRegion("Frame", "UIParent", nil, nil)
+
+--------------------------------------------------------------------------
+-- Atlases: real Forever ("Camelot") chrome art, fetched out-of-band by
+-- tests/preview/fetch_atlases.py into tests/preview/.atlas-cache/ (never
+-- committed -- see tests/preview/README.md). When that cache is missing
+-- (fresh checkout, no network) or doesn't have a given name yet,
+-- GetAtlasInfo still returns a plausible non-nil table, so addon/
+-- NineSlice logic that branches on "if info then" never has to
+-- special-case headless tests.
+--------------------------------------------------------------------------
+
+local function atlasCacheDir()
+    local src = debug.getinfo(1, "S").source
+    local here = src:match("@(.*/)") or "./"
+    return here .. "preview/.atlas-cache/"
+end
+
+-- Minimal JSON decoder: only needs to handle the shape fetch_atlases.py
+-- writes (a flat object of objects: strings, numbers, booleans).
+local function decodeJson(s)
+    local pos = 1
+    local function skipWs()
+        local _, e = s:find("^%s*", pos)
+        pos = e + 1
+    end
+    local parseValue
+    local function parseString()
+        pos = pos + 1 -- opening quote
+        local startPos = pos
+        local out = {}
+        while true do
+            local c = s:sub(pos, pos)
+            if c == "" then
+                error("unterminated string in atlas cache JSON")
+            elseif c == '"' then
+                out[#out + 1] = s:sub(startPos, pos - 1)
+                pos = pos + 1
+                return table.concat(out)
+            elseif c == "\\" then
+                out[#out + 1] = s:sub(startPos, pos - 1)
+                out[#out + 1] = s:sub(pos + 1, pos + 1)
+                pos = pos + 2
+                startPos = pos
+            else
+                pos = pos + 1
+            end
+        end
+    end
+    local function parseObject()
+        pos = pos + 1
+        local t = {}
+        skipWs()
+        if s:sub(pos, pos) == "}" then
+            pos = pos + 1
+            return t
+        end
+        while true do
+            skipWs()
+            local key = parseString()
+            skipWs()
+            pos = pos + 1 -- ':'
+            skipWs()
+            t[key] = parseValue()
+            skipWs()
+            local c = s:sub(pos, pos)
+            if c == "," then
+                pos = pos + 1
+            elseif c == "}" then
+                pos = pos + 1
+                return t
+            else
+                error("malformed object in atlas cache JSON at " .. pos)
+            end
+        end
+    end
+    local function parseArray()
+        pos = pos + 1
+        local t = {}
+        skipWs()
+        if s:sub(pos, pos) == "]" then
+            pos = pos + 1
+            return t
+        end
+        while true do
+            skipWs()
+            t[#t + 1] = parseValue()
+            skipWs()
+            local c = s:sub(pos, pos)
+            if c == "," then
+                pos = pos + 1
+            elseif c == "]" then
+                pos = pos + 1
+                return t
+            else
+                error("malformed array in atlas cache JSON at " .. pos)
+            end
+        end
+    end
+    parseValue = function()
+        skipWs()
+        local c = s:sub(pos, pos)
+        if c == '"' then
+            return parseString()
+        elseif c == "{" then
+            return parseObject()
+        elseif c == "[" then
+            return parseArray()
+        elseif s:sub(pos, pos + 3) == "true" then
+            pos = pos + 4
+            return true
+        elseif s:sub(pos, pos + 4) == "false" then
+            pos = pos + 5
+            return false
+        elseif s:sub(pos, pos + 3) == "null" then
+            pos = pos + 4
+            return nil
+        else
+            local _, e, num = s:find("^(-?%d+%.?%d*[eE]?[%+%-]?%d*)", pos)
+            if not num then
+                error("malformed value in atlas cache JSON at " .. pos)
+            end
+            pos = e + 1
+            return tonumber(num)
+        end
+    end
+    skipWs()
+    return parseValue()
+end
+
+local atlasCache -- memoized; false = already tried and the file is missing
+local function loadAtlasCache()
+    if atlasCache ~= nil then
+        return atlasCache or nil
+    end
+    local f = io.open(atlasCacheDir() .. "index.json", "r")
+    if not f then
+        atlasCache = false
+        return nil
+    end
+    local text = f:read("*a")
+    f:close()
+    local ok, decoded = pcall(decodeJson, text)
+    atlasCache = ok and decoded or false
+    return atlasCache or nil
+end
+WowStub.LoadAtlasCache = loadAtlasCache -- exposed so tests/preview/record.lua validates against the same cache
+
+C_Texture = {}
+
+function C_Texture.GetAtlasInfo(name)
+    if not name then
+        return nil
+    end
+    local cache = loadAtlasCache()
+    local e = cache and cache.elements and cache.elements[name]
+    if e then
+        return {
+            width = e.width,
+            height = e.height,
+            leftTexCoord = e.left / e.imageWidth,
+            rightTexCoord = e.right / e.imageWidth,
+            topTexCoord = e.top / e.imageHeight,
+            bottomTexCoord = e.bottom / e.imageHeight,
+            tilesHorizontally = e.tilesHorizontally,
+            tilesVertically = e.tilesVertically,
+            file = e.png,
+        }
+    end
+    -- Cache missing, or this name hasn't been fetched yet: a plausible
+    -- fallback so NineSliceUtil / addon code that branches on the return
+    -- (width/height, "if info then") still works with zero network.
+    return {
+        width = 32,
+        height = 32,
+        leftTexCoord = 0,
+        rightTexCoord = 1,
+        topTexCoord = 0,
+        bottomTexCoord = 1,
+        tilesHorizontally = name:sub(1, 1) == "_",
+        tilesVertically = name:sub(1, 1) == "!",
+        file = nil,
+    }
+end
+
+--------------------------------------------------------------------------
+-- NineSliceUtil: a faithful (trimmed -- no textureKit/threeSlice/named-
+-- layout support, unused by this addon) port of Blizzard's
+-- Interface/AddOns/Blizzard_SharedXML/NineSlice.lua ApplyLayout, so the
+-- addon's own layout tables (TopLeftCorner/TopRightCorner/.../Center,
+-- each {atlas=, layer=, x=, y=, mirrorLayout=}) produce the exact same
+-- piece anchors a real client would: corners pinned to the container,
+-- edges stretched between their two adjacent corners (tiling along the
+-- stretch axis via the atlas's own tilesHorizontally/tilesVertically),
+-- Center spanning TopLeftCorner.BOTTOMRIGHT to BottomRightCorner.TOPLEFT.
+--------------------------------------------------------------------------
+
+NineSliceUtil = {}
+
+-- rawget, not container[pieceName]: an unset Pascal-case key like
+-- "TopLeftCorner" would otherwise hit FrameMeta's generic no-op fallback
+-- (which returns a callable, not nil, for any capitalized key) and look
+-- like the piece already existed.
+local function getNineSlicePiece(container, pieceName)
+    local piece = rawget(container, pieceName)
+    if piece then
+        return piece, true
+    end
+    piece = container:CreateTexture()
+    container[pieceName] = piece
+    return piece, false
+end
+
+local function setupTextureCoordinates(piece, setupInfo, pieceLayout, userLayout)
+    local left, right, top, bottom = 0, 1, 0, 1
+    local mirrored = pieceLayout.mirrorLayout
+    if mirrored == nil then
+        mirrored = userLayout and userLayout.mirrorLayout
+    end
+    if mirrored then
+        if setupInfo.mirrorVertical then
+            top, bottom = bottom, top
+        end
+        if setupInfo.mirrorHorizontal then
+            left, right = right, left
+        end
+    end
+    piece:SetTexCoord(left, right, top, bottom)
+end
+
+local function setupPieceVisuals(piece, setupInfo, pieceLayout, textureKit, userLayout)
+    setupTextureCoordinates(piece, setupInfo, pieceLayout, userLayout)
+    local atlasName = pieceLayout.atlas
+    if textureKit and atlasName then
+        atlasName = atlasName:gsub("%%s", textureKit)
+    end
+    local info = atlasName and C_Texture.GetAtlasInfo(atlasName)
+    piece:SetHorizTile(info and info.tilesHorizontally or false)
+    piece:SetVertTile(info and info.tilesVertically or false)
+    if info and atlasName then
+        piece:SetAtlas(atlasName, true)
+    end
+end
+
+local function setupCorner(container, piece, setupInfo, pieceLayout)
+    piece:ClearAllPoints()
+    piece:SetPoint(pieceLayout.point or setupInfo.point, container, pieceLayout.relativePoint or setupInfo.point,
+        pieceLayout.x, pieceLayout.y)
+end
+
+local function setupEdge(container, piece, setupInfo, pieceLayout)
+    piece:ClearAllPoints()
+    piece:SetPoint(setupInfo.point, getNineSlicePiece(container, setupInfo.relativePieces[1]), setupInfo.relativePoint,
+        pieceLayout.x, pieceLayout.y)
+    piece:SetPoint(setupInfo.relativePoint, getNineSlicePiece(container, setupInfo.relativePieces[2]), setupInfo.point,
+        pieceLayout.x1, pieceLayout.y1)
+end
+
+local function setupCenter(container, piece, setupInfo, pieceLayout)
+    piece:ClearAllPoints()
+    piece:SetPoint("TOPLEFT", getNineSlicePiece(container, "TopLeftCorner"), "BOTTOMRIGHT", pieceLayout.x, pieceLayout.y)
+    piece:SetPoint("BOTTOMRIGHT", getNineSlicePiece(container, "BottomRightCorner"), "TOPLEFT", pieceLayout.x1, pieceLayout.y1)
+end
+
+local nineSliceSetup = {
+    { pieceName = "TopLeftCorner", point = "TOPLEFT", fn = setupCorner },
+    { pieceName = "TopRightCorner", point = "TOPRIGHT", mirrorHorizontal = true, fn = setupCorner },
+    { pieceName = "BottomLeftCorner", point = "BOTTOMLEFT", mirrorVertical = true, fn = setupCorner },
+    { pieceName = "BottomRightCorner", point = "BOTTOMRIGHT", mirrorHorizontal = true, mirrorVertical = true, fn = setupCorner },
+    { pieceName = "TopEdge", point = "TOPLEFT", relativePoint = "TOPRIGHT",
+        relativePieces = { "TopLeftCorner", "TopRightCorner" }, fn = setupEdge },
+    { pieceName = "BottomEdge", point = "BOTTOMLEFT", relativePoint = "BOTTOMRIGHT",
+        relativePieces = { "BottomLeftCorner", "BottomRightCorner" }, mirrorVertical = true, fn = setupEdge },
+    { pieceName = "LeftEdge", point = "TOPLEFT", relativePoint = "BOTTOMLEFT",
+        relativePieces = { "TopLeftCorner", "BottomLeftCorner" }, fn = setupEdge },
+    { pieceName = "RightEdge", point = "TOPRIGHT", relativePoint = "BOTTOMRIGHT",
+        relativePieces = { "TopRightCorner", "BottomRightCorner" }, mirrorHorizontal = true, fn = setupEdge },
+    { pieceName = "Center", fn = setupCenter },
+}
+
+function NineSliceUtil.ApplyLayout(container, userLayout, textureKit)
+    for _, setup in ipairs(nineSliceSetup) do
+        local pieceLayout = userLayout[setup.pieceName]
+        if pieceLayout then
+            local piece, alreadyExisted = getNineSlicePiece(container, setup.pieceName)
+            if not alreadyExisted then
+                container[setup.pieceName] = piece
+                piece:SetDrawLayer(container.layoutTextureLayer or pieceLayout.layer or "BORDER",
+                    container.layoutTextureSubLevel or pieceLayout.subLevel)
+            end
+            setup.fn(container, piece, setup, pieceLayout)
+            setupPieceVisuals(piece, setup, pieceLayout, textureKit, userLayout)
+        end
+    end
+end
+
+--------------------------------------------------------------------------
+-- ColorMixin / CreateColor: real clients always have ColorMixin defined;
+-- addon code uses its presence as a "is the real SetGradient API
+-- available" feature check before calling CreateColor. GetRGBA is the
+-- one ColorMixin method addon code reads a color object back through.
+--------------------------------------------------------------------------
+
+ColorMixin = {}
+
+function CreateColor(r, g, b, a)
+    a = a or 1
+    return { r = r, g = g, b = b, a = a, GetRGBA = function() return r, g, b, a end }
+end
 
 function WowStub.FireEvent(eventName, ...)
     for _, entry in ipairs(WowStub.frames) do

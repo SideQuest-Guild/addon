@@ -28,6 +28,7 @@ read_globals = {
     "InCombatLockdown", "SendChatMessage", "ChatFrame_SendTell",
     "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
     "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo", "IsRaidLeader", "IsPartyLeader", "GameTooltip",
+    "C_Texture", "NineSliceUtil", "CreateColor", "ColorMixin",
 }
 
 -- Test files additionally define/read the WoW API stub and its control table.
@@ -44,6 +45,7 @@ files["tests/wowstub.lua"] = {
         "C_GuildBank", "InCombatLockdown", "SendChatMessage",
         "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
+        "C_Texture", "NineSliceUtil", "CreateColor", "ColorMixin",
     },
 }
 

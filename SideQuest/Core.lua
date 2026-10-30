@@ -45,6 +45,7 @@ local function defaultDB()
         settings = {
             officerRankIndex = nil, -- lowest guild rank that counts as officer; 0 is the Guild Master, like GetGuildInfo
             standingsBroadcastThrottle = 2, -- seconds between standings chunk sends
+            reduceMotion = false, -- skip window-open/tab-crossfade/wax-seal/toast animation
         },
         -- v2: cached imported state (SQI1: "v":2), see addon-contract-v2.md.
         guild = {

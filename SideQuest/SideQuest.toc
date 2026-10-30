@@ -29,5 +29,6 @@ Recruits.lua
 Bank.lua
 Prep.lua
 Sync.lua
+UI\Skin.lua
 UI\Main.lua
 UI\BidPopup.lua

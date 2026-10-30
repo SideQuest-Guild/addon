@@ -30,6 +30,7 @@ local ADDON_FILES = {
     "SideQuest/Bank.lua",
     "SideQuest/Prep.lua",
     "SideQuest/Sync.lua",
+    "SideQuest/UI/Skin.lua",
     "SideQuest/UI/Main.lua",
     "SideQuest/UI/BidPopup.lua",
 }

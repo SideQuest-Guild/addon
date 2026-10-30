@@ -2,8 +2,9 @@
 -- The Guild Sheet: one movable, resizable window that opens on YOU (not a
 -- roster grid), with bottom tabs for Guild, Crafters, Raids, Ledger, News
 -- and (officers) Console. Visual authority: sidequest-guild/website/DESIGN.md
--- (night blue, chamber framing, ribbon headings, class/quality colours
--- paired with text, no unicode icons, no eyebrow labels, tabular numerals).
+-- (night blue, chamfered chamber framing, ribbon headings, class/quality
+-- colours paired with text, no unicode icons, no eyebrow labels), carried
+-- in Forever's own chamfered Camelot window chrome (UI/Skin.lua).
 -- See .impeccable/surfaces/sidequest-ui-main-lua.md for the direction contract.
 
 SideQuest = SideQuest or {}
@@ -15,41 +16,30 @@ if not CreateFrame then
 end
 
 --------------------------------------------------------------------------
--- Media, tokens, helpers
+-- Visual chrome lives in UI/Skin.lua (loads first, see SideQuest.toc):
+-- colors, fonts, the chamfered chamber/ribbon/button/field-well/scroll/tab
+-- builders, the native window chrome and the motion helpers. Main.lua
+-- only adds the app-domain vocabulary on top of it (class/quality/role
+-- colors, the news icon map, item resolution) -- never a second copy of
+-- any chrome primitive.
 --------------------------------------------------------------------------
 
-local MEDIA_TEX = "Interface\\AddOns\\SideQuest\\Media\\Textures\\"
-local FONT_DISPLAY = "Interface\\AddOns\\SideQuest\\Media\\Fonts\\LibertinusSerifDisplay.ttf"
-local FONT_BODY = "Interface\\AddOns\\SideQuest\\Media\\Fonts\\EBGaramond.ttf"
-local FONT_BODY_ITALIC = "Interface\\AddOns\\SideQuest\\Media\\Fonts\\EBGaramond-Italic.ttf"
-
--- DESIGN.md color tokens, RGBA 0-1.
-local C = {
-    night = { 0x0a / 255, 0x0f / 255, 0x1a / 255, 1 },
-    night2 = { 0x10 / 255, 0x1a / 255, 0x2c / 255, 1 },
-    night3 = { 0x18 / 255, 0x25 / 255, 0x3d / 255, 1 },
-    royal = { 0x22 / 255, 0x38 / 255, 0x6a / 255, 1 },
-    royal2 = { 0x2e / 255, 0x4a / 255, 0x85 / 255, 1 },
-    stone = { 150 / 255, 172 / 255, 210 / 255, 0.26 },
-    stone2 = { 150 / 255, 172 / 255, 210 / 255, 0.13 },
-    gold = { 0xd8 / 255, 0xab / 255, 0x5c / 255, 1 },
-    goldDeep = { 0xa8 / 255, 0x84 / 255, 0x49 / 255, 1 },
-    ink = { 0xf2 / 255, 0xef / 255, 0xe9 / 255, 1 },
-    inkMuted = { 0xcf / 255, 0xca / 255, 0xc1 / 255, 1 },
-    inkFaint = { 0x9d / 255, 0x97 / 255, 0x8d / 255, 1 },
-    mist = { 0xc4 / 255, 0xcd / 255, 0xdd / 255, 1 },
-    mist2 = { 0x96 / 255, 0xa2 / 255, 0xb8 / 255, 1 },
-    flavor = { 1, 0xd3 / 255, 0x6a / 255, 1 },
-    errorC = { 0xe0 / 255, 0xa4 / 255, 0x79 / 255, 1 },
-    menuVeil = { 14 / 255, 14 / 255, 15 / 255, 0.55 },
-    online = { 0.35, 0.86, 0.4, 1 },
-    offline = { 0.5, 0.5, 0.52, 1 },
-    -- DESIGN.md button-primary textColor ("#17130c"): near-black ink used
-    -- on filled gold/gold-deep surfaces (the raid-night step plate, and
-    -- any future gold-filled text) where the usual warm-white ink would
-    -- not contrast.
-    inkOnGold = { 0x17 / 255, 0x13 / 255, 0x0c / 255, 1 },
-}
+local C = UI.Colors
+local setColor = UI.SetColor
+local makeFontString = UI.MakeFontString
+local shade = UI.Shade
+local hairline = UI.Hairline
+local trackedCaps = UI.TrackedCaps
+local MEDIA_TEX = UI.MediaTex
+local FONT_DISPLAY, FONT_BODY, FONT_BODY_ITALIC = UI.FontDisplay, UI.FontBody, UI.FontBodyItalic
+local createButton = UI.CreateButton
+local skinEditBox = UI.SkinEditBox
+local createCheckbox = UI.CreateCheckbox
+local createChamber = UI.CreateChamber
+local createRibbon = UI.CreateRibbon
+local createSubHeading = UI.CreateSubHeading
+local buildScroll = UI.BuildScroll
+local setScrollContentHeight = UI.SetScrollContentHeight
 
 -- Role swatch colors (tiny marker next to text -- never the only carrier,
 -- a role word always follows). DESIGN.md has no dedicated role palette, so
@@ -89,32 +79,21 @@ end
 -- fetch; the swatch keeps every kind visually distinct there too). Never
 -- the unicode "!"/"?" glyphs DESIGN.md's quest-log uses for events -- those
 -- are reserved for open/closed sign-ups, not news kinds.
+-- Game atlases per news kind (Forever art). Loot shows the item's own icon in
+-- a quality-tinted frame instead, see setNewsIcon.
 local NEWS_ICON = {
-    boss_kill = { tex = "Interface\\RaidFrame\\ReadyCheck-Ready", color = { 0xd8 / 255, 0xab / 255, 0x5c / 255, 1 } },
-    first_kill = { tex = "Interface\\RaidFrame\\ReadyCheck-Ready", color = { 0xd8 / 255, 0xab / 255, 0x5c / 255, 1 } },
-    loot = { tex = "Interface\\Icons\\INV_Misc_Bag_08", color = nil }, -- color filled per-item (quality) at render time
-    announcement = { tex = "Interface\\COMMON\\VoiceChat-Speaker-On", color = { 1, 0xd3 / 255, 0x6a / 255, 1 } },
-    level = { tex = "Interface\\Icons\\Achievement_Level_10", color = { 0x2e / 255, 0x4a / 255, 0x85 / 255, 1 } },
-    joined = { tex = "Interface\\Icons\\INV_Misc_GroupLooking", color = { 150 / 255, 172 / 255, 210 / 255, 0.6 } },
-    badge = { tex = "Interface\\Icons\\INV_Misc_Trophy_01", color = { 0xa8 / 255, 0x84 / 255, 0x49 / 255, 1 } },
+    boss_kill = "DungeonSkull",
+    first_kill = "VignetteKillElite",
+    announcement = "communities-icon-notification",
+    level = "LevelUp-Dot-Gold",
+    joined = "socialqueuing-icon-group",
+    badge = "UI-Achievement-Shield-1",
 }
+local LOOT_ICON_FALLBACK = "Interface\\Icons\\INV_Misc_Bag_08"
 local NEWS_KIND_WORD = {
     boss_kill = "Boss kill", first_kill = "First kill", loot = "Loot", announcement = "Announcement",
     level = "Level up", joined = "Joined", badge = "Badge",
 }
-
--- WoW FontStrings have no letter-spacing; tracked caps are built by hand
--- with U+2009 (thin space) between glyphs (verified present in all three
--- shipped fonts' cmaps; U+200A hair space is not -- see Media/PROVENANCE.md).
-local THIN_SPACE = "\xE2\x80\x89" -- UTF-8 for U+2009
-local function trackedCaps(text)
-    local out = {}
-    for i = 1, #text do
-        out[#out + 1] = text:sub(i, i)
-    end
-    return table.concat(out, THIN_SPACE):upper()
-end
-UI.TrackedCaps = trackedCaps
 
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
@@ -189,274 +168,15 @@ local function resolveItemInfo(itemLink)
     }
 end
 
-local function setColor(region, color)
-    if region.SetColorTexture then
-        region:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
-    elseif region.SetTexture then
-        region:SetTexture(color[1], color[2], color[3], color[4] or 1)
-    end
-end
-
-local function makeFontString(parent, font, size, color, justify)
-    local fs = parent:CreateFontString(nil, "OVERLAY")
-    if fs.SetFont then
-        fs:SetFont(font or FONT_BODY, size or 13, "")
-    end
-    if color and fs.SetTextColor then
-        fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
-    end
-    if justify and fs.SetJustifyH then
-        fs:SetJustifyH(justify)
-    end
-    return fs
-end
-
---- Text-shadow ("shade" in DESIGN.md): legibility over busy painted art.
-local function shade(fs)
-    if fs.SetShadowOffset then
-        fs:SetShadowOffset(1, -1)
-    end
-    if fs.SetShadowColor then
-        fs:SetShadowColor(0, 0, 0, 0.85)
-    end
-    return fs
-end
-
---- A hairline 1px rule using a color texture (DESIGN.md's only border/
--- divider device: rgba(255,255,255,0.09) ink hairline on a dark field).
-local function hairline(parent, width)
-    local line = parent:CreateTexture(nil, "ARTWORK")
-    line:SetHeight(1)
-    if width then
-        line:SetWidth(width)
-    end
-    setColor(line, { 1, 1, 1, 0.09 })
-    return line
-end
-
---- Four gold corner brackets from the shared texture, flipped per corner
--- via tex coords (no rotation API needed for 90-degree reflections).
-local function addCornerBrackets(frame, size)
-    size = size or 20
-    local coords = {
-        TOPLEFT = { 0, 0, 1, 0, 0, 1, 1, 1 },
-        TOPRIGHT = { 1, 0, 0, 0, 1, 1, 0, 1 },
-        BOTTOMLEFT = { 0, 1, 1, 1, 0, 0, 1, 0 },
-        BOTTOMRIGHT = { 1, 1, 0, 1, 1, 0, 0, 0 },
-    }
-    frame.corners = {}
-    for point, quad in pairs(coords) do
-        local tex = frame:CreateTexture(nil, "OVERLAY")
-        tex:SetSize(size, size)
-        tex:SetPoint(point, 2, point:find("TOP") and -2 or 2)
-        if tex.SetTexture then
-            tex:SetTexture(MEDIA_TEX .. "CornerBracket")
-        end
-        if tex.SetTexCoord then
-            tex:SetTexCoord(unpack(quad))
-        end
-        frame.corners[point] = tex
-    end
-end
-
---- Draw a 1px hairline border on all four edges of `frame` in `color`
--- (DESIGN.md: "Never a solid or saturated border" -- always a hairline).
-local function addBorder(frame, color, thickness)
-    thickness = thickness or 1
-    local top = frame:CreateTexture(nil, "BORDER")
-    top:SetHeight(thickness)
-    top:SetPoint("TOPLEFT", frame, "TOPLEFT")
-    top:SetPoint("TOPRIGHT", frame, "TOPRIGHT")
-    setColor(top, color)
-    local bottom = frame:CreateTexture(nil, "BORDER")
-    bottom:SetHeight(thickness)
-    bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT")
-    bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT")
-    setColor(bottom, color)
-    local left = frame:CreateTexture(nil, "BORDER")
-    left:SetWidth(thickness)
-    left:SetPoint("TOPLEFT", frame, "TOPLEFT")
-    left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT")
-    setColor(left, color)
-    local right = frame:CreateTexture(nil, "BORDER")
-    right:SetWidth(thickness)
-    right:SetPoint("TOPRIGHT", frame, "TOPRIGHT")
-    right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT")
-    setColor(right, color)
-    return { top = top, bottom = bottom, left = left, right = right }
-end
-
---- Room button chrome (DESIGN.md "Room buttons"): `kind = "primary"` is a
--- royal fill with a gold-deep 1px edge and ink caps label (a form's
--- submit/commit action); `kind = "quiet"` (default) is a dark well with a
--- stone edge and mist label (secondary/toggle actions). Hover brightens
--- the fill and turns the edge gold; disabled dims both and swaps in a
--- tooltip reason via `btn:SetEnabled(enabled, reasonText)`. Replaces
--- every stock "UIPanelButtonTemplate" button -- that template's red/gray
--- chrome is never themed and clashes with the night-blue rooms.
-local function createButton(parent, kind, text, width, height)
-    kind = (kind == "primary") and "primary" or "quiet"
-    local btn = CreateFrame("Button", nil, parent)
-    btn:SetSize(width or 90, height or 20)
-    local well = btn:CreateTexture(nil, "BACKGROUND")
-    well:SetAllPoints(btn)
-    local border = addBorder(btn, kind == "primary" and C.goldDeep or C.stone, 1)
-    local label = makeFontString(btn, FONT_BODY, 11, kind == "primary" and C.ink or C.mist, "CENTER")
-    label:SetPoint("CENTER")
-    if text then
-        label:SetText(text)
-    end
-    btn.well, btn.border, btn.label, btn.kind = well, border, label, kind
-    local function paint(hover, enabled)
-        local fillC = kind == "primary" and (hover and C.royal2 or C.royal) or (hover and C.night2 or C.night)
-        setColor(well, fillC)
-        if well.SetAlpha then well:SetAlpha(enabled and 1 or 0.4) end
-        local edgeC = (hover and enabled) and C.gold or (kind == "primary" and C.goldDeep or C.stone)
-        for _, seg in pairs(border) do
-            setColor(seg, edgeC)
-            if seg.SetAlpha then seg:SetAlpha(enabled and 1 or 0.5) end
-        end
-        local labelC = not enabled and C.inkFaint or (kind == "primary" and C.ink or ((hover) and C.gold or C.mist))
-        label:SetTextColor(labelC[1], labelC[2], labelC[3], 1)
-    end
-    btn.__enabled = true
-    paint(false, true)
-    btn:SetScript("OnEnter", function()
-        paint(true, btn.__enabled)
-        if not btn.__enabled and btn.__disabledReason and GameTooltip then
-            GameTooltip:SetOwner(btn, "ANCHOR_TOP")
-            GameTooltip:SetText(btn.__disabledReason)
-            GameTooltip:Show()
-        end
-    end)
-    btn:SetScript("OnLeave", function()
-        paint(false, btn.__enabled)
-        if GameTooltip then GameTooltip:Hide() end
-    end)
-    btn.SetText = function(_, t) label:SetText(t) end
-    btn.GetText = function() return label:GetText() end
-    local nativeSetEnabled = btn.SetEnabled
-    btn.SetEnabled = function(self, enabled, reason)
-        enabled = not not enabled
-        self.__enabled = enabled
-        self.__disabledReason = (not enabled) and reason or nil
-        if nativeSetEnabled then nativeSetEnabled(self, enabled) end
-        paint(false, enabled)
-    end
-    btn.Disable = function(self) self:SetEnabled(false) end
-    btn.Enable = function(self) self:SetEnabled(true) end
-    return btn
-end
-
---- Field-well chrome for EditBoxes (DESIGN.md "Forms (rooms)" `.field`):
--- a dark well with a stone edge that warms toward gold on focus, plus
--- placeholder text in mist shown only while the field is empty. Stock
--- InputBoxTemplate chrome renders as bare unboxed text with no well and
--- no placeholder at all.
-local function skinEditBox(editBox, placeholderText)
-    local well = editBox:CreateTexture(nil, "BACKGROUND")
-    well:SetAllPoints(editBox)
-    setColor(well, C.night)
-    local border = addBorder(editBox, C.stone, 1)
-    local placeholder = makeFontString(editBox, FONT_BODY, 12, C.mist2, "LEFT")
-    placeholder:SetPoint("LEFT", 4, 0)
-    placeholder:SetText(placeholderText or "Search")
-    local function refresh()
-        placeholder:SetShown(not editBox.GetText or editBox:GetText() == "")
-    end
-    if editBox.HookScript then
-        editBox:HookScript("OnTextChanged", refresh)
-        editBox:HookScript("OnEditFocusGained", function()
-            for _, seg in pairs(border) do setColor(seg, C.gold) end
-        end)
-        editBox:HookScript("OnEditFocusLost", function()
-            for _, seg in pairs(border) do setColor(seg, C.stone) end
-        end)
-    end
-    refresh()
-    editBox.well, editBox.border, editBox.placeholder = well, border, placeholder
-    return editBox
-end
-
---- A chamber: night gradient fill, stone outer hairline, gold-deep inner
--- hairline 5px in, bracketed gold corners. The only container used in tab
--- content.
-local function createChamber(parent, name)
-    local chamber = CreateFrame("Frame", name, parent, "BackdropTemplate")
-    local fill = chamber:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints(chamber)
-    setColor(fill, C.night3)
-    addBorder(chamber, C.stone, 1)
-    local inner = CreateFrame("Frame", nil, chamber)
-    inner:SetPoint("TOPLEFT", 5, -5)
-    inner:SetPoint("BOTTOMRIGHT", -5, 5)
-    addBorder(inner, C.goldDeep, 1)
-    addCornerBrackets(chamber, 20)
-    chamber.inner = inner
-    return chamber
-end
-
---- Ribbon heading centered on a chamber's top edge: royal fill, gold-deep
--- top/bottom lines, notched end caps, tracked display caps. "Nothing sits
--- above the ribbon" and there is no eyebrow label anywhere in this UI.
-local function createRibbon(chamber, text, height)
-    height = height or 26
-    local ribbon = CreateFrame("Frame", nil, chamber)
-    ribbon:SetHeight(height)
-    ribbon:SetPoint("TOP", chamber, "TOP", 0, height / 2)
-    ribbon:SetPoint("LEFT", chamber, "LEFT", 24, 0)
-    ribbon:SetPoint("RIGHT", chamber, "RIGHT", -24, 0)
-    local fill = ribbon:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints(ribbon)
-    setColor(fill, C.royal)
-    local topLine = hairline(ribbon)
-    topLine:SetPoint("TOPLEFT", ribbon, "TOPLEFT")
-    topLine:SetPoint("TOPRIGHT", ribbon, "TOPRIGHT")
-    setColor(topLine, C.goldDeep)
-    local botLine = hairline(ribbon)
-    botLine:SetPoint("BOTTOMLEFT", ribbon, "BOTTOMLEFT")
-    botLine:SetPoint("BOTTOMRIGHT", ribbon, "BOTTOMRIGHT")
-    setColor(botLine, C.goldDeep)
-    local leftCap = ribbon:CreateTexture(nil, "OVERLAY")
-    leftCap:SetSize(16, height)
-    leftCap:SetPoint("RIGHT", ribbon, "LEFT", 0, 0)
-    if leftCap.SetTexture then leftCap:SetTexture(MEDIA_TEX .. "RibbonEndCapLeft") end
-    local rightCap = ribbon:CreateTexture(nil, "OVERLAY")
-    rightCap:SetSize(16, height)
-    rightCap:SetPoint("LEFT", ribbon, "RIGHT", 0, 0)
-    if rightCap.SetTexture then rightCap:SetTexture(MEDIA_TEX .. "RibbonEndCapRight") end
-    local label = makeFontString(ribbon, FONT_DISPLAY, 14, C.ink, "CENTER")
-    label:SetPoint("CENTER", ribbon, "CENTER", 0, 0)
-    label:SetText(trackedCaps(text))
-    ribbon.label = label
-    return ribbon
-end
-
---- A sub-heading: tracked display caps followed by a gold-deep line that
--- fades out to the right (DESIGN.md ".chamber h3"/".sub-title"). Used for
--- every section inside a chamber that is not the ribbon itself -- never an
--- eyebrow label sitting above unrelated content.
-local function createSubHeading(parent, text)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(14)
-    local label = makeFontString(row, FONT_DISPLAY, 11, C.gold, "LEFT")
-    label:SetPoint("LEFT", 0, 0)
-    label:SetText(trackedCaps(text))
-    local line = hairline(row)
-    line:SetPoint("LEFT", label, "RIGHT", 8, 0)
-    line:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    setColor(line, C.goldDeep)
-    row.label, row.line = label, line
-    return row
-end
-
 --- One quest-log row: a gold "!" for something open/pending, a dim "?"
 -- once it's done, title + a mist meta line. Never color-only: every state
 -- also changes the mark glyph and/or adds text.
 local function createQuestLogRow(parent)
     local row = CreateFrame("Button", nil, parent)
     row:SetHeight(32)
-    local mark = makeFontString(row, FONT_DISPLAY, 16, C.gold)
+    -- the game's own quest marks: "!" while sign-ups are open, "?" once closed
+    local mark = row:CreateTexture(nil, "ARTWORK")
+    mark:SetSize(16, 16)
     mark:SetPoint("LEFT", 2, 0)
     local title = makeFontString(row, FONT_BODY, 14, C.ink, "LEFT")
     title:SetPoint("LEFT", mark, "RIGHT", 8, 6)
@@ -466,37 +186,39 @@ local function createQuestLogRow(parent)
     return row
 end
 
---- A news row with a kind icon (texture + fallback swatch) instead of the
--- quest-log "!"/"?" marks, which are reserved for sign-up state.
+--- A news row: the kind's icon, then the line and its meta.
 local function createNewsRow(parent)
     local row = CreateFrame("Frame", nil, parent)
     row:SetHeight(32)
-    local swatch = row:CreateTexture(nil, "BACKGROUND")
-    swatch:SetSize(18, 18)
-    swatch:SetPoint("LEFT", 2, 0)
     local icon = row:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(16, 16)
-    icon:SetPoint("CENTER", swatch, "CENTER", 0, 0)
+    icon:SetSize(20, 20)
+    icon:SetPoint("LEFT", 3, 0)
+    local frame = row:CreateTexture(nil, "OVERLAY")
+    frame:SetSize(24, 24)
+    frame:SetPoint("CENTER", icon, "CENTER")
+    frame:SetTexture(MEDIA_TEX .. "IconFrame")
     local title = makeFontString(row, FONT_BODY, 13, C.ink, "LEFT")
-    title:SetPoint("LEFT", swatch, "RIGHT", 8, 6)
+    title:SetPoint("LEFT", icon, "RIGHT", 10, 6)
     local meta = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
     meta:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
-    row.swatch, row.icon, row.title, row.meta = swatch, icon, title, meta
+    row.icon, row.frame, row.title, row.meta = icon, frame, title, meta
     return row
 end
 
---- Fill a news row's icon for `item` (News.Get()/GuildNow shape: kind,
--- quality for loot). Falls back to a generic swatch for unknown kinds.
+--- Fill a news row's icon for `item` (News.Get()/GuildNow shape: kind, and
+-- for loot item_id and quality).
 local function setNewsIcon(row, item)
-    local info = NEWS_ICON[item.kind] or NEWS_ICON.announcement
-    if row.icon.SetTexture then
-        row.icon:SetTexture(info.tex)
-    end
-    local color = info.color
     if item.kind == "loot" then
-        color = QUALITY_COLOR[item.quality or 1] or QUALITY_COLOR[1]
+        local tex = item.item_id and C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(item.item_id)
+        row.icon:SetTexture(tex or LOOT_ICON_FALLBACK)
+        row.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        local q = QUALITY_COLOR[item.quality or 1] or QUALITY_COLOR[1]
+        row.frame:SetVertexColor(q[1], q[2], q[3], 1)
+        row.frame:Show()
+    else
+        row.icon:SetAtlas(NEWS_ICON[item.kind] or NEWS_ICON.announcement)
+        row.frame:Hide()
     end
-    setColor(row.swatch, color or C.stone2)
 end
 
 --- Day header for news/quest-log lists ("grouped by day" per finding #9):
@@ -519,43 +241,6 @@ local function setStateText(fs, text, isError)
         local c = isError and C.errorC or C.mist2
         fs:SetTextColor(c[1], c[2], c[3], 1)
     end
-end
-
---- A scroll region: ScrollFrame + content child, with a themed scrollbar
--- track drawn beside it (the preview renderer clips children to this
--- frame's rect and paints the same track/thumb it draws for real play).
-local function buildScroll(parent, top)
-    local scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 14, top or -14)
-    scroll:SetPoint("BOTTOMRIGHT", -28, 14)
-    local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(10, 10)
-    scroll:SetScrollChild(content)
-    local track = parent:CreateTexture(nil, "BACKGROUND")
-    track:SetWidth(4)
-    track:SetPoint("TOP", scroll, "TOP", 0, 0)
-    track:SetPoint("BOTTOM", scroll, "BOTTOM", 0, 0)
-    track:SetPoint("RIGHT", scroll, "RIGHT", 18, 0)
-    setColor(track, C.stone2)
-    local thumb = parent:CreateTexture(nil, "ARTWORK")
-    thumb:SetWidth(4)
-    thumb:SetPoint("TOP", track, "TOP", 0, 0)
-    setColor(thumb, C.goldDeep)
-    scroll.track, scroll.thumb = track, thumb
-    return scroll, content
-end
-
---- Set a scrollbar thumb's height to the visible/content ratio (called
--- after a list is laid out, so the track always reflects how much more
--- there is to see -- the actual clip + scroll-position math is the
--- preview renderer's job, same as the real UIPanelScrollFrameTemplate's).
-local function sizeScrollThumb(scroll, contentHeight)
-    if not scroll.thumb or not scroll.GetHeight then
-        return
-    end
-    local visible = 1
-    local ratio = math.min(1, visible / math.max(1, contentHeight / 1))
-    scroll.thumb:SetHeight(math.max(16, 200 * ratio))
 end
 
 local function createNameRow(parent, size)
@@ -594,33 +279,19 @@ local function classText(fs, character, className)
 end
 
 --------------------------------------------------------------------------
--- Exports for sibling UI files (BidPopup.lua): one chamber/ribbon/colour
--- vocabulary, never a second copy of it.
+-- Exports for sibling UI files (BidPopup.lua): the app-domain vocabulary.
+-- Chrome primitives (colors, fonts, chamber/ribbon/button/...) are
+-- already exported by UI/Skin.lua.
 --------------------------------------------------------------------------
 
-UI.Colors = C
 UI.RoleColor, UI.RoleWord = ROLE_COLOR, ROLE_WORD
 UI.ClassColor, UI.ClassWord, UI.QualityColor = CLASS_COLOR, CLASS_WORD, QUALITY_COLOR
 UI.ClassKey = classKey
-UI.SetColor = setColor
-UI.MakeFontString = makeFontString
-UI.Shade = shade
-UI.Hairline = hairline
-UI.AddBorder = addBorder
-UI.CreateButton = createButton
-UI.SkinEditBox = skinEditBox
-UI.CreateChamber = createChamber
-UI.CreateRibbon = createRibbon
-UI.CreateSubHeading = createSubHeading
 UI.CreateQuestLogRow = createQuestLogRow
 UI.SetStateText = setStateText
-UI.BuildScroll = buildScroll
 UI.ClassText = classText
 UI.CreateNameRow = createNameRow
 UI.SetNameRow = setNameRow
-UI.MediaTex = MEDIA_TEX
-UI.FontDisplay, UI.FontBody, UI.FontBodyItalic = FONT_DISPLAY, FONT_BODY, FONT_BODY_ITALIC
-UI.TrackedCaps = trackedCaps
 UI.ParseItemId = parseItemId
 UI.ResolveItemInfo = resolveItemInfo
 
@@ -655,12 +326,19 @@ function UI.BuildMainFrame()
     if SideQuestDB.ui.scale and main.SetScale then
         main:SetScale(SideQuestDB.ui.scale)
     end
+    -- Night ground under the native title band (PortraitFrameTemplate's Bg
+    -- runs from (2, -21) to (-2, 2)).
     local fill = main:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints(main)
+    fill:SetPoint("TOPLEFT", 2, -UI.WINDOW_TITLE_H)
+    fill:SetPoint("BOTTOMRIGHT", -2, 2)
     setColor(fill, C.night)
-    local edge = main:CreateTexture(nil, "BORDER")
-    edge:SetAllPoints(main)
-    setColor(edge, C.stone)
+
+    -- Forever's own chrome: the gilded, chamfered Camelot portrait frame with
+    -- the guild crest in its ring, the title in its band, its close button.
+    local closeBtn = UI.ApplyWindowChrome(main, "SideQuest")
+    closeBtn:SetScript("OnClick", function()
+        main:Hide()
+    end)
 
     main:SetMovable(true)
     main:EnableMouse(true)
@@ -684,7 +362,7 @@ function UI.BuildMainFrame()
 
     local resizeGrip = CreateFrame("Button", nil, main)
     resizeGrip:SetSize(16, 16)
-    resizeGrip:SetPoint("BOTTOMRIGHT", -2, 2)
+    resizeGrip:SetPoint("BOTTOMRIGHT", -6, 6)
     resizeGrip:SetScript("OnMouseDown", function()
         main:StartSizing("BOTTOMRIGHT")
     end)
@@ -694,61 +372,45 @@ function UI.BuildMainFrame()
     end)
 
     --------------------------------------------------------------
-    -- Header strip: crest, tracked wordmark (shaded for legibility over
-    -- the painted art), freshness line (on its own local scrim)
+    -- The Great Hall painting under the title band, fading into night at
+    -- its foot; the crest's ring overlaps its top-left corner the way a
+    -- character portrait overlaps a native window. The freshness line sits
+    -- on its own scrim at the right.
     --------------------------------------------------------------
     local header = CreateFrame("Frame", nil, main)
-    header:SetPoint("TOPLEFT")
-    header:SetPoint("TOPRIGHT")
-    header:SetHeight(110)
-    local strip = header:CreateTexture(nil, "BACKGROUND")
+    header:SetPoint("TOPLEFT", 2, -UI.WINDOW_TITLE_H)
+    header:SetPoint("TOPRIGHT", -2, -UI.WINDOW_TITLE_H)
+    header:SetHeight(78)
+    local strip = header:CreateTexture(nil, "BACKGROUND", nil, 1)
     strip:SetAllPoints(header)
-    if strip.SetTexture then
-        strip:SetTexture(MEDIA_TEX .. "HeaderStrip")
-    end
-    local crest = header:CreateTexture(nil, "ARTWORK")
-    crest:SetSize(48, 48)
-    crest:SetPoint("LEFT", 14, 0)
-    if crest.SetTexture then
-        crest:SetTexture(MEDIA_TEX .. "Crest")
-    end
-    local wordmark = makeFontString(header, FONT_DISPLAY, 22, C.ink, "LEFT")
-    wordmark:SetPoint("LEFT", crest, "RIGHT", 14, 6)
-    wordmark:SetText(trackedCaps("SideQuest"))
-    shade(wordmark)
+    strip:SetTexture(MEDIA_TEX .. "HeaderStrip")
+    local foot = header:CreateTexture(nil, "BACKGROUND", nil, 2)
+    foot:SetPoint("BOTTOMLEFT")
+    foot:SetPoint("BOTTOMRIGHT")
+    foot:SetHeight(30)
+    foot:SetColorTexture(1, 1, 1, 1)
+    foot:SetGradient("VERTICAL", CreateColor(C.night[1], C.night[2], C.night[3], 1),
+        CreateColor(C.night[1], C.night[2], C.night[3], 0))
 
-    -- freshness: a local scrim (dark veil) behind the line, not just a
-    -- shadow, so it stays legible over the busiest part of the painting.
     local freshScrim = header:CreateTexture(nil, "ARTWORK")
-    freshScrim:SetSize(190, 22)
-    freshScrim:SetPoint("RIGHT", -6, 0)
-    setColor(freshScrim, C.menuVeil)
-    local freshness = makeFontString(header, FONT_BODY, 12, C.mist, "RIGHT")
-    freshness:SetPoint("RIGHT", -16, 0)
+    freshScrim:SetSize(200, 20)
+    freshScrim:SetPoint("BOTTOMRIGHT", -6, 10)
+    freshScrim:SetColorTexture(1, 1, 1, 1)
+    freshScrim:SetGradient("HORIZONTAL", CreateColor(C.night[1], C.night[2], C.night[3], 0),
+        CreateColor(C.night[1], C.night[2], C.night[3], 0.85))
+    local freshness = makeFontString(header, FONT_BODY_ITALIC, 12, C.mist, "RIGHT")
+    freshness:SetPoint("RIGHT", freshScrim, "RIGHT", -8, 0)
+    shade(freshness)
     main.freshness = freshness
 
-    local closeBtn = CreateFrame("Button", nil, header, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", -2, -2)
-    closeBtn:SetScript("OnClick", function()
-        main:Hide()
-    end)
-
     --------------------------------------------------------------
-    -- Body (tab content lives here) + bottom tab bar, inset to match the
-    -- chamber below it so the tab row never overlaps the chamber corners
+    -- Body: everything between the painting and the frame's foot. The tab
+    -- row hangs below the window like the Character frame's.
     --------------------------------------------------------------
-    local TAB_HEIGHT, TAB_BAR_HEIGHT = 32, 40
-    local tabBar = CreateFrame("Frame", nil, main)
-    tabBar:SetPoint("BOTTOMLEFT", main, "BOTTOMLEFT", 12, 4)
-    tabBar:SetPoint("BOTTOMRIGHT", main, "BOTTOMRIGHT", -12, 4)
-    tabBar:SetHeight(TAB_BAR_HEIGHT)
-    main.tabBar = tabBar
-
     local body = CreateFrame("Frame", nil, main)
-    body:SetPoint("TOPLEFT", header, "BOTTOMLEFT")
-    body:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT")
-    body:SetPoint("BOTTOMLEFT", tabBar, "TOPLEFT")
-    body:SetPoint("BOTTOMRIGHT", tabBar, "TOPRIGHT")
+    body:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 6, 0)
+    body:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", -6, 0)
+    body:SetPoint("BOTTOM", main, "BOTTOM", 0, 8)
     main.body = body
 
     UI.main = main
@@ -761,33 +423,20 @@ function UI.BuildMainFrame()
     end
     table.insert(allTabs, OFFICER_TAB)
 
-    -- WINDOW_DEFAULT_W matches the actual default window width (and the
-    -- preview's render width), so the tab row fills the bar exactly and
-    -- lines up under the chamber's inset edges instead of a narrower,
-    -- stale WINDOW_MIN_W grid.
-    local tabWidth = math.max(60, math.floor(WINDOW_DEFAULT_W - 24) / #allTabs)
-    for i, tabName in ipairs(allTabs) do
-        local btn = CreateFrame("Button", nil, tabBar)
-        btn:SetSize(tabWidth, TAB_HEIGHT)
-        btn:SetPoint("LEFT", (i - 1) * tabWidth, 0)
-        local well = btn:CreateTexture(nil, "BACKGROUND")
-        well:SetAllPoints(btn)
-        setColor(well, C.night2)
-        local border = addBorder(btn, C.stone, 1)
-        local label = makeFontString(btn, FONT_BODY, 12, C.mist, "CENTER")
-        label:SetPoint("CENTER")
-        label:SetText(trackedCaps(tabName))
-        btn.well, btn.label, btn.border = well, label, border
+    -- PanelTabButtonTemplate placement: the first tab at (11, 2) under the
+    -- frame's bottom-left, each next one 3 to the right of the last.
+    local prev
+    for _, tabName in ipairs(allTabs) do
+        local btn = UI.CreatePanelTab(main, tabName, false, tabName == OFFICER_TAB)
+        if prev then
+            btn:SetPoint("LEFT", prev, "RIGHT", 3, 0)
+        else
+            btn:SetPoint("TOPLEFT", main, "BOTTOMLEFT", 11, 2)
+        end
+        prev = btn
+        UI.SetPanelTabSelected(btn, false)
         btn:SetScript("OnClick", function()
             UI.ShowTab(tabName)
-        end)
-        btn:SetScript("OnEnter", function()
-            if UI.activeTab ~= tabName then
-                setColor(well, C.royal2)
-            end
-        end)
-        btn:SetScript("OnLeave", function()
-            setColor(well, UI.activeTab == tabName and C.royal or C.night2)
         end)
         if tabName == OFFICER_TAB then
             btn:Hide() -- shown only for officers, see UI.RefreshOfficerVisibility
@@ -847,28 +496,17 @@ function UI.RefreshFreshness()
     setStateText(main.freshness, text, false)
 end
 
---- Tab chrome: dark well + stone edge; the current tab takes a royal fill
--- with a gold-deep edge; the officer tab keeps a gold-deep edge even when
--- not current (DESIGN.md: "Console = gold-edged").
 function UI.ShowTab(tabName)
     for name, panel in pairs(UI.panels) do
         if name == tabName then
             panel:Show()
+            UI.PlayCrossfade(panel)
         else
             panel:Hide()
         end
     end
     for name, btn in pairs(UI.tabButtons) do
-        local isActive = name == tabName
-        setColor(btn.well, isActive and C.royal or C.night2)
-        if btn.label and btn.label.SetTextColor then
-            local c = isActive and C.gold or C.mist
-            btn.label:SetTextColor(c[1], c[2], c[3], 1)
-        end
-        local edgeColor = (isActive or name == OFFICER_TAB) and C.goldDeep or C.stone
-        for _, line in pairs(btn.border or {}) do
-            setColor(line, edgeColor)
-        end
+        UI.SetPanelTabSelected(btn, name == tabName)
     end
     UI.activeTab = tabName
     SideQuestDB.ui.tab = tabName
@@ -895,6 +533,7 @@ function UI.Show()
     SideQuest.WhenOutOfCombat(function()
         local main = UI.BuildMainFrame()
         main:Show()
+        UI.PlayOpenAnim(main)
         UI.ShowTab(UI.activeTab or SideQuestDB.ui.tab or "You")
     end)
 end
@@ -983,13 +622,8 @@ function UI.BuildYouPanel(body)
 
     local answerButtons = {}
     for i, answer in ipairs({ { "going", "Going" }, { "maybe", "Maybe" }, { "cant", "Can't" } }) do
-        local btn = createButton(content, "quiet", answer[2], 70, 22)
-        btn:SetPoint("TOPLEFT", nextEventMeta, "BOTTOMLEFT", (i - 1) * 74, -8)
-        local selectedEdge = addBorder(btn, C.gold, 2)
-        for _, line in pairs(selectedEdge) do
-            line:Hide()
-        end
-        btn.selectedEdge = selectedEdge
+        local btn = createButton(content, "quiet", answer[2], 72, 24)
+        btn:SetPoint("TOPLEFT", nextEventMeta, "BOTTOMLEFT", (i - 1) * 78, -8)
         answerButtons[answer[1]] = btn
     end
     local signupState = makeFontString(content, FONT_BODY, 11, C.mist2, "LEFT")
@@ -1152,11 +786,7 @@ function UI.RefreshYou()
                 SideQuest.Signups.Answer(nextEvt.id, answer)
                 UI.RefreshYou()
             end)
-            local selected = answer == currentAnswer
-            for _, line in pairs(btn.selectedEdge) do
-                line:SetShown(selected)
-            end
-            setColor(btn.well or btn, selected and C.royal or C.night2)
+            btn:SetSelected(answer == currentAnswer)
         end
         if state == "sent" then
             setStateText(you.signupState, "Sent -- waiting for an officer", false)
@@ -1170,9 +800,7 @@ function UI.RefreshYou()
         you.nextEventMeta:SetText("")
         setStateText(you.signupState, "", false)
         for _, btn in pairs(you.answerButtons) do
-            for _, line in pairs(btn.selectedEdge) do
-                line:Hide()
-            end
+            btn:SetSelected(false)
         end
     end
 
@@ -1195,6 +823,9 @@ function UI.RefreshYou()
     you.epgpAltsText:SetText(string.format("Guild EP %.0f  --  attendance %.0f%%  --  alts: %s",
         (member and member.guild_ep) or 0, (member and (member.attendance_rate or 0) * 100) or 0,
         #altNames > 0 and table.concat(altNames, ", ") or "none"))
+    -- the You column is a fixed stack: name, PR, four weeks, next event and
+    -- answers, badges, guild EP line
+    setScrollContentHeight(you.scroll, 400)
 
     -- GUILD NOW
     local rosterMembers = (SideQuestDB.roster and SideQuestDB.roster.members) or {}
@@ -1248,6 +879,7 @@ function UI.RefreshYou()
         row.meta:SetText((item.character and (displayName(item.character) .. "  ") or "") .. os.date("%m/%d %H:%M", item.at or now()))
         row:Show()
     end
+    setScrollContentHeight(guildNow.newsScroll, 32 * shown)
 
     UI.RefreshFreshness()
 end
@@ -1278,7 +910,7 @@ function UI.BuildGuildPanel(body)
     skinEditBox(searchBox, "Search members")
     chamber.searchBox = searchBox
 
-    local onlineOnly = CreateFrame("CheckButton", nil, chamber.inner, "UICheckButtonTemplate")
+    local onlineOnly = createCheckbox(chamber.inner, 16)
     onlineOnly:SetPoint("LEFT", searchBox, "RIGHT", 10, 0)
     local onlineOnlyLabel = makeFontString(chamber.inner, FONT_BODY, 11, C.mist, "LEFT")
     onlineOnlyLabel:SetPoint("LEFT", onlineOnly, "RIGHT", 2, 0)
@@ -1325,7 +957,7 @@ function UI.BuildGuildPanel(body)
     -- header row: Name | Level | Rank | Zone | Last seen
     local header = CreateFrame("Frame", nil, chamber.inner)
     header:SetPoint("TOPLEFT", 14, -58)
-    header:SetPoint("RIGHT", -28, 0)
+    header:SetPoint("TOPRIGHT", -28, -58)
     header:SetHeight(16)
     local COLS = { name = 0, level = 230, rank = 300, zone = 420, lastSeen = 540 }
     chamber.cols = COLS
@@ -1343,7 +975,7 @@ function UI.BuildGuildPanel(body)
     headerLabel("Last seen", COLS.lastSeen)
     local headerLine = hairline(chamber.inner)
     headerLine:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -3)
-    headerLine:SetPoint("RIGHT", -28, 0)
+    headerLine:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -3)
 
     local scroll, content = buildScroll(chamber.inner, -80)
     chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
@@ -1357,10 +989,11 @@ local function buildGuildRow(content)
     ui:SetSize(560, 22)
     ui.indent = CreateFrame("Frame", nil, ui)
     ui.indent:SetPoint("LEFT", 0, 0)
-    ui.expandBtn = createButton(ui, "quiet", nil, 18, 18)
+    ui.expandBtn = UI.CreateExpandButton(ui)
     ui.expandBtn:SetPoint("LEFT", ui.indent, "LEFT", 0, 0)
     ui.statusIcon = ui:CreateTexture(nil, "ARTWORK")
-    ui.statusIcon:SetSize(8, 8)
+    ui.statusIcon:SetSize(10, 10)
+    ui.statusIcon:SetTexture(MEDIA_TEX .. "Gem")
     ui.statusIcon:SetPoint("LEFT", ui.expandBtn, "RIGHT", 4, 0)
     ui.nameRow = createNameRow(ui, 13)
     ui.nameRow:SetPoint("LEFT", ui.statusIcon, "RIGHT", 6, 0)
@@ -1463,7 +1096,8 @@ function UI.RefreshGuild()
     local COLS = chamber.cols
     local function paintRow(ui, r, indent)
         ui.indent:SetWidth(indent)
-        setColor(ui.statusIcon, r.online and C.online or C.offline)
+        local gem = r.online and C.online or C.offline
+        ui.statusIcon:SetVertexColor(gem[1], gem[2], gem[3], 1)
         setNameRow(ui.nameRow, r.character, r.class)
         ui.statusWord:ClearAllPoints()
         ui.statusWord:SetPoint("LEFT", ui.nameRow, "RIGHT", 8, 0)
@@ -1506,8 +1140,8 @@ function UI.RefreshGuild()
         end
         local expandKey = g.main.member_id or g.main.character
         local hasAlts = #g.alts > 0
-        ui.expandBtn:SetText(hasAlts and (chamber.expanded[expandKey] and "-" or "+") or "")
-        ui.expandBtn:SetEnabled(hasAlts)
+        ui.expandBtn:SetExpanded(chamber.expanded[expandKey])
+        ui.expandBtn:SetShown(hasAlts)
         ui.expandBtn:SetScript("OnClick", function()
             chamber.expanded[expandKey] = not chamber.expanded[expandKey]
             UI.RefreshGuild()
@@ -1527,7 +1161,7 @@ function UI.RefreshGuild()
             end
         end
     end
-    sizeScrollThumb(chamber.scroll, 24 * i)
+    setScrollContentHeight(chamber.scroll, 24 * i)
 end
 
 --------------------------------------------------------------------------
@@ -1683,7 +1317,7 @@ function UI.RefreshCrafters()
         end
         y = y + 6
     end
-    sizeScrollThumb(chamber.scroll, y)
+    setScrollContentHeight(chamber.scroll, y)
 end
 
 --------------------------------------------------------------------------
@@ -1761,7 +1395,7 @@ function UI.RefreshRaids()
         row:SetPoint("TOPLEFT", 0, -y)
         y = y + (isOfficer and 92 or 70)
         local isOpen = (evt.starts_at or 0) > now()
-        row.mark:SetText(isOpen and "!" or "?")
+        row.mark:SetAtlas(isOpen and "QuestNormal" or "QuestTurnin")
         row.title:SetText(evt.title or "Raid")
         row.meta:SetText((evt.kind or "raid") .. "  --  " .. os.date("%A %b %d, %H:%M", evt.starts_at or now()))
 
@@ -1782,7 +1416,7 @@ function UI.RefreshRaids()
                 SideQuest.Signups.Answer(evt.id, answer)
                 UI.RefreshRaids()
             end)
-            setColor(btn.well or btn, answer == currentAnswer and C.royal or C.night2)
+            btn:SetSelected(answer == currentAnswer)
         end
 
         row.inviteBtn:SetShown(isOfficer)
@@ -1806,7 +1440,7 @@ function UI.RefreshRaids()
         end
         row:Show()
     end
-    sizeScrollThumb(chamber.scroll, y)
+    setScrollContentHeight(chamber.scroll, y)
 end
 
 --------------------------------------------------------------------------
@@ -1846,7 +1480,7 @@ function UI.BuildLedgerPanel(body)
 
     local header = CreateFrame("Frame", nil, chamber.inner)
     header:SetPoint("TOPLEFT", sheetBtn, "BOTTOMLEFT", 0, -12)
-    header:SetPoint("RIGHT", -28, 0)
+    header:SetWidth(560)
     header:SetHeight(14)
     local LCOLS = { name = 4, ep = 300, gp = 370, pr = 440, rank = 500 }
     chamber.ledgerCols = LCOLS
@@ -1867,7 +1501,7 @@ function UI.BuildLedgerPanel(body)
     rankHdr:SetText(trackedCaps("Rank"))
     local headerLine = hairline(chamber.inner)
     headerLine:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -3)
-    headerLine:SetPoint("RIGHT", -28, 0)
+    headerLine:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -3)
 
     local scroll, content = buildScroll(chamber.inner, -76)
     chamber.scroll, chamber.content, chamber.rows, chamber.lootRows = scroll, content, {}, {}
@@ -1988,7 +1622,7 @@ function UI.RefreshLedger()
         ui.nameText:SetText((item.item_name or "Item") .. "  GP " .. (item.gp or 0) .. "  (" .. (item.response or "ms") .. ")")
         ui:Show()
     end
-    sizeScrollThumb(chamber.scroll, (22 * (#rows + 1)) + 40 + 20 * #loot)
+    setScrollContentHeight(chamber.scroll, (22 * (#rows + 1)) + 40 + 20 * #loot)
 end
 
 --------------------------------------------------------------------------
@@ -2063,7 +1697,7 @@ function UI.RefreshNews()
         row:Show()
         y = y + 32
     end
-    sizeScrollThumb(chamber.scroll, y)
+    setScrollContentHeight(chamber.scroll, y)
 end
 
 --------------------------------------------------------------------------
@@ -2074,24 +1708,19 @@ function UI.BuildToast()
     if UI.toast then
         return UI.toast
     end
-    local toast = CreateFrame("Frame", "SideQuestToast", UIParent, "BackdropTemplate")
-    toast:SetSize(360, 56)
+    local toast = createChamber(UIParent, "SideQuestToast")
+    toast:SetSize(360, 80)
     toast:SetPoint("TOP", 0, -60)
-    local fill = toast:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints(toast)
-    setColor(fill, C.night3)
-    local edge = toast:CreateTexture(nil, "BORDER")
-    edge:SetAllPoints(toast)
-    setColor(edge, C.goldDeep)
-    local officerText = makeFontString(toast, FONT_BODY, 12, C.gold, "CENTER")
-    officerText:SetPoint("TOP", 0, -8)
-    local textFs = makeFontString(toast, FONT_BODY_ITALIC, 14, C.flavor, "CENTER")
-    textFs:SetPoint("CENTER", 0, -4)
+    local ribbon = createRibbon(toast, "Announcement", 22)
+    local officerText = makeFontString(toast.inner, FONT_BODY, 12, C.gold, "CENTER")
+    officerText:SetPoint("TOP", 0, -10)
+    local textFs = makeFontString(toast.inner, FONT_BODY_ITALIC, 14, C.flavor, "CENTER")
+    textFs:SetPoint("CENTER", 0, -8)
     if textFs.SetWordWrap then
-        textFs:SetWidth(330)
+        textFs:SetWidth(300)
         textFs:SetWordWrap(true)
     end
-    toast.officerText, toast.textFs = officerText, textFs
+    toast.ribbon, toast.officerText, toast.textFs = ribbon, officerText, textFs
     toast:Hide()
     UI.toast = toast
     return toast
@@ -2104,6 +1733,7 @@ function UI.ShowToast(item)
         toast.officerText:SetText(displayName(item.officer) or "An officer")
         toast.textFs:SetText(item.text or "")
         toast:Show()
+        UI.PlayToastIn(toast)
         if C_Timer and C_Timer.After then
             C_Timer.After(6, function()
                 toast:Hide()
@@ -2126,29 +1756,27 @@ function UI.BuildConsolePanel(body)
     panel:Hide()
     UI.panels[OFFICER_TAB] = panel
 
-    local subBar = CreateFrame("Frame", nil, panel)
-    subBar:SetPoint("TOPLEFT", 12, -12)
-    subBar:SetPoint("TOPRIGHT", -12, -12)
-    subBar:SetHeight(26)
-    local subWidth = math.floor((WINDOW_DEFAULT_W - 24) / #CONSOLE_SUBTABS)
+    -- Native top tabs standing on the sub-view chamber's top edge, the way
+    -- Forever's profession frames carry theirs. The selected tab names the
+    -- view, so Console chambers carry no ribbon of their own.
+    local CONSOLE_TAB_TOP = 30
     panel.subButtons = {}
-    for i, name in ipairs(CONSOLE_SUBTABS) do
-        local btn = CreateFrame("Button", nil, subBar)
-        btn:SetSize(subWidth, 24)
-        btn:SetPoint("LEFT", (i - 1) * subWidth, 0)
-        local well = btn:CreateTexture(nil, "BACKGROUND")
-        well:SetAllPoints(btn)
-        setColor(well, C.night2)
-        local border = addBorder(btn, C.goldDeep, 1) -- console sub-tabs are gold-edged throughout
-        local label = makeFontString(btn, FONT_BODY, 11, C.mist, "CENTER")
-        label:SetPoint("CENTER")
-        label:SetText(trackedCaps(name))
-        btn.well, btn.label, btn.border = well, label, border
+    local prev
+    for _, name in ipairs(CONSOLE_SUBTABS) do
+        local btn = UI.CreatePanelTab(panel, name, true)
+        if prev then
+            btn:SetPoint("LEFT", prev, "RIGHT", 3, 0)
+        else
+            btn:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 26, -CONSOLE_TAB_TOP)
+        end
+        prev = btn
+        UI.SetPanelTabSelected(btn, false)
         btn:SetScript("OnClick", function()
             UI.ShowConsoleSub(name)
         end)
         panel.subButtons[name] = btn
     end
+    panel.tabTop = CONSOLE_TAB_TOP
 
     panel.subPanels = {}
     UI.BuildConsoleRaidNight(panel)
@@ -2165,16 +1793,13 @@ function UI.ShowConsoleSub(name)
     for subName, sub in pairs(panel.subPanels) do
         if subName == name then
             sub:Show()
+            UI.PlayCrossfade(sub)
         else
             sub:Hide()
         end
     end
     for subName, btn in pairs(panel.subButtons) do
-        setColor(btn.well, subName == name and C.royal or C.night2)
-        if btn.label and btn.label.SetTextColor then
-            local c = subName == name and C.gold or C.mist
-            btn.label:SetTextColor(c[1], c[2], c[3], 1)
-        end
+        UI.SetPanelTabSelected(btn, subName == name)
     end
     panel.activeSub = name
     if name == "Raid Night" then
@@ -2201,12 +1826,9 @@ end
 
 local function makeConsoleSub(panel, key)
     local sub = CreateFrame("Frame", nil, panel)
-    -- subBar sits at TOPLEFT(12,-12) with height 26, so its bottom edge is
-    -- 38px below panel.top; the chamber's ribbon is centred ON its own top
-    -- edge (half above it), so the chamber itself must start well below
-    -- that before the ribbon clears the sub-tab strip instead of touching it.
-    sub:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -60)
-    sub:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 12)
+    -- The chamber's top edge is the line the sub-tabs stand on.
+    sub:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -panel.tabTop)
+    sub:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 6)
     sub:Hide()
     panel.subPanels[key] = sub
     return sub
@@ -2220,7 +1842,6 @@ function UI.BuildConsoleRaidNight(panel)
     local sub = makeConsoleSub(panel, "Raid Night")
     local chamber = createChamber(sub, "SideQuestRaidNightChamber")
     chamber:SetAllPoints(sub)
-    createRibbon(chamber, "Raid Night")
 
     local scroll, content = buildScroll(chamber.inner, -30)
     chamber.scroll, chamber.content = scroll, content
@@ -2230,7 +1851,7 @@ function UI.BuildConsoleRaidNight(panel)
     courseHeading:SetWidth(520)
     local list = CreateFrame("Frame", nil, content)
     list:SetPoint("TOPLEFT", courseHeading, "BOTTOMLEFT", 0, -6)
-    list:SetPoint("RIGHT", 0, 0)
+    list:SetPoint("TOPRIGHT", courseHeading, "BOTTOMRIGHT", 0, -6)
     chamber.stepRows = {}
 
     local steps = {
@@ -2259,11 +1880,14 @@ function UI.BuildConsoleRaidNight(panel)
         local row = CreateFrame("Frame", nil, list)
         row:SetSize(500, 24)
         row:SetPoint("TOPLEFT", 0, -26 * (i - 1))
-        -- one number, in a gold-deep plate (never doubled with the label).
+        -- one number, on a chamfered metal plate tinted per state (never
+        -- doubled with the label).
         local numPlate = row:CreateTexture(nil, "BACKGROUND")
-        numPlate:SetSize(20, 20)
+        numPlate:SetSize(22, 22)
         numPlate:SetPoint("LEFT", 0, 0)
-        setColor(numPlate, C.goldDeep)
+        numPlate:SetTexture(MEDIA_TEX .. "Plate")
+        numPlate:SetTexCoord(0, 0.75, 0, 0.75) -- 48 px of art in a 64 px file
+        numPlate:SetVertexColor(C.goldDeep[1], C.goldDeep[2], C.goldDeep[3], 1)
         local num = makeFontString(row, FONT_DISPLAY, 12, C.inkOnGold, "CENTER")
         num:SetPoint("CENTER", numPlate, "CENTER", 0, 0)
         num:SetText(tostring(i))
@@ -2309,7 +1933,7 @@ function UI.BuildConsoleRaidNight(panel)
     awardHeading:SetWidth(520)
     local awardList = CreateFrame("Frame", nil, content)
     awardList:SetPoint("TOPLEFT", awardHeading, "BOTTOMLEFT", 0, -6)
-    awardList:SetPoint("RIGHT", 0, 0)
+    awardList:SetPoint("TOPRIGHT", awardHeading, "BOTTOMRIGHT", 0, -6)
     chamber.awardRows = {}
 
     chamber.presenceText, chamber.standbyText, chamber.awardHeading, chamber.awardList =
@@ -2337,19 +1961,29 @@ function UI.RefreshConsoleRaidNight()
         if step.doneAt then
             row.timeText:SetText(os.date("%H:%M", step.doneAt))
             row.label:SetTextColor(C.mist2[1], C.mist2[2], C.mist2[3], 1)
-            setColor(row.numPlate, C.stone)
+            row.numPlate:SetVertexColor(C.stone[1], C.stone[2], C.stone[3], 1)
+            row.num:Hide() -- the seal stands in for the number once a step is done
             if row.btn then
                 row.btn:SetText("Done")
                 row.btn:Disable()
             end
+            if not row.seal then
+                -- the one authored moment: a wax seal bearing the crest
+                -- stamps onto the plate the first time this step is seen
+                -- done; it is never replayed on later refreshes, and the
+                -- seal itself (not an animation) is what persists.
+                row.seal = UI.StampWaxSeal(row, "CENTER", row.numPlate, "CENTER", 0, 0, true)
+            end
         elseif i == current then
             row.timeText:SetText("In progress")
             row.label:SetTextColor(C.gold[1], C.gold[2], C.gold[3], 1)
-            setColor(row.numPlate, C.gold)
+            row.numPlate:SetVertexColor(C.gold[1], C.gold[2], C.gold[3], 1)
+            row.num:Show()
         else
             row.timeText:SetText("")
             row.label:SetTextColor(C.ink[1], C.ink[2], C.ink[3], 1)
-            setColor(row.numPlate, C.goldDeep)
+            row.numPlate:SetVertexColor(C.goldDeep[1], C.goldDeep[2], C.goldDeep[3], 1)
+            row.num:Show()
         end
     end
 
@@ -2424,6 +2058,8 @@ function UI.RefreshConsoleRaidNight()
         row:Show()
     end
     chamber.awardHeading.label:SetText(trackedCaps("Auto-award log (" .. #awards .. ")"))
+    -- course, presence and standby above the award log, then one line per award
+    setScrollContentHeight(chamber.scroll, 300 + 18 * shown)
 end
 
 -- Loot sub-view: the item up for bid (icon, quality-colour name, slot, GP
@@ -2433,7 +2069,6 @@ function UI.BuildConsoleLoot(panel)
     local sub = makeConsoleSub(panel, "Loot")
     local chamber = createChamber(sub, "SideQuestConsoleLootChamber")
     chamber:SetAllPoints(sub)
-    createRibbon(chamber, "Loot")
 
     local openLootBtn = createButton(chamber.inner, "primary", "Open bidding (loot window)", 180, 22)
     openLootBtn:SetPoint("TOPLEFT", 14, -30)
@@ -2452,12 +2087,14 @@ function UI.BuildConsoleLoot(panel)
     -- the item up for bid: icon (quality-colour swatch), name in its
     -- quality colour, slot + GP cost, and the time left -- the loot
     -- window itself only shows a raw link, never what's about to be awarded.
-    local iconSwatch = chamber.inner:CreateTexture(nil, "BACKGROUND")
-    iconSwatch:SetSize(32, 32)
+    local iconSwatch = chamber.inner:CreateTexture(nil, "OVERLAY")
+    iconSwatch:SetSize(34, 34)
     iconSwatch:SetPoint("TOPLEFT", openLootBtn, "BOTTOMLEFT", 0, -10)
+    iconSwatch:SetTexture(MEDIA_TEX .. "IconFrame")
     local icon = chamber.inner:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(28, 28)
+    icon:SetSize(30, 30)
     icon:SetPoint("CENTER", iconSwatch, "CENTER")
+    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     local itemText = makeFontString(chamber.inner, FONT_DISPLAY, 13, C.ink, "LEFT")
     itemText:SetPoint("TOPLEFT", iconSwatch, "TOPRIGHT", 10, -2)
     local slotGpText = makeFontString(chamber.inner, FONT_BODY, 11, C.mist, "LEFT")
@@ -2503,7 +2140,7 @@ function UI.RefreshBidRanking(bid)
         r:Hide()
     end
     if not bid then
-        setColor(chamber.iconSwatch, C.stone2)
+        chamber.iconSwatch:SetVertexColor(C.mist2[1], C.mist2[2], C.mist2[3], 0.6)
         if chamber.icon.SetTexture then chamber.icon:SetTexture(nil) end
         setStateText(chamber.itemText, "No item up for bid.", true)
         chamber.slotGpText:SetText("")
@@ -2521,7 +2158,7 @@ function UI.RefreshBidRanking(bid)
     -- the item itself: icon/name in quality colour, slot + GP, time left
     local info = UI.ResolveItemInfo(bid.itemLink)
     local qColor = QUALITY_COLOR[info.quality] or QUALITY_COLOR[1]
-    setColor(chamber.iconSwatch, qColor)
+    chamber.iconSwatch:SetVertexColor(qColor[1], qColor[2], qColor[3], 1)
     if info.icon and chamber.icon.SetTexture then
         chamber.icon:SetTexture(info.icon)
     end
@@ -2580,6 +2217,7 @@ function UI.RefreshBidRanking(bid)
         end)
         row:Show()
     end
+    setScrollContentHeight(chamber.scroll, 22 * #ranked)
 end
 
 SideQuest.On("SQ_BID_OPENED", function(bid)
@@ -2593,7 +2231,6 @@ function UI.BuildConsoleRoster(panel)
     local sub = makeConsoleSub(panel, "Roster")
     local chamber = createChamber(sub, "SideQuestConsoleRosterChamber")
     chamber:SetAllPoints(sub)
-    createRibbon(chamber, "Roster")
 
     local sweepBtn = createButton(chamber.inner, "primary", "Sweep roster", 140, 22)
     sweepBtn:SetPoint("TOPLEFT", 14, -30)
@@ -2668,7 +2305,7 @@ function UI.RefreshConsoleRoster()
         row:Show()
         y = y + 22
     end
-    sizeScrollThumb(chamber.scroll, y)
+    setScrollContentHeight(chamber.scroll, y)
 end
 
 -- Recruits sub-view: applicants/trials, checklist, votes
@@ -2676,7 +2313,6 @@ function UI.BuildConsoleRecruits(panel)
     local sub = makeConsoleSub(panel, "Recruits")
     local chamber = createChamber(sub, "SideQuestConsoleRecruitsChamber")
     chamber:SetAllPoints(sub)
-    createRibbon(chamber, "Recruits")
 
     local scroll, content = buildScroll(chamber.inner, -34)
     chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
@@ -2721,16 +2357,23 @@ function UI.RefreshConsoleRecruits()
             row.noBtn = createButton(row, "quiet", "No", 44, 18)
             row.checks = {}
             for ci, def in ipairs(CHECK_DEFS) do
-                local tick = row:CreateTexture(nil, "ARTWORK")
-                tick:SetSize(10, 10)
-                tick:SetPoint("TOPLEFT", row.nameRow, "BOTTOMLEFT", (ci - 1) * 90, -6)
-                local label = makeFontString(row, FONT_BODY, 10, C.mist2, "LEFT")
-                label:SetPoint("LEFT", tick, "RIGHT", 4, 0)
+                -- an empty box until done, then the box with its check: the
+                -- state reads by shape, never by colour alone
+                local box = row:CreateTexture(nil, "ARTWORK")
+                box:SetSize(14, 14)
+                box:SetPoint("TOPLEFT", row.nameRow, "BOTTOMLEFT", (ci - 1) * 96, -6)
+                box:SetAtlas("checkbox-minimal")
+                local tick = row:CreateTexture(nil, "OVERLAY")
+                tick:SetSize(14, 14)
+                tick:SetPoint("CENTER", box, "CENTER")
+                tick:SetAtlas("checkmark-minimal")
+                local label = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
+                label:SetPoint("LEFT", box, "RIGHT", 5, 0)
                 label:SetText(def.label)
                 row.checks[def.key] = { tick = tick, label = label }
             end
             row.votesText = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
-            row.votesText:SetPoint("TOPLEFT", row.nameRow, "BOTTOMLEFT", 0, -22)
+            row.votesText:SetPoint("TOPLEFT", row.nameRow, "BOTTOMLEFT", 0, -28)
             chamber.rows[i] = row
         end
         row:SetPoint("TOPLEFT", 0, -58 * (i - 1))
@@ -2744,7 +2387,9 @@ function UI.RefreshConsoleRecruits()
         row.noBtn:SetPoint("LEFT", row.yesBtn, "RIGHT", 6, 0)
         for key, ui in pairs(row.checks) do
             local checked = r.checklist and r.checklist[key]
-            setColor(ui.tick, checked and C.gold or C.stone2)
+            ui.tick:SetShown(checked and true or false)
+            local col = checked and C.ink or C.mist2
+            ui.label:SetTextColor(col[1], col[2], col[3], 1)
         end
         local votes = {}
         for _, v in ipairs(r.votes or {}) do
@@ -2761,7 +2406,7 @@ function UI.RefreshConsoleRecruits()
         end)
         row:Show()
     end
-    sizeScrollThumb(chamber.scroll, 58 * #recruits)
+    setScrollContentHeight(chamber.scroll, 58 * #recruits)
 end
 
 -- Bank ledger sub-view
@@ -2769,7 +2414,6 @@ function UI.BuildConsoleBank(panel)
     local sub = makeConsoleSub(panel, "Bank")
     local chamber = createChamber(sub, "SideQuestConsoleBankChamber")
     chamber:SetAllPoints(sub)
-    createRibbon(chamber, "Bank")
 
     local captureBtn = createButton(chamber.inner, "primary", "Capture open tab", 150, 22)
     captureBtn:SetPoint("TOPLEFT", 14, -30)
@@ -2816,7 +2460,7 @@ function UI.RefreshConsoleBank()
         row.text:SetText(b.kind .. "  " .. (b.item_name or "") .. " x" .. (b.count or 0) .. "  " .. displayName(b.character or ""))
         row:Show()
     end
-    sizeScrollThumb(chamber.scroll, 20 * #rows)
+    setScrollContentHeight(chamber.scroll, 20 * #rows)
 end
 
 -- Announce sub-view: compose -> toast + guild chat + queued for Discord,
@@ -2825,7 +2469,6 @@ function UI.BuildConsoleAnnounce(panel)
     local sub = makeConsoleSub(panel, "Announce")
     local chamber = createChamber(sub, "SideQuestConsoleAnnounceChamber")
     chamber:SetAllPoints(sub)
-    createRibbon(chamber, "Announce")
 
     local editBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
     editBox:SetSize(400, 20)
@@ -2833,7 +2476,7 @@ function UI.BuildConsoleAnnounce(panel)
     editBox:SetAutoFocus(false)
     skinEditBox(editBox, "Announcement text")
 
-    local discordCheck = CreateFrame("CheckButton", nil, chamber.inner, "UICheckButtonTemplate")
+    local discordCheck = createCheckbox(chamber.inner, 16)
     discordCheck:SetPoint("TOPLEFT", editBox, "BOTTOMLEFT", 0, -8)
     local discordLabel = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
     discordLabel:SetPoint("LEFT", discordCheck, "RIGHT", 2, 0)
@@ -2855,7 +2498,7 @@ function UI.BuildConsoleAnnounce(panel)
     recentHeading:SetWidth(520)
     local recentList = CreateFrame("Frame", nil, chamber.inner)
     recentList:SetPoint("TOPLEFT", recentHeading, "BOTTOMLEFT", 0, -6)
-    recentList:SetPoint("RIGHT", -14, 0)
+    recentList:SetPoint("TOPRIGHT", recentHeading, "BOTTOMRIGHT", 0, -6)
     chamber.recentRows = {}
     chamber.recentHeading, chamber.recentList = recentHeading, recentList
     panel.announceChamber = chamber
@@ -2900,7 +2543,6 @@ function UI.BuildConsoleSync(panel)
     local sub = makeConsoleSub(panel, "Sync")
     local chamber = createChamber(sub, "SideQuestConsoleSyncChamber")
     chamber:SetAllPoints(sub)
-    createRibbon(chamber, "Sync")
 
     local lastSyncText = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
     lastSyncText:SetPoint("TOPLEFT", 14, -30)

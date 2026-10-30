@@ -12,3 +12,6 @@ build/
 
 # OS
 .DS_Store
+
+# Blizzard-extracted atlas art fetched at preview time (tests/preview/fetch_atlases.py); never commit Blizzard art
+tests/preview/.atlas-cache/

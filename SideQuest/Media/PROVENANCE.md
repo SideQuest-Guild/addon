@@ -116,129 +116,80 @@ All three are licensed SIL Open Font License 1.1 (see `OFL.txt` in this director
 
 ---
 
-## Textures/
+## Skin/
 
-Source room paintings: `website/assets/rooms/*.webp` (8 files). Dimensions checked via
-`magick identify -format "%f: %wx%h\n" *.webp`:
-
-```
-armory.webp: 1698x926        hall-of-heroes.webp: 1698x926
-great-hall.webp: 1536x1024    ledger-chamber.webp: 1698x926
-muster-yard.webp: 1536x1024   raid-hall.webp: 1698x926
-round-table.webp: 1698x926    war-room.webp: 1698x926
-```
-
-(Note: the assignment described these as `*.png`; the actual files on disk are `*.webp` — used
-as-is, same content role.) `raid-hall.webp` was chosen for `HeaderStrip.tga`: at 1698x926
-(~1.83:1) it is tied for the widest aspect ratio among the available paintings, and depicts an
-open hall interior (no single dominant foreground figure), so a 1024x256 (4:1) crop from its
-upper-middle band reads as atmospheric architectural detail rather than cutting through a face or
-character — well suited to sit behind a UI header ribbon.
-
-### Crest.tga
-
-Source: `website/assets/brand/sidequest-logo.png` (959x1182, sRGB + alpha). Resized to fit within
-128x128 and padded to exactly 128x128 with a transparent background (power-of-two, alpha
-preserved):
-
-```sh
-magick website/assets/brand/sidequest-logo.png \
-  -resize 128x128 \
-  -background none -gravity center -extent 128x128 \
-  -define tga:compression=none \
-  Crest.tga
-```
+Every custom (non-Blizzard) texture the addon ships. Blizzard's own Forever art (the window
+frame, tabs, close button, cast bar, checkboxes, quest marks, news icons) is never shipped: the
+addon names those atlases with `SetAtlas` and the game supplies them.
 
 ### HeaderStrip.tga
 
-Source: `website/assets/rooms/raid-hall.webp` (1698x926). Resized to 1024px width, cropped to a
-1024x256 strip from the upper-middle region (avoids the floor and avoids being cropped straight
-off the top edge), then the bottom ~25% (64 of 256px) is faded to transparent via a generated
-alpha mask (top 192px solid white = fully opaque, bottom 64px linear white→black gradient =
-fade-to-transparent), applied with `-compose CopyOpacity` per DESIGN.md's edge-mask technique:
+Source: `website/assets/rooms/raid-hall.webp` (1698x926), the guild site's raid hall painting.
+Resized to 1024px wide, a 1024x256 band cropped from the upper middle, and its bottom 64px faded
+to transparent with a generated mask:
 
 ```sh
 magick website/assets/rooms/raid-hall.webp -resize 1024x -gravity North -crop 1024x256+0+120 +repage crop.png
-
 magick -size 1024x192 xc:white mask_top.png
 magick -size 1024x64 gradient:white-black mask_fade.png
 magick mask_top.png mask_fade.png -append mask.png
-
 magick crop.png mask.png -alpha off -compose CopyOpacity -composite \
   -define tga:compression=none HeaderStrip.tga
 ```
 
-### RibbonEndCapLeft.tga / RibbonEndCapRight.tga
+### Everything else: tools/skin-art/render.mjs
 
-Authored (no external source). 64x64, royal (#22386a) fill with gold-deep (#a88449) 1px top/bottom
-lines, trimmed to the shape's horizontal span, and a triangular notch cut into the outward-facing
-short edge (left edge for the left cap, right edge for the right cap) via a single concave filled
-polygon. `-define tga:image-type=2` forces genuine 32bpp truecolor+alpha storage (verified via raw
-header bytes, since `magick identify`'s "Type" field is a heuristic based on unique-color count
-and otherwise misreports these low-color-count images as "PaletteAlpha" even though the file is
-stored as full truecolor):
+All other textures are drawn as SVG in `tools/skin-art/render.mjs` and rasterized with Chromium
+(Playwright, borrowed from the website checkout), so every rim, chamfer and hairline is exact and
+the set can be regenerated after a palette change:
 
 ```sh
-magick -size 64x64 xc:none \
-  -fill "#22386a" -draw "polygon 12,0 63,0 63,63 12,63 0,32" \
-  -fill "#a88449" -draw "line 12,0 63,0" \
-  -fill "#a88449" -draw "line 12,63 63,63" \
-  -define tga:image-type=2 -define tga:compression=none RibbonEndCapLeft.tga
-
-magick -size 64x64 xc:none \
-  -fill "#22386a" -draw "polygon 0,0 51,0 63,32 51,63 0,63" \
-  -fill "#a88449" -draw "line 0,0 51,0" \
-  -fill "#a88449" -draw "line 0,63 51,63" \
-  -define tga:image-type=2 -define tga:compression=none RibbonEndCapRight.tga
+node tools/skin-art/render.mjs [/path/to/website/website/package.json]
 ```
 
-### CornerBracket.tga
+It writes `SideQuest/Media/Skin/<name>.tga` (32-bit truecolor, `-type TrueColorAlpha`) and
+`tests/preview/tex/<name>.png`. Art is drawn at 2x: Skin.lua halves slice sizes on screen. Art
+whose size isn't a power of two is placed in the top-left of the next power-of-two canvas and
+cropped back in Lua with `SetTexCoord`.
 
-Authored (no external source). 64x64, gold (#d8ab5c) 1px stroke L-shaped bracket (vertical arm
-along the left edge, horizontal arm along the top edge) whose inner corner is chamfered (cut
-corner) instead of meeting at a sharp right angle, plus a small solid gold diamond filling that
-chamfered joint. Meant to be rotated/flipped by the Lua UI code to serve all four chamber corners:
+The guild crest source for the seal and the portrait is `tools/skin-art/Crest.tga` (128x128),
+made from `website/assets/brand/sidequest-logo.png` (959x1182):
 
 ```sh
-magick -size 64x64 xc:none -strokewidth 1 -stroke "#d8ab5c" -fill none \
-  -draw "path 'M 0,48 L 0,6 L 6,0 L 48,0'" \
-  -fill "#d8ab5c" -draw "polygon 3,0 6,3 3,6 0,3" \
-  -define tga:compression=none CornerBracket.tga
+magick website/assets/brand/sidequest-logo.png -resize 128x128 \
+  -background none -gravity center -extent 128x128 -define tga:compression=none Crest.tga
 ```
 
-### Diamond.tga
-
-Authored (no external source). 32x32, small solid gold (#d8ab5c) rotated-square (diamond) mark,
-transparent background:
-
-```sh
-magick -size 32x32 xc:none \
-  -fill "#d8ab5c" -draw "polygon 16,2 30,16 16,30 2,16" \
-  -define tga:compression=none Diamond.tga
-```
+| file | file size | art | use |
+|---|---|---|---|
+| Chamber.tga | 64x64 | 64x64 | 9-slice at 24 px: chamfered gilded rim, inner shadow, guild-gold-deep hairline |
+| Ribbon.tga | 256x64 | 256x64 | 3-slice at 40 px: royal swallowtail ribbon with gold edge lines and a drop shadow |
+| ButtonPrimary.tga | 128x64 | 128x48 | 3-slice at 16 px: royal body in a gilded rim |
+| ButtonQuiet.tga | 128x64 | 128x48 | 3-slice at 16 px: night body in a bronze rim |
+| ButtonGlow.tga | 128x64 | 128x48 | 3-slice at 16 px: hover light, drawn with ADD blending |
+| FieldWell.tga | 128x64 | 128x48 | 3-slice at 16 px: sunken chamfered well for edit boxes |
+| ScrollThumb.tga | 16x64 | 16x64 | the scrollbar thumb |
+| Diamond.tga | 32x32 | 32x32 | faceted gold diamond: chamber corners, dividers, the officers' tab |
+| Gem.tga | 32x32 | 32x32 | silver cabochon tinted per state (online/offline) |
+| IconFrame.tga | 64x64 | 64x64 | silver chamfered frame tinted to an item's quality |
+| Plate.tga | 64x64 | 48x48 | silver chamfered number plate tinted per raid-night step state |
+| WaxSeal.tga | 128x128 | 128x128 | red wax seal with the crest pressed in: the raid-night stamp |
+| CrestPortrait.tga | 128x128 | 128x128 | the crest on a royal disc, already round, for the portrait ring |
 
 ---
 
 ## Verification performed
 
-All TGA outputs confirmed 32-bit (truecolor + 8-bit alpha, 32 bits/pixel) and power-of-two
-dimensioned by inspecting the raw TGA header (byte 2 = image type, byte 16 = bits-per-pixel):
+Every TGA is power-of-two and 32-bit truecolor with alpha, checked from the raw header (byte 2 =
+image type `02` truecolor, byte 16 = `20`, 32 bits per pixel):
 
 ```sh
-for f in *.tga; do
-  dims=$(magick identify -format "%wx%h" "$f")
-  echo "$f: $dims"; xxd -l 18 "$f"
+for f in SideQuest/Media/Skin/*.tga; do
+  echo "$f $(magick identify -format '%wx%h' "$f") type=$(xxd -s 2 -l 1 -p "$f") bpp=$(xxd -s 16 -l 1 -p "$f")"
 done
 ```
 
-| file | dimensions | image type (byte 2) | bits/pixel (byte 16) |
-|---|---|---|---|
-| Crest.tga | 128x128 | `02` (truecolor) | `20` (32) |
-| HeaderStrip.tga | 1024x256 | `02` | `20` |
-| RibbonEndCapLeft.tga | 64x64 | `02` | `20` |
-| RibbonEndCapRight.tga | 64x64 | `02` | `20` |
-| CornerBracket.tga | 64x64 | `02` | `20` |
-| Diamond.tga | 32x32 | `02` | `20` |
+All 14 files report `type=02 bpp=20`.
 
 All TTF fonts confirmed to parse with fontTools:
 
@@ -255,5 +206,5 @@ du -sh SideQuest/Media
 ```
 
 ```
-1.3M  SideQuest/Media
+1.8M  SideQuest/Media
 ```

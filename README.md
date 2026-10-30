@@ -6,8 +6,8 @@ to [sidequest-guild.com](https://sidequest-guild.com).
 
 ![The You tab: your points, your next raid, who's online and guild news](docs/screenshots/you.jpg)
 
-These pictures are drawn outside the game from the addon's own code, fonts and art, with made-up guild members. In
-game, the scroll bars and a few window borders look slightly different.
+These pictures are drawn outside the game from the addon's own code and art, with WoW: Forever's own window frame,
+tabs and icons, and made-up guild members. Lighting and a few small details differ in game.
 
 ## Install
 

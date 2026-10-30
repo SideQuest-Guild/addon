@@ -35,6 +35,59 @@ WowStub.FrameMeta.__index = function(t, k)
 end
 
 --------------------------------------------------------------------------
+-- 1b. Atlas art: load the cache tests/preview/fetch_atlases.py wrote
+--     (the same loader C_Texture.GetAtlasInfo uses, so the renderer and
+--     what the addon itself can "see" through the stub always agree),
+--     plus the full list of real Blizzard atlas names so a typo'd atlas
+--     name fails this script loudly instead of silently drawing nothing.
+--------------------------------------------------------------------------
+
+local ATLAS_CACHE_DIR = SCRIPT_DIR .. ".atlas-cache/"
+local atlasIndex = WowStub.LoadAtlasCache()
+
+local validAtlasNames
+do
+    local f = io.open(ATLAS_CACHE_DIR .. "valid_names.txt", "r")
+    if f then
+        validAtlasNames = {}
+        for line in f:lines() do
+            if line ~= "" then
+                validAtlasNames[line] = true
+            end
+        end
+        f:close()
+    end
+end
+
+local warnedMissingAtlas = {}
+local unknownAtlasSet, unknownAtlasList = {}, {}
+
+--- The cache entry for atlas `name`, or nil. Distinguishes "not fetched
+-- yet" (real Blizzard name, just missing art -- warn once, caller draws a
+-- placeholder) from "not a real atlas name" (addon-side typo -- recorded
+-- so the script can fail loudly once every view has been walked).
+local function atlasEntry(name)
+    if not name then
+        return nil
+    end
+    local e = atlasIndex and atlasIndex.elements and atlasIndex.elements[name]
+    if e then
+        return e
+    end
+    if validAtlasNames and not validAtlasNames[name] then
+        if not unknownAtlasSet[name] then
+            unknownAtlasSet[name] = true
+            table.insert(unknownAtlasList, name)
+        end
+    elseif not warnedMissingAtlas[name] then
+        warnedMissingAtlas[name] = true
+        io.stderr:write("warning: atlas '" .. name ..
+            "' has no cached art yet (run tests/preview/fetch_atlases.py) -- drawing a placeholder\n")
+    end
+    return nil
+end
+
+--------------------------------------------------------------------------
 -- 2. Load the addon under the patched stub.
 --------------------------------------------------------------------------
 
@@ -44,7 +97,7 @@ local ADDON_FILES = {
     "SideQuest/Standings.lua", "SideQuest/Events.lua", "SideQuest/Roster.lua", "SideQuest/Professions.lua",
     "SideQuest/News.lua", "SideQuest/Signups.lua", "SideQuest/Sheet.lua", "SideQuest/Crafters.lua",
     "SideQuest/Announce.lua", "SideQuest/Recruits.lua", "SideQuest/Bank.lua", "SideQuest/Prep.lua",
-    "SideQuest/Sync.lua", "SideQuest/UI/Main.lua", "SideQuest/UI/BidPopup.lua",
+    "SideQuest/Sync.lua", "SideQuest/UI/Skin.lua", "SideQuest/UI/Main.lua", "SideQuest/UI/BidPopup.lua",
 }
 for _, f in ipairs(ADDON_FILES) do
     dofile(ROOT .. f)
@@ -213,6 +266,11 @@ local function lastCallsOf(obj, method)
     return out
 end
 
+local function lastCallArgs(obj, method)
+    local calls = lastCallsOf(obj, method)
+    return calls[#calls]
+end
+
 --- Current SetPoint anchors for `obj`, honoring call order: a later
 -- SetPoint for the same corner replaces the earlier one, and a
 -- ClearAllPoints call drops every anchor recorded before it. Without this,
@@ -310,7 +368,11 @@ local function resolveRect(obj) -- memoized, recursive on relativeTo/parent (cre
         end
     end
 
-    if not width or not height then
+    -- Anchors on opposite edges of an axis define its size and override any
+    -- explicit size on that axis, as in WoW (a useAtlasSize edge piece
+    -- stretched between two corners takes the span, not its atlas width).
+    local spanX = false
+    do
         local minFx, maxFx, minFy, maxFy, atMinFx, atMaxFx, atMinFy, atMaxFy
         for _, a in ipairs(anchors) do
             if not minFx or a.fx < minFx then minFx, atMinFx = a.fx, a.absX end
@@ -318,13 +380,18 @@ local function resolveRect(obj) -- memoized, recursive on relativeTo/parent (cre
             if not minFy or a.fy < minFy then minFy, atMinFy = a.fy, a.absY end
             if not maxFy or a.fy > maxFy then maxFy, atMaxFy = a.fy, a.absY end
         end
-        if not width and minFx and maxFx and minFx ~= maxFx then
+        if minFx and maxFx and minFx ~= maxFx then
             width = (atMaxFx - atMinFx) / (maxFx - minFx)
+            spanX = true
         end
-        if not height and minFy and maxFy and minFy ~= maxFy then
+        if minFy and maxFy and minFy ~= maxFy then
             height = (atMaxFy - atMinFy) / (maxFy - minFy)
         end
     end
+    -- a FontString whose width is set (or spanned) lays its text out inside
+    -- that box per SetJustifyH, instead of sizing to its text
+    local sizedText = obj.__kind == "FontString" and
+        (spanX or #lastCallsOf(obj, "SetWidth") > 0 or #lastCallsOf(obj, "SetSize") > 0)
 
     -- fontstrings/textures with no size info size themselves to content
     -- (best-effort estimate: real average glyph advance for the shipped
@@ -389,7 +456,7 @@ local function resolveRect(obj) -- memoized, recursive on relativeTo/parent (cre
         top = 0
     end
 
-    resolved[obj] = { left = left, top = top, width = width, height = height, anchor = anchors[1] }
+    resolved[obj] = { left = left, top = top, width = width, height = height, anchor = anchors[1], sizedText = sizedText }
     return resolved[obj]
 end
 
@@ -404,12 +471,15 @@ local MEDIA_TTF = {
 }
 
 local function fontCssName(wowPath)
+    -- longest matching key wins: "EBGaramond" is also a substring of
+    -- "EBGaramond-Italic", and pairs() order is not stable
+    local best, bestLen = "SQ Body", 0
     for key, info in pairs(MEDIA_TTF) do
-        if wowPath and wowPath:find(key, 1, true) then
-            return info.css
+        if wowPath and #key > bestLen and wowPath:find(key, 1, true) then
+            best, bestLen = info.css, #key
         end
     end
-    return "SQ Body"
+    return best
 end
 
 local function textureCssUrl(wowPath)
@@ -423,6 +493,65 @@ local function textureCssUrl(wowPath)
     return "../tex/" .. name .. ".png"
 end
 
+-- Natural pixel size of a PNG, read straight from its IHDR chunk (8-byte
+-- signature + 4-byte length + 4-byte "IHDR" tag = 16, then 4+4 bytes of
+-- big-endian width/height) -- no image library needed, memoized per path
+-- since the same sliced sheet (Chamber.tga, ButtonQuiet.tga, ...) is read
+-- by every one of its 3-/9-slice pieces.
+local pngSizeCache = {}
+local function pngNaturalSize(path)
+    if pngSizeCache[path] ~= nil then
+        return pngSizeCache[path] and pngSizeCache[path][1], pngSizeCache[path] and pngSizeCache[path][2]
+    end
+    local f = io.open(path, "rb")
+    if not f then
+        pngSizeCache[path] = false
+        return nil
+    end
+    local header = f:read(24)
+    f:close()
+    if not header or #header < 24 or header:sub(1, 8) ~= "\137PNG\r\n\26\n" then
+        pngSizeCache[path] = false
+        return nil
+    end
+    local w = header:byte(17) * 16777216 + header:byte(18) * 65536 + header:byte(19) * 256 + header:byte(20)
+    local h = header:byte(21) * 16777216 + header:byte(22) * 65536 + header:byte(23) * 256 + header:byte(24)
+    pngSizeCache[path] = { w, h }
+    return w, h
+end
+
+--- CSS background-size/-position for a plain (non-atlas) sliced texture
+-- piece: when the piece's last SetTexCoord call cropped a genuine
+-- sub-rect of its source sheet (exactly 4 numeric args, not the default
+-- 0,1,0,1 and not an 8-arg flip/rotate quad), scale and offset the
+-- background image so only that sub-rect fills the piece's w x h box.
+-- Pixel values, not percentages: CSS percentage positions align the same
+-- fraction of image and box, which is not a crop offset. Returns "" when
+-- the piece uses the whole texture (the common case), so callers can keep
+-- their existing background-size:100% 100% default.
+local function customTextureCropStyle(obj, wowPath, boxW, boxH)
+    local tc = lastCallArgs(obj, "SetTexCoord")
+    if not tc or #tc ~= 4 then
+        return ""
+    end
+    local l, r, t, b = tc[1], tc[2], tc[3], tc[4]
+    if not (l and r and t and b) or (l == 0 and r == 1 and t == 0 and b == 1) then
+        return ""
+    end
+    local name = wowPath and wowPath:match("([^\\]+)$")
+    local w = name and pngNaturalSize(SCRIPT_DIR .. "tex/" .. name .. ".png")
+    if not w then
+        return ""
+    end
+    local cropW, cropH = math.abs(r - l), math.abs(b - t)
+    if cropW == 0 or cropH == 0 then
+        return ""
+    end
+    local sizeX, sizeY = boxW / cropW, boxH / cropH
+    local posX, posY = -sizeX * math.min(l, r), -sizeY * math.min(t, b)
+    return string.format("background-size:%.3fpx %.3fpx;background-position:%.3fpx %.3fpx;", sizeX, sizeY, posX, posY)
+end
+
 local function lastColorOf(obj)
     for name, set in pairs({ SetColorTexture = true, SetVertexColor = true }) do
         local calls = lastCallsOf(obj, name)
@@ -432,6 +561,112 @@ local function lastColorOf(obj)
         end
     end
     return nil
+end
+
+-- SVG <feColorMatrix> tint filters: WoW's SetVertexColor multiplies a
+-- texture's own RGB by the given color (not an overlay/tint), which CSS
+-- has no single property for; a diagonal color-matrix multiply does
+-- exactly that. Filters are registered per view (emitView resets this)
+-- and emitted once as a hidden <svg><defs> block, referenced by id.
+local tintFiltersUsed
+local function tintFilterRef(r, g, b, a)
+    r, g, b, a = r or 1, g or 1, b or 1, a or 1
+    local id = string.format("tint-%d-%d-%d-%d", math.floor(r * 255), math.floor(g * 255), math.floor(b * 255), math.floor(a * 255))
+    tintFiltersUsed[id] = { r, g, b, a }
+    return "url(#" .. id .. ")"
+end
+
+--- CSS (background-image/-repeat/-size/transform/filter/mix-blend-mode)
+-- for a Texture object with a SetAtlas call, drawn from the cache
+-- fetch_atlases.py wrote. Returns (css, nil) on success, or (css,
+-- atlasName) for a hatched "art not cached yet" placeholder the caller
+-- labels with the atlas name. Returns nil entirely if `obj` never called
+-- SetAtlas (the Texture branch then falls back to SetTexture/color/
+-- gradient handling, same as before atlas support existed).
+local function resolveAtlasStyle(obj)
+    local atlasCall = lastCallArgs(obj, "SetAtlas")
+    if not atlasCall then
+        return nil
+    end
+    local name = atlasCall[1]
+    local entry = atlasEntry(name)
+    if not entry then
+        return "background-image:repeating-linear-gradient(45deg,#742 0,#742 6px,#631 6px,#631 12px);" ..
+            "display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;" ..
+            "color:#fff;font:9px monospace;box-shadow:inset 0 0 0 1px #f90;word-break:break-all;", name
+    end
+
+    local pngPath = entry.elementPng or entry.png
+    local url = "../.atlas-cache/" .. pngPath
+    local repeatX = entry.tilesHorizontally and "repeat" or "no-repeat"
+    local repeatY = entry.tilesVertically and "repeat" or "no-repeat"
+    -- tiles repeat at the element's logical size (the -2x art is twice that)
+    local sizeX = entry.tilesHorizontally and (entry.width .. "px") or "100%"
+    local sizeY = entry.tilesVertically and (entry.height .. "px") or "100%"
+
+    local parts = {
+        "background-image:url('" .. url .. "');",
+        string.format("background-repeat:%s %s;", repeatX, repeatY),
+        string.format("background-size:%s %s;", sizeX, sizeY),
+    }
+
+    -- SetTexCoord on an atlas texture is relative to the atlas region. A
+    -- reversed range is a flip (NineSliceUtil mirroring); a range narrower
+    -- than 0..1 is a crop (PanelTopTabButtonMixin keeps the top 75% of a
+    -- flipped tab).
+    local flipX, flipY = false, false
+    local tc = lastCallArgs(obj, "SetTexCoord")
+    if tc and #tc == 4 and tc[1] and tc[2] and tc[3] and tc[4] then
+        flipX, flipY = tc[1] > tc[2], tc[3] > tc[4]
+        local u0, u1 = math.min(tc[1], tc[2]), math.max(tc[1], tc[2])
+        local v0, v1 = math.min(tc[3], tc[4]), math.max(tc[3], tc[4])
+        if u1 - u0 < 1 or v1 - v0 < 1 then
+            -- Crop in unflipped image space; the flip transform below mirrors
+            -- the kept band. A tiling axis keeps its repeat size.
+            local r = resolveRect(obj)
+            local sw = entry.tilesHorizontally and entry.width or r.width / (u1 - u0)
+            local sh = entry.tilesVertically and entry.height or r.height / (v1 - v0)
+            local ox = entry.tilesHorizontally and 0 or -u0 * sw
+            local oy = entry.tilesVertically and 0 or -v0 * sh
+            parts[3] = string.format("background-size:%.3fpx %.3fpx;background-position:%.3fpx %.3fpx;",
+                sw, sh, ox, oy)
+        end
+    end
+    local transforms = {}
+    if flipX or flipY then
+        table.insert(transforms, string.format("scale(%d,%d)", flipX and -1 or 1, flipY and -1 or 1))
+    end
+    local rot = lastCallArgs(obj, "SetRotation")
+    if rot and rot[1] and rot[1] ~= 0 then
+        table.insert(transforms, string.format("rotate(%.3fdeg)", rot[1] * 180 / math.pi))
+    end
+    if #transforms > 0 then
+        table.insert(parts, "transform:" .. table.concat(transforms, " ") .. ";transform-origin:center;")
+    end
+
+    local filters = {}
+    local vc = lastCallArgs(obj, "SetVertexColor")
+    if vc and ((vc[1] or 1) ~= 1 or (vc[2] or 1) ~= 1 or (vc[3] or 1) ~= 1 or (vc[4] or 1) ~= 1) then
+        table.insert(filters, tintFilterRef(vc[1], vc[2], vc[3], vc[4]))
+    end
+    local desat = lastCallArgs(obj, "SetDesaturated")
+    if desat and desat[1] then
+        table.insert(filters, "grayscale(1)")
+    end
+    if #filters > 0 then
+        table.insert(parts, "filter:" .. table.concat(filters, " ") .. ";")
+    end
+
+    local blend = lastCallArgs(obj, "SetBlendMode")
+    if blend and blend[1] == "ADD" then
+        table.insert(parts, "mix-blend-mode:plus-lighter;")
+    end
+
+    if #lastCallsOf(obj, "AddMaskTexture") > 0 or #lastCallsOf(obj, "SetMask") > 0 then
+        table.insert(parts, "clip-path:circle(50%);")
+    end
+
+    return table.concat(parts), nil
 end
 
 local function esc(s)
@@ -469,11 +704,20 @@ local function visibleDescendants(root)
     return list
 end
 
-local function anchoredStyle(r, rootRect, stageWidth)
+local function anchoredStyle(obj, r, rootRect, stageWidth)
     -- Horizontal/vertical placement using the object's own first anchor
     -- fraction, so right- and center-anchored text (freshness line, ribbon
     -- labels, ...) is positioned precisely instead of guessing a pixel
     -- width for text whose real width only the browser's font metrics know.
+    if r.sizedText then
+        -- WoW centres text vertically in its box and justifies it across it
+        local justify = lastCallArgs(obj, "SetJustifyH")
+        local align = justify and ({ LEFT = "left", CENTER = "center", RIGHT = "right" })[justify[1]] or "center"
+        return string.format("left:%.1fpx;top:%.1fpx;width:%.1fpx;height:%.1fpx;text-align:%s;" ..
+            "display:flex;align-items:center;justify-content:%s;",
+            r.left - rootRect.left, r.top - rootRect.top, r.width, math.max(r.height, 14), align,
+            align == "left" and "flex-start" or (align == "right" and "flex-end" or "center"))
+    end
     local anchor = r.anchor
     local fx = anchor and anchor.fx or 0
     local fy = anchor and anchor.fy or 0
@@ -531,82 +775,170 @@ local function clipPathFor(r, clipRect)
     return string.format("clip-path:inset(%.1fpx %.1fpx %.1fpx %.1fpx);", insetTop, insetRight, insetBottom, insetLeft)
 end
 
+local NON_VISUAL_KINDS = {
+    MaskTexture = true, AnimationGroup = true, Animation = true,
+    Alpha = true, Scale = true, Translate = true, Rotation = true,
+}
+
 local function emitView(name, root, width, height, scale)
     local body = {}
     local fontsUsed = {}
+    tintFiltersUsed = {}
     local rootRect = resolveRect(root)
+    local descendants = visibleDescendants(root)
+
+    -- Real nine-slice corners extend a few px past their container's own
+    -- bounds by design (Blizzard's own PortraitFrameTemplate offsets like
+    -- TopLeftCorner x=-8/y=16): union every visible descendant's rect, in
+    -- root-local coordinates, so that chrome isn't silently clipped by a
+    -- stage sized to just the root's own declared width/height, then
+    -- shift everything so the union's top-left lands at (0,0).
+    local minLeft, minTop, maxRight, maxBottom = 0, 0, width, height
+    for _, obj in ipairs(descendants) do
+        if not NON_VISUAL_KINDS[obj.__kind] then
+            local r = resolveRect(obj)
+            local l, t = r.left - rootRect.left, r.top - rootRect.top
+            minLeft = math.min(minLeft, l)
+            minTop = math.min(minTop, t)
+            maxRight = math.max(maxRight, l + r.width)
+            maxBottom = math.max(maxBottom, t + r.height)
+        end
+    end
+    local padLeft, padTop = -minLeft, -minTop
+    local stageWidth, stageHeight = maxRight - minLeft, maxBottom - minTop
+    local shiftedRootRect = { left = rootRect.left - padLeft, top = rootRect.top - padTop,
+        width = rootRect.width, height = rootRect.height }
+
     -- a font must still be legible once the whole stage is scaled down to
     -- 0.64; clamp every FontString's effective rendered size to at least
     -- MIN_RENDERED_PX post-scale rather than letting it shrink linearly.
     local MIN_RENDERED_PX = 8
-    for _, obj in ipairs(visibleDescendants(root)) do
-        local r = resolveRect(obj)
-        local style
-        if obj.__kind == "FontString" then
-            style = "position:absolute;" .. anchoredStyle(r, rootRect, width)
-        else
-            style = string.format(
-                "position:absolute;left:%.1fpx;top:%.1fpx;width:%.1fpx;height:%.1fpx;",
-                r.left - rootRect.left, r.top - rootRect.top, r.width, r.height)
-        end
-        local scrollAncestor = findScrollAncestor(obj)
-        if scrollAncestor then
-            style = style .. clipPathFor(r, resolveRect(scrollAncestor))
-        end
-        if obj.__kind == "Texture" then
-            local tex = lastCallsOf(obj, "SetTexture")
-            local url = #tex > 0 and type(tex[#tex][1]) == "string" and textureCssUrl(tex[#tex][1]) or nil
-            if url then
-                style = style .. "background-image:url('" .. url .. "');background-size:100% 100%;"
+    for _, obj in ipairs(descendants) do
+        if not NON_VISUAL_KINDS[obj.__kind] then
+            local r = resolveRect(obj)
+            local style
+            if obj.__kind == "FontString" then
+                style = "position:absolute;" .. anchoredStyle(obj, r, shiftedRootRect, stageWidth)
             else
-                local cr, cg, cb, ca = lastColorOf(obj)
-                if cr then
-                    style = style .. string.format("background-color:rgba(%d,%d,%d,%.2f);",
-                        math.floor(cr * 255), math.floor(cg * 255), math.floor(cb * 255), ca)
+                style = string.format(
+                    "position:absolute;left:%.1fpx;top:%.1fpx;width:%.1fpx;height:%.1fpx;",
+                    r.left - shiftedRootRect.left, r.top - shiftedRootRect.top, r.width, r.height)
+            end
+            local scrollAncestor = findScrollAncestor(obj)
+            if scrollAncestor then
+                style = style .. clipPathFor(r, resolveRect(scrollAncestor))
+            end
+            if obj.__kind == "Texture" then
+                local atlasStyle, placeholderName = resolveAtlasStyle(obj)
+                if atlasStyle then
+                    style = style .. atlasStyle
+                    table.insert(body, string.format('<div class="r tex" style="%s">%s</div>', style,
+                        placeholderName and esc(placeholderName) or ""))
+                else
+                    local tex = lastCallsOf(obj, "SetTexture")
+                    local url = #tex > 0 and type(tex[#tex][1]) == "string" and textureCssUrl(tex[#tex][1]) or nil
+                    local grad = lastCallArgs(obj, "SetGradient")
+                    if url then
+                        local cropStyle = customTextureCropStyle(obj, tex[#tex][1], r.width, r.height)
+                        style = style .. "background-image:url('" .. url .. "');" ..
+                            (cropStyle ~= "" and cropStyle or "background-size:100% 100%;")
+                        -- the same per-texture modifiers WoW applies to atlas art
+                        local vc = lastCallArgs(obj, "SetVertexColor")
+                        local filters = {}
+                        if vc and ((vc[1] or 1) ~= 1 or (vc[2] or 1) ~= 1 or (vc[3] or 1) ~= 1 or (vc[4] or 1) ~= 1) then
+                            table.insert(filters, tintFilterRef(vc[1], vc[2], vc[3], vc[4]))
+                        end
+                        local desat = lastCallArgs(obj, "SetDesaturated")
+                        if desat and desat[1] then
+                            table.insert(filters, "grayscale(1)")
+                        end
+                        if #filters > 0 then
+                            style = style .. "filter:" .. table.concat(filters, " ") .. ";"
+                        end
+                        local rot = lastCallArgs(obj, "SetRotation")
+                        if rot and rot[1] and rot[1] ~= 0 then
+                            style = style .. string.format("transform:rotate(%.3fdeg);", -rot[1] * 180 / math.pi)
+                        end
+                        local blend = lastCallArgs(obj, "SetBlendMode")
+                        if blend and blend[1] == "ADD" then
+                            style = style .. "mix-blend-mode:plus-lighter;"
+                        end
+                    elseif grad and type(grad[2]) == "table" and type(grad[3]) == "table" then
+                        -- WoW: minColor is the left/bottom end, maxColor the right/top
+                        local dir = (grad[1] == "HORIZONTAL") and "to right" or "to top"
+                        local function colStr(c)
+                            return string.format("rgba(%d,%d,%d,%.2f)",
+                                math.floor((c.r or 0) * 255), math.floor((c.g or 0) * 255), math.floor((c.b or 0) * 255), c.a or 1)
+                        end
+                        style = style .. string.format("background-image:linear-gradient(%s,%s,%s);",
+                            dir, colStr(grad[2]), colStr(grad[3]))
+                    else
+                        local cr, cg, cb, ca = lastColorOf(obj)
+                        if cr then
+                            style = style .. string.format("background-color:rgba(%d,%d,%d,%.2f);",
+                                math.floor(cr * 255), math.floor(cg * 255), math.floor(cb * 255), ca)
+                        end
+                    end
+                    table.insert(body, string.format('<div class="r tex" style="%s"></div>', style))
                 end
-            end
-            table.insert(body, string.format('<div class="r tex" style="%s"></div>', style))
-        elseif obj.__kind == "FontString" then
-            local fontCalls = lastCallsOf(obj, "SetFont")
-            local fontFile, fontSize = nil, 13
-            if #fontCalls > 0 then
-                fontFile, fontSize = fontCalls[#fontCalls][1], fontCalls[#fontCalls][2] or 13
-            end
-            if scale < 1 and fontSize * scale < MIN_RENDERED_PX then
-                fontSize = MIN_RENDERED_PX / scale
-            end
-            local cssFont = fontCssName(fontFile)
-            fontsUsed[cssFont] = true
-            local colorCalls = lastCallsOf(obj, "SetTextColor")
-            local cr, cg, cb, ca = 0.95, 0.94, 0.91, 1
-            if #colorCalls > 0 then
-                local a = colorCalls[#colorCalls]
-                cr, cg, cb, ca = a[1] or cr, a[2] or cg, a[3] or cb, a[4] or 1
-            end
-            style = style .. string.format(
-                "font-family:'%s';font-size:%.1fpx;color:rgba(%d,%d,%d,%.2f);" ..
-                "font-variant-numeric:tabular-nums;white-space:pre;overflow:visible;",
-                cssFont, fontSize, math.floor(cr * 255), math.floor(cg * 255), math.floor(cb * 255), ca)
-            local text = obj.GetText and obj.GetText() or ""
-            table.insert(body, string.format('<div class="r fs" style="%s">%s</div>', style, esc(text)))
-        else
-            -- Button (and any other) frames store their label via SetText
-            -- directly on the object in this stub (no child FontString the
-            -- way a real UIPanelButtonTemplate routes it); render it so
-            -- every control's label is checkable here even though the
-            -- template's own button-face chrome still isn't reproduced.
-            local btnText = obj.GetText and obj.GetText()
-            if btnText and btnText ~= "" then
-                fontsUsed["SQ Body"] = true
-                style = style .. "display:flex;align-items:center;justify-content:center;" ..
-                    "font-family:'SQ Body';font-size:11px;color:#c4cddd;overflow:hidden;white-space:nowrap;"
-                table.insert(body, string.format('<div class="r frame" style="%s">%s</div>', style, esc(btnText)))
+            elseif obj.__kind == "FontString" then
+                local fontCalls = lastCallsOf(obj, "SetFont")
+                local fontFile, fontSize, fontFlags = nil, 13, nil
+                if #fontCalls > 0 then
+                    local fc = fontCalls[#fontCalls]
+                    fontFile, fontSize, fontFlags = fc[1], fc[2] or 13, fc[3]
+                end
+                if scale < 1 and fontSize * scale < MIN_RENDERED_PX then
+                    fontSize = MIN_RENDERED_PX / scale
+                end
+                local cssFont = fontCssName(fontFile)
+                fontsUsed[cssFont] = true
+                local colorCalls = lastCallsOf(obj, "SetTextColor")
+                local cr, cg, cb, ca = 0.95, 0.94, 0.91, 1
+                if #colorCalls > 0 then
+                    local a = colorCalls[#colorCalls]
+                    cr, cg, cb, ca = a[1] or cr, a[2] or cg, a[3] or cb, a[4] or 1
+                end
+                style = style .. string.format(
+                    "font-family:'%s';font-size:%.1fpx;color:rgba(%d,%d,%d,%.2f);" ..
+                    "font-variant-numeric:tabular-nums;white-space:pre;overflow:visible;",
+                    cssFont, fontSize, math.floor(cr * 255), math.floor(cg * 255), math.floor(cb * 255), ca)
+                if fontFlags and tostring(fontFlags):find("OUTLINE") then
+                    style = style .. "-webkit-text-stroke:1px #000;paint-order:stroke fill;"
+                end
+                local shadowOff = lastCallArgs(obj, "SetShadowOffset")
+                if shadowOff then
+                    local sx, sy = shadowOff[1] or 0, shadowOff[2] or 0
+                    local sr, sg, sb, sa = 0, 0, 0, 1
+                    local shadowColor = lastCallArgs(obj, "SetShadowColor")
+                    if shadowColor then
+                        sr, sg, sb, sa = shadowColor[1] or 0, shadowColor[2] or 0, shadowColor[3] or 0, shadowColor[4] or 1
+                    end
+                    style = style .. string.format("text-shadow:%.1fpx %.1fpx 0 rgba(%d,%d,%d,%.2f);",
+                        sx, -sy, math.floor(sr * 255), math.floor(sg * 255), math.floor(sb * 255), sa)
+                end
+                local text = obj.GetText and obj.GetText() or ""
+                table.insert(body, string.format('<div class="r fs" style="%s">%s</div>', style, esc(text)))
             else
-                table.insert(body, string.format('<div class="r frame" style="%s"></div>', style))
+                -- Button (and any other) frames store their label via SetText
+                -- directly on the object in this stub (no child FontString the
+                -- way a real UIPanelButtonTemplate routes it); render it so
+                -- every control's label is checkable here even though the
+                -- template's own button-face chrome still isn't reproduced.
+                local btnText = obj.GetText and obj.GetText()
+                if btnText and btnText ~= "" then
+                    fontsUsed["SQ Body"] = true
+                    style = style .. "display:flex;align-items:center;justify-content:center;" ..
+                        "font-family:'SQ Body';font-size:11px;color:#c4cddd;overflow:hidden;white-space:nowrap;"
+                    table.insert(body, string.format('<div class="r frame" style="%s">%s</div>', style, esc(btnText)))
+                else
+                    table.insert(body, string.format('<div class="r frame" style="%s"></div>', style))
+                end
             end
         end
     end
 
+    -- sorted, so regenerating an unchanged view writes byte-identical HTML
     local fontFaces = {}
     for _, info in pairs(MEDIA_TTF) do
         if fontsUsed[info.css] then
@@ -614,6 +946,19 @@ local function emitView(name, root, width, height, scale)
                 "@font-face { font-family: '%s'; src: url('../fonts/%s'); }", info.css, info.file))
         end
     end
+    table.sort(fontFaces)
+
+    local tintDefs = {}
+    for id, c in pairs(tintFiltersUsed) do
+        table.insert(tintDefs, string.format(
+            '<filter id="%s" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" ' ..
+            'values="%.4f 0 0 0 0  0 %.4f 0 0 0  0 0 %.4f 0 0  0 0 0 %.4f 0"/></filter>',
+            id, c[1], c[2], c[3], c[4]))
+    end
+    table.sort(tintDefs)
+    local svgDefs = #tintDefs > 0
+        and ('<svg width="0" height="0" style="position:absolute">' .. table.concat(tintDefs) .. "</svg>")
+        or ""
 
     local html = string.format([[<!doctype html>
 <html><head><meta charset="utf-8"><title>%s</title>
@@ -625,16 +970,18 @@ html, body { margin: 0; background: #05070c; }
 .footer { font: 11px sans-serif; color: #889; background: #000c; padding: 6px 10px; max-width: 640px; }
 </style></head>
 <body>
+%s
 <div class="stage">
 %s
 </div>
-<div class="footer">SideQuest layout preview -- %s @ %dx%d, UI scale %s. Layout check only, not pixel-identical
-to the game (stock Blizzard template chrome -- button borders, the scroll frame's native up/down arrow buttons,
-close-button texture -- is not rendered; list clipping and the themed scrollbar track/thumb are). Headings/body
-text use the shipped EB Garamond / Libertinus Serif Display TTFs (OFL); the game's default Friz Quadrata is
-proprietary and is not reproduced here.</div>
+<div class="footer">SideQuest layout preview -- %s @ %dx%d, UI scale %s. Layout check, not a pixel-identical
+render of the game: every SetAtlas-backed piece (native Forever chrome, the close button, tabs) draws real
+Blizzard "Camelot" art fetched by tests/preview/fetch_atlases.py (orange-striped boxes mean that element's art
+hasn't been fetched yet); stock UIPanelButtonTemplate/InputBoxTemplate/ScrollFrame chrome that ISN'T atlas-driven
+still isn't reproduced. Headings/body text use the shipped EB Garamond / Libertinus Serif Display TTFs (OFL);
+the game's default Friz Quadrata is proprietary and is not reproduced here.</div>
 </body></html>]],
-        esc(name), table.concat(fontFaces, "\n"), width, height, tostring(scale), table.concat(body, "\n"),
+        esc(name), table.concat(fontFaces, "\n"), stageWidth, stageHeight, tostring(scale), svgDefs, table.concat(body, "\n"),
         esc(name), width, height, tostring(scale))
 
     local path = OUT_DIR:gsub("out/$", "") .. "html/" .. name .. ".html"
@@ -737,3 +1084,12 @@ fh:write(indexHtml)
 fh:close()
 
 print("Preview HTML generation complete: " .. #ALL_NAMES .. " views.")
+
+if #unknownAtlasList > 0 then
+    io.stderr:write("\nFAILED: " .. #unknownAtlasList ..
+        " atlas name(s) used by the addon are not real Blizzard atlas elements (typo?):\n")
+    for _, n in ipairs(unknownAtlasList) do
+        io.stderr:write("  - " .. n .. "\n")
+    end
+    os.exit(1)
+end

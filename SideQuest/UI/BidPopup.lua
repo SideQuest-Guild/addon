@@ -15,9 +15,9 @@ if not CreateFrame then
 end
 
 local C = UI.Colors
-local setColor = UI.SetColor
 local makeFontString = UI.MakeFontString
 local FONT_DISPLAY, FONT_BODY = UI.FontDisplay, UI.FontBody
+local BAR_W, BAR_H = 211, 13 -- Forever's player cast bar, native size
 
 local function now()
     return GetServerTime and GetServerTime() or 0
@@ -63,7 +63,7 @@ function UI.BuildBidPopup()
     end
 
     local popup = UI.CreateChamber(UIParent, "SideQuestBidPopup")
-    popup:SetSize(320, 220)
+    popup:SetSize(340, 236)
     popup:SetPoint("TOP", 0, -200)
     popup:Hide()
     local ribbon = UI.CreateRibbon(popup, "Bidding")
@@ -71,19 +71,27 @@ function UI.BuildBidPopup()
 
     local inner = popup.inner
 
-    -- item icon (quality-colour swatch behind it; the real texture is a
-    -- Blizzard file the preview renderer can't fetch, so the swatch alone
-    -- still carries the quality colour, per DESIGN.md "always with text")
-    local iconSwatch = inner:CreateTexture(nil, "BACKGROUND")
-    iconSwatch:SetSize(40, 40)
-    iconSwatch:SetPoint("TOPLEFT", 14, -32)
-    local icon = inner:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(36, 36)
-    icon:SetPoint("CENTER", iconSwatch, "CENTER")
+    -- the item's icon in a chamfered metal frame tinted to its quality colour
+    -- (the name below carries the quality colour too, so it never rests on
+    -- colour alone)
+    local iconFrame = CreateFrame("Frame", nil, inner)
+    iconFrame:SetSize(44, 44)
+    iconFrame:SetPoint("TOPLEFT", 10, -28)
+    local iconWell = iconFrame:CreateTexture(nil, "BACKGROUND")
+    iconWell:SetPoint("TOPLEFT", 3, -3)
+    iconWell:SetPoint("BOTTOMRIGHT", -3, 3)
+    iconWell:SetColorTexture(0.02, 0.03, 0.06, 1)
+    local icon = iconFrame:CreateTexture(nil, "ARTWORK")
+    icon:SetPoint("TOPLEFT", 3, -3)
+    icon:SetPoint("BOTTOMRIGHT", -3, 3)
+    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    local iconRim = iconFrame:CreateTexture(nil, "OVERLAY")
+    iconRim:SetAllPoints(iconFrame)
+    iconRim:SetTexture(UI.MediaTex .. "IconFrame")
 
     local itemText = makeFontString(inner, FONT_DISPLAY, 14, C.ink, "LEFT")
-    itemText:SetPoint("TOPLEFT", iconSwatch, "TOPRIGHT", 10, -2)
-    itemText:SetWidth(220)
+    itemText:SetPoint("TOPLEFT", iconFrame, "TOPRIGHT", 10, -2)
+    itemText:SetWidth(230)
     if itemText.SetWordWrap then
         itemText:SetWordWrap(true)
     end
@@ -91,39 +99,41 @@ function UI.BuildBidPopup()
     slotGpText:SetPoint("TOPLEFT", itemText, "BOTTOMLEFT", 0, -6)
 
     local prText = makeFontString(inner, FONT_BODY, 12, C.mist, "LEFT")
-    prText:SetPoint("TOPLEFT", iconSwatch, "BOTTOMLEFT", 0, -10)
+    prText:SetPoint("TOPLEFT", iconFrame, "BOTTOMLEFT", 0, -10)
     local rankText = makeFontString(inner, FONT_BODY, 12, C.mist, "LEFT")
     rankText:SetPoint("TOPLEFT", prText, "BOTTOMLEFT", 0, -2)
 
-    -- countdown bar: a stone track with a gold-deep fill that shrinks as
-    -- time runs out, plus the numeric seconds for anyone who can't read
-    -- the bar at 0.64 scale (never colour/length alone).
-    local barTrack = inner:CreateTexture(nil, "ARTWORK")
-    barTrack:SetSize(260, 8)
-    barTrack:SetPoint("TOPLEFT", rankText, "BOTTOMLEFT", 0, -12)
-    setColor(barTrack, C.stone2)
-    local barFill = inner:CreateTexture(nil, "OVERLAY")
-    barFill:SetHeight(8)
-    barFill:SetPoint("TOPLEFT", barTrack, "TOPLEFT")
-    setColor(barFill, C.goldDeep)
+    -- countdown: Forever's player cast bar at its native size, so its frame
+    -- art is never stretched; the fill shrinks as time runs out, with the
+    -- seconds in words for anyone who can't read the bar at 0.64 scale.
+    -- The atlases are set without useAtlasSize: these sizes are the layout.
+    local barBg = inner:CreateTexture(nil, "BACKGROUND")
+    barBg:SetSize(BAR_W, BAR_H)
+    barBg:SetPoint("TOPLEFT", rankText, "BOTTOMLEFT", 6, -14)
+    barBg:SetAtlas("UI-CastingBar-Background")
+    local barFill = inner:CreateTexture(nil, "ARTWORK")
+    barFill:SetSize(BAR_W, BAR_H)
+    barFill:SetPoint("TOPLEFT", barBg, "TOPLEFT")
+    barFill:SetAtlas("UI-CastingBar-Filling-Standard")
+    local barFrame = inner:CreateTexture(nil, "OVERLAY")
+    barFrame:SetPoint("TOPLEFT", barBg, "TOPLEFT", -6, 6)
+    barFrame:SetPoint("BOTTOMRIGHT", barBg, "BOTTOMRIGHT", 6, -6)
+    barFrame:SetAtlas("UI-CastingBar-Frame")
     local timerText = makeFontString(inner, FONT_BODY, 11, C.mist2, "LEFT")
-    timerText:SetPoint("TOPLEFT", barTrack, "BOTTOMLEFT", 0, -4)
+    timerText:SetPoint("TOPLEFT", barBg, "BOTTOMLEFT", 0, -4)
 
     local function makeChoiceButton(label, xOffset, response)
-        local btn = UI.CreateButton(inner, "quiet", label, 84, 22)
-        btn:SetPoint("BOTTOM", xOffset, 16)
-        local selectedEdge = UI.AddBorder(btn, C.gold, 2)
-        for _, line in pairs(selectedEdge) do
-            line:Hide()
-        end
-        btn.selectedEdge = selectedEdge
+        local btn = UI.CreateButton(inner, "quiet", label, 86, 24)
+        btn:SetPoint("BOTTOM", xOffset, 12)
         btn:SetScript("OnClick", function()
             SideQuest.Loot.SubmitBid(response)
             popup.chosen = response
             for _, b in ipairs(popup.choiceButtons) do
-                b:Disable()
-                for _, line in pairs(b.selectedEdge) do
-                    line:SetShown(b == btn)
+                if b == btn then
+                    b:SetSelected(true)
+                    b:EnableMouse(false)
+                else
+                    b:Disable()
                 end
             end
             UI.SetStateText(popup.sentText, "Sent: " .. label .. " -- waiting for the officer's award", false)
@@ -142,9 +152,10 @@ function UI.BuildBidPopup()
     sentText:SetPoint("BOTTOM", 0, 42)
     sentText:Hide()
 
-    popup.iconSwatch, popup.icon, popup.itemText, popup.slotGpText = iconSwatch, icon, itemText, slotGpText
+    popup.iconRim, popup.icon, popup.itemText, popup.slotGpText = iconRim, icon, itemText, slotGpText
     popup.prText, popup.rankText = prText, rankText
-    popup.barTrack, popup.barFill, popup.timerText, popup.sentText = barTrack, barFill, timerText, sentText
+    popup.barBg, popup.barFill, popup.barFrame, popup.timerText, popup.sentText =
+        barBg, barFill, barFrame, timerText, sentText
 
     UI.bidPopup = popup
     return popup
@@ -157,10 +168,9 @@ function UI.ShowBidPopup(itemLink, timeoutSeconds)
         popup.chosen = nil
         popup.sentText:Hide()
         for _, btn in ipairs(popup.choiceButtons) do
+            btn:EnableMouse(true)
+            btn:SetSelected(false)
             btn:Enable()
-            for _, line in pairs(btn.selectedEdge) do
-                line:Hide()
-            end
         end
 
         -- resolve the real item: name/quality/icon/slot/GP via the shared
@@ -170,8 +180,8 @@ function UI.ShowBidPopup(itemLink, timeoutSeconds)
         local info = UI.ResolveItemInfo(itemLink)
         local qColor = UI.QualityColor[info.quality] or UI.QualityColor[1]
 
-        setColor(popup.iconSwatch, qColor)
-        if info.icon and popup.icon.SetTexture then
+        popup.iconRim:SetVertexColor(qColor[1], qColor[2], qColor[3], 1)
+        if info.icon then
             popup.icon:SetTexture(info.icon)
         end
         popup.itemText:SetTextColor(qColor[1], qColor[2], qColor[3], 1)
@@ -198,7 +208,7 @@ function UI.ShowBidPopup(itemLink, timeoutSeconds)
         local totalSeconds = timeoutSeconds or 30
         local deadline = startedAt + totalSeconds
         popup.deadline = deadline
-        popup.barFill:SetWidth(260)
+        popup.barFill:SetWidth(BAR_W)
         if popup.ticker and popup.ticker.Cancel then
             popup.ticker:Cancel()
         end
@@ -213,7 +223,7 @@ function UI.ShowBidPopup(itemLink, timeoutSeconds)
                 end
                 return
             end
-            popup.barFill:SetWidth(260 * (remaining / totalSeconds))
+            popup.barFill:SetWidth(BAR_W * (remaining / totalSeconds))
             popup.timerText:SetText(remaining .. "s remaining")
         end
         tick()
