@@ -2367,13 +2367,19 @@ function UI.RefreshConsoleRaidNight()
     chamber.presenceText:SetText(#raidNames > 0 and (#raidNames .. " in raid: " .. table.concat(raidNames, ", "))
         or "No one marked present yet -- recording starts this automatically.")
 
-    local standby = SideQuestDB.standby or {}
-    local standbyNames = {}
-    for _, char in ipairs(standby) do
-        table.insert(standbyNames, displayName(char))
+    -- a standby player is usually in both lists (the standby roster and the recorder's presence), so list each once
+    local standbyNames, seen = {}, {}
+    local function addStandby(name)
+        if not seen[name] then
+            seen[name] = true
+            table.insert(standbyNames, name)
+        end
+    end
+    for _, char in ipairs(SideQuestDB.standby or {}) do
+        addStandby(displayName(char))
     end
     for _, n in ipairs(standbyFromPresent) do
-        table.insert(standbyNames, n)
+        addStandby(n)
     end
     if #standbyNames > 0 then
         chamber.standbyText:SetText(table.concat(standbyNames, ", "))
