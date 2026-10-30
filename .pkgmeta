@@ -21,3 +21,4 @@ ignore:
   - PRODUCT.md
   - DESIGN.md
   - cliff.toml
+  - SECURITY.md

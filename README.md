@@ -7,8 +7,11 @@ to [sidequest-guild.com](https://sidequest-guild.com).
 ## Install
 
 Install **SideQuest Guild** from [CurseForge](https://www.curseforge.com/projects/1773662) with the CurseForge app, or
-download the zip from [GitHub releases](https://github.com/SideQuest-Guild/sidequest-addon/releases) and unzip it into
+download the zip from [GitHub releases](https://github.com/SideQuest-Guild/addon/releases) and unzip it into
 `_classic_beta_/Interface/AddOns/`. You should end up with `Interface/AddOns/SideQuest/SideQuest.toc`.
+
+CurseForge and GitHub get the same zip, built by GitHub Actions and signed. [SECURITY.md](SECURITY.md) shows how to
+check that a zip you downloaded came from this repo.
 
 In game, type `/sq` to open the window.
 
@@ -112,8 +115,8 @@ every member online.
 first; the site shows it only once.
 
 ```sh
-uvx --from "git+https://github.com/SideQuest-Guild/sidequest-addon#subdirectory=uploader" sidequest-sync login
-uvx --from "git+https://github.com/SideQuest-Guild/sidequest-addon#subdirectory=uploader" sidequest-sync watch
+uvx --from "git+https://github.com/SideQuest-Guild/addon#subdirectory=uploader" sidequest-sync login
+uvx --from "git+https://github.com/SideQuest-Guild/addon#subdirectory=uploader" sidequest-sync watch
 ```
 
 When the website confirms the import, type `/sq export clear` so the next night starts empty. Then click **Copy game
@@ -160,8 +163,14 @@ git tag -s v0.2.0 -m "SideQuest v0.2.0"
 git push origin main v0.2.0
 ```
 
-Pushing the tag starts the release workflow. It writes that version's notes with git-cliff, then uploads the addon to
-CurseForge and makes a GitHub release.
+Pushing the tag starts the release workflow. It writes that version's notes with git-cliff, builds the zip and uploads
+it to CurseForge, signs build provenance and an SBOM for it, and publishes it as a GitHub release. A published
+release's files can't be changed, and `v*` tags can't be moved or deleted, so a bad release is fixed with a new version.
+
+To test the workflow without releasing, run it by hand from the Actions tab. It builds and signs the zip, uploads
+nothing to CurseForge, and leaves a draft release named `dry-run-<run id>` that you can delete.
+
+`main` takes signed commits only, and force pushes and deleting it are blocked.
 
 ## License
 

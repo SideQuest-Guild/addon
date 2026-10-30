@@ -1,34 +1,141 @@
 name: Release
 
+# A v* tag builds the addon zip once, uploads it to CurseForge, signs build provenance and an SBOM for it, and publishes
+# it as an immutable GitHub release. CurseForge and GitHub get the same file, so either download can be verified with
+# `gh attestation verify`.
+#
+# Running the workflow by hand is a dry run: it builds and attests the zip and leaves a draft release named
+# dry-run-<run id>. Nothing goes to CurseForge, and the draft can be deleted.
+
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
+  workflow_dispatch:
 
-permissions:
-  contents: write # the packager creates the GitHub release
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  build:
+    name: Build, upload to CurseForge, attest
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Sigstore certificate for the attestations
+      attestations: write
+    env:
+      PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # git-cliff reads every tag and commit
+          fetch-depth: 0 # git-cliff and the packager read every tag
+          persist-credentials: false
 
-      # The release notes are this tag's section of the changelog. The packager reads CHANGELOG.md (manual-changelog
-      # in .pkgmeta) and sends it to CurseForge and GitHub.
+      # The release notes are this tag's section of the changelog. The packager reads CHANGELOG.md (manual-changelog in
+      # .pkgmeta) and sends it to CurseForge; the GitHub release uses the same file.
       - name: Write release notes
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           config: cliff.toml
           args: --latest --strip header
         env:
           OUTPUT: CHANGELOG.md
 
-      # Uploads to CurseForge (project id from SideQuest/SideQuest.toc) and creates the GitHub release.
-      - name: Package and release
-        uses: BigWigsMods/packager@v2
+      # No GitHub token is passed, so the packager only uploads to CurseForge; the github-release job publishes to
+      # GitHub. -d skips every upload on a dry run.
+      - name: Package and upload to CurseForge
+        uses: BigWigsMods/packager@e50a250f8705041e40f2fa1ddcb280a686d65aa0 # v2.6.1
+        with:
+          args: ${{ env.PUBLISH != 'true' && '-d' || '' }}
+          pandoc: "false"
         env:
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+          CF_API_TOKEN: ${{ env.PUBLISH == 'true' && secrets.CF_API_KEY || '' }}
+
+      - name: Find the zip
+        id: zip
+        run: |
+          shopt -s nullglob
+          zips=(.release/*.zip)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "expected one zip in .release/, found ${#zips[@]}" >&2
+            exit 1
+          fi
+          echo "path=${zips[0]}" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "${zips[0]}" .zip)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+
+      # The addon has no third-party code, so the SBOM is one package with a SHA-256 for every file in the zip.
+      - name: Write the SBOM
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
+          NAME: ${{ steps.zip.outputs.name }}
+          SYFT_FILE_METADATA_SELECTION: all
+          SYFT_FILE_METADATA_DIGESTS: sha256
+        run: |
+          version="$(git describe --tags --always)"
+          "$SYFT" scan dir:.release/SideQuest --source-name SideQuest --source-version "$version" \
+            -o "spdx-json=.release/$NAME.spdx.json"
+
+      - name: Write checksums
+        working-directory: .release
+        env:
+          NAME: ${{ steps.zip.outputs.name }}
+        run: sha256sum "$NAME.zip" "$NAME.spdx.json" > SHA256SUMS.txt
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.zip.outputs.path }}
+
+      - name: Attest the SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ steps.zip.outputs.path }}
+          sbom-path: .release/${{ steps.zip.outputs.name }}.spdx.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: |
+            ${{ steps.zip.outputs.path }}
+            .release/${{ steps.zip.outputs.name }}.spdx.json
+            .release/SHA256SUMS.txt
+            CHANGELOG.md
+          if-no-files-found: error
+          include-hidden-files: true # .release/ starts with a dot
+
+  github-release:
+    name: GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+
+      # Immutable releases lock a release's assets and tag once it is published, so the release is drafted with every
+      # asset attached and published in a separate step.
+      - name: Draft and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PUBLISH: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          shopt -s nullglob
+          assets=(.release/*.zip .release/*.spdx.json .release/SHA256SUMS.txt)
+          if [ "$PUBLISH" = "true" ]; then
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "SideQuest $GITHUB_REF_NAME" \
+              --notes-file CHANGELOG.md "${assets[@]}"
+            gh release edit "$GITHUB_REF_NAME" --draft=false
+          else
+            gh release create "dry-run-$GITHUB_RUN_ID" --draft --target "$GITHUB_SHA" --title "Dry run $GITHUB_RUN_ID" \
+              --notes-file CHANGELOG.md "${assets[@]}"
+          fi
