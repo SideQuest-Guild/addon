@@ -4,6 +4,11 @@ A World of Warcraft: Forever addon for the SideQuest guild. Members use it to se
 for raids and check their loot points. Officers use it to run raid nights, hand out loot and send the night's record
 to [sidequest-guild.com](https://sidequest-guild.com).
 
+![The You tab: your points, your next raid, who's online and guild news](docs/screenshots/you.jpg)
+
+These pictures are drawn outside the game from the addon's own code, fonts and art, with made-up guild members. In
+game, the scroll bars and a few window borders look slightly different.
+
 ## Install
 
 Install **SideQuest Guild** from [CurseForge](https://www.curseforge.com/projects/1773662) with the CurseForge app, or
@@ -28,6 +33,8 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 
 ## For members
 
+<img src="docs/screenshots/guild.jpg" alt="The Guild tab: the roster with search and filters" width="49%"> <img src="docs/screenshots/ledger.jpg" alt="The Ledger tab: everyone's EP, GP and PR" width="49%">
+
 | Tab | What it shows |
 |---|---|
 | You | Your PR and where it ranks, your last four weeks of points, your next raid with Going, Maybe and Can't buttons, and who's online. |
@@ -43,6 +50,8 @@ If you can come to a raid but the group is full, type `/sq standby`. An officer 
 were there.
 
 ## For officers
+
+<img src="docs/screenshots/console-raid-night.jpg" alt="The Raid Night tab: tonight's steps, who's present and standby" width="49%"> <img src="docs/screenshots/console-loot.jpg" alt="The Loot tab: bids ranked by PR with Award buttons" width="49%">
 
 Officers get a gold **Console** tab. The addon treats you as an officer if your guild rank can edit officer notes. If
 your officer ranks can't, pick the lowest rank that should count (the Guild Master is 0, the rank below is 1, and so on)

@@ -34,6 +34,10 @@ Output:
 - `tests/preview/out/<view>.png` and `<view>-064.png` — Playwright
   screenshots of each, sized to the view's stage.
 
+Add `--docs` to the `screenshot.mjs` command to refresh the README's pictures instead: it captures just the window,
+with no caption, at twice the size, into `docs/screenshots/*.jpg`. Do this after a UI change so the README stays
+current.
+
 ## What it does and doesn't prove
 
 **Does:** real anchor math (so a row genuinely overlapping the tab bar or a

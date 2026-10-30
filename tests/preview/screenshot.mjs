@@ -14,13 +14,20 @@ const requireFromWebsite = createRequire(WEBSITE_PKG);
 const { chromium } = requireFromWebsite("playwright");
 const here = path.dirname(fileURLToPath(import.meta.url));
 const htmlDir = path.join(here, "html");
-const outDir = path.join(here, "out");
+
+// --docs: capture just the window (no margin or caption) at 2x as JPEG for the views shown in the README, into
+// docs/screenshots/. Otherwise capture every view, with its caption, into tests/preview/out/.
+const DOCS = process.argv.includes("--docs");
+const DOCS_VIEWS = ["you", "guild", "ledger", "console-raid-night", "console-loot"];
+const outDir = DOCS ? path.join(here, "..", "..", "docs", "screenshots") : path.join(here, "out");
 mkdirSync(outDir, { recursive: true });
 
-const files = readdirSync(htmlDir).filter((f) => f.endsWith(".html"));
+const files = readdirSync(htmlDir)
+  .filter((f) => f.endsWith(".html"))
+  .filter((f) => !DOCS || DOCS_VIEWS.includes(f.replace(/\.html$/, "")));
 
 const browser = await chromium.launch();
-const page = await browser.newPage();
+const page = await browser.newPage({ deviceScaleFactor: DOCS ? 2 : 1 });
 
 for (const file of files) {
   const name = file.replace(/\.html$/, "");
@@ -32,7 +39,11 @@ for (const file of files) {
     width: Math.ceil(box.width) + 20,
     height: Math.ceil(box.height) + 40,
   });
-  await page.screenshot({ path: path.join(outDir, name + ".png") });
+  if (DOCS) {
+    await stage.screenshot({ path: path.join(outDir, name + ".jpg"), type: "jpeg", quality: 85 });
+  } else {
+    await page.screenshot({ path: path.join(outDir, name + ".png") });
+  }
   console.log("captured", name + ".png");
 }
 

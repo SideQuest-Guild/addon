@@ -22,3 +22,4 @@ ignore:
   - DESIGN.md
   - cliff.toml
   - SECURITY.md
+  - docs
