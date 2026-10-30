@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  addon:
+    name: Addon (LuaJIT tests + luacheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LuaJIT
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "luajit-2.1"
+
+      - name: Install LuaRocks
+        uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install luacheck
+        run: luarocks install luacheck
+
+      - name: Run addon test suite
+        run: luajit tests/run_tests.lua
+
+      - name: luacheck
+        run: luacheck SideQuest tests
+
+      - name: Upload export fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: export_v1_fixture
+          path: tests/fixtures/export_v1.txt
+
+  uploader:
+    name: Uploader (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Run uploader tests
+        working-directory: uploader
+        run: uv run --python 3.12 pytest

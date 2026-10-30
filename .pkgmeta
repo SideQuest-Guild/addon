@@ -1,0 +1,10 @@
+package-as: SideQuest
+
+# Only the addon itself is shipped; tests, tooling and the uploader live in
+# this repo but have nothing to do with the in-game package.
+ignore:
+  - tests
+  - uploader
+  - .github
+  - .luacheckrc
+  - .pkgmeta

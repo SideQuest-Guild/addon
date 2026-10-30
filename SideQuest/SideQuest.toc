@@ -1,0 +1,28 @@
+## Interface: 16001
+## Title: SideQuest Guild
+## Notes: EPGP loot, attendance and progression sync for the SideQuest guild.
+## Author: SideQuest
+## Version: @project-version@
+## SavedVariables: SideQuestDB
+## X-License: MIT
+## X-Website: https://sidequest-guild.com
+## X-Curse-Project-ID:
+# ^ Leave the line above present but empty until CurseForge issues a project
+#   id for this addon; the release workflow (.github/workflows/release.yml)
+#   only publishes to CurseForge once X-Curse-Project-ID has a value, and
+#   @project-version@ above is substituted by the BigWigsMods packager from
+#   the git tag at release time.
+
+Libs\Json.lua
+Libs\Base64.lua
+Core.lua
+Rules.lua
+Codec.lua
+Comm.lua
+Recorder.lua
+Loot.lua
+Standings.lua
+Events.lua
+Sync.lua
+UI\Main.lua
+UI\BidPopup.lua

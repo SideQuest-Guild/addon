@@ -1,0 +1,14 @@
+# Lua
+*.luac
+
+# Python / uv
+uploader/.venv/
+uploader/__pycache__/
+uploader/**/__pycache__/
+uploader/.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store

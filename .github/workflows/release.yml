@@ -1,0 +1,22 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package and release
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+        # A GitHub release is always created from the tag. CurseForge upload
+        # is skipped automatically by the packager until SideQuest.toc's
+        # `## X-Curse-Project-ID` has a value (see that file for where to
+        # add it once the project is registered on CurseForge).
