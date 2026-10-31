@@ -2,7 +2,7 @@
 # changes they can see are listed: build, ci, test and docs commits are left out.
 
 [changelog]
-header = "# Changelog\n\n"
+header = "# Changelog\n"
 body = """
 {% if version %}\
 ## {{ version }} ({{ timestamp | date(format="%Y-%m-%d") }})
@@ -17,7 +17,7 @@ body = """
 {% endfor %}\
 {% endfor %}
 """
-trim = true
+trim = false
 
 [git]
 conventional_commits = true

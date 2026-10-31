@@ -1,8 +1,22 @@
 # Changelog
 
+## v0.2.0 (2026-10-31)
+
+### New
+
+- The window wears WoW: Forever's own frame, tabs and close button, with the guild site's chambers, ribbons and buttons inside, and a wax seal stamps each finished raid-night step
+- The addon applies the import SideQuest Companion stages, at an officer's next login
+- The addon keeps a guild directory of every member's professions and skill, character, craft cooldowns, market listings and materials, with Crafters and Market tabs to search it
+
+### Fixed
+
+- Sidequest-sync creates its token file as 0600, so the token is never readable by other users
+- The Raid Night tab lists each standby player once
+
 ## v0.1.0 (2026-10-30)
 
 ### New
 
 - SideQuest guild addon for WoW: Forever (raid recorder, EPGP loot, standings, events, site sync) and the sidequest-sync uploader
 - The SideQuest window as a guild sheet for members and a console for officers; roster, crafters, sign-ups, news, raid prep, bank, recruits and announcements; v2 sync; layout-preview renderer
+
