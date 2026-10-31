@@ -20,11 +20,23 @@ local function matches(haystack, needle)
     return haystack:lower():find(needle:lower(), 1, true) ~= nil
 end
 
---- Member action: search for a recipe or profession by substring.
+--- Member action: search for a recipe or profession by substring. Directory matches this client already
+-- holds (online or not) are filled into Crafters.results immediately, before any network answer arrives.
 function Crafters.Query(text)
     local payload = { id = SideQuest.NextId(), query = text, at = now() }
     SideQuest.Comm.SendCraftQuery(payload)
     Crafters.results = {}
+    for _, row in ipairs(SideQuest.Directory.WhoCrafts(text)) do
+        local entry = Crafters.results[row.character]
+        if not entry then
+            entry = { character = row.character, profession = row.profession, skill = row.skill,
+                online = row.online, recipes = {} }
+            Crafters.results[row.character] = entry
+        end
+        if row.recipe_id then
+            table.insert(entry.recipes, { id = row.recipe_id, name = row.recipe_name })
+        end
+    end
     SideQuest.Fire("SQ_CRAFT_QUERY_SENT", payload.id)
     return payload.id
 end
@@ -87,18 +99,47 @@ SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, sender)
         if not ok then
             return
         end
+        local me = SideQuest.NormalizeUnit("player")
         local mine = myMatches(req.query)
         if mine then
-            SideQuest.Comm.ScheduleAnswer("CRAFT:" .. req.id .. ":" .. SideQuest.NormalizeUnit("player"), function()
+            SideQuest.Comm.ScheduleAnswer("CRAFT:" .. req.id .. ":" .. me, function()
                 SideQuest.Comm.SendCraftAnswer({
                     id = req.id,
-                    character = SideQuest.NormalizeUnit("player"),
+                    character = me,
                     profession = mine.profession,
                     skill = mine.skill,
                     recipes = mine.recipes,
                     online = true,
                 })
             end)
+        end
+        -- Answer from the directory too, for any character (besides myself, handled above) this client
+        -- already holds a matching `prof` section for; shares the same suppression key as the
+        -- character's own self-answer so only one of them actually sends.
+        local byCharacter = {}
+        for _, row in ipairs(SideQuest.Directory.WhoCrafts(req.query)) do
+            if row.character ~= me then
+                local entry = byCharacter[row.character]
+                if not entry then
+                    entry = { profession = row.profession, skill = row.skill, recipes = {} }
+                    byCharacter[row.character] = entry
+                end
+                if row.recipe_id then
+                    table.insert(entry.recipes, { id = row.recipe_id, name = row.recipe_name })
+                end
+            end
+        end
+        for character, info in pairs(byCharacter) do
+            SideQuest.Comm.ScheduleAnswer("CRAFT:" .. req.id .. ":" .. character, function()
+                SideQuest.Comm.SendCraftAnswer({
+                    id = req.id,
+                    character = character,
+                    profession = info.profession,
+                    skill = info.skill,
+                    recipes = info.recipes,
+                    online = SideQuest.Directory.IsOnline(character),
+                })
+            end, 0, 3000)
         end
         if SideQuest.IsOfficer() then
             SideQuest.Comm.ScheduleAnswer("CRAFT_OFFLINE:" .. req.id, function()

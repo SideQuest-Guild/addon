@@ -223,4 +223,13 @@ SideQuest.On("GUILD_ROSTER_UPDATE", function()
 end)
 SideQuest.RegisterGameEvent("GUILD_ROSTER_UPDATE")
 
+-- Officers rebuild lastExport on logout, so SideQuest Companion always finds a current export in the
+-- save file to upload, including the directory's latest hashes even if nobody ran /sq export that session.
+SideQuest.On("PLAYER_LOGOUT", function()
+    if SideQuest.IsOfficer() then
+        Sync.BuildExport()
+    end
+end)
+SideQuest.RegisterGameEvent("PLAYER_LOGOUT")
+
 return Sync

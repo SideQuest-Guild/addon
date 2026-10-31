@@ -41,11 +41,18 @@ local function defaultDB()
         },
         killed_encounters = {},
         events = {},
+        -- directory.md: every member's shared record, keyed by normalized "Name-Realm".
+        directory = {},
+        -- directory.md: this character's own sell/buy/requests and bag/bank stock, independent of
+        -- `settings.share` (which only governs what gets published to the guild directory).
+        market = { sell = {}, buy = {}, requests = {} },
+        stock = { bags = {}, bank = {}, bank_at = nil },
         standby = {}, -- list of normalized "Name-Realm"
         settings = {
             officerRankIndex = nil, -- lowest guild rank that counts as officer; 0 is the Guild Master, like GetGuildInfo
             standingsBroadcastThrottle = 2, -- seconds between standings chunk sends
             reduceMotion = false, -- skip window-open/tab-crossfade/wax-seal/toast animation
+            share = { prof = true, char = true, cd = true, market = true, stock = true }, -- directory.md
         },
         -- v2: cached imported state (SQI1: "v":2), see addon-contract-v2.md.
         guild = {
@@ -143,8 +150,10 @@ if CreateFrame then
         SQ.Fire(event, ...)
     end)
 
+    -- An unknown event throws on Forever instead of being ignored, so every
+    -- registration is defensive.
     function SQ.RegisterGameEvent(event)
-        SQ.eventFrame:RegisterEvent(event)
+        pcall(SQ.eventFrame.RegisterEvent, SQ.eventFrame, event)
     end
 else
     function SQ.RegisterGameEvent() end
@@ -190,6 +199,27 @@ function SQ.Print(msg)
     if DEFAULT_CHAT_FRAME then
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ccffSideQuest|r: " .. tostring(msg))
     end
+end
+
+--------------------------------------------------------------------------
+-- Items: Forever has C_Item only; the old GetItemInfo global is gone.
+--------------------------------------------------------------------------
+
+--- Same returns as GetItemInfo (name, link, quality, ..., equipLoc, icon);
+-- nil when the client hasn't cached the item yet.
+function SQ.GetItemInfo(item)
+    local fn = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+    if not fn or item == nil then
+        return nil
+    end
+    return fn(item)
+end
+
+--- The item's name, or "item <id>" while the client hasn't cached it.
+function SQ.ItemName(itemId)
+    local name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemId)
+    name = name or SQ.GetItemInfo(itemId)
+    return name or ("item " .. tostring(itemId))
 end
 
 --------------------------------------------------------------------------
@@ -339,6 +369,43 @@ if _G then
     SlashCmdList = SlashCmdList or {}
     SlashCmdList["SIDEQUEST"] = dispatchSlash
 end
+
+SQ.RegisterSlash("share", function(rest)
+    local section, onOff = rest:match("^(%S*)%s*(%S*)$")
+    section = (section or ""):lower()
+    local share = SideQuestDB.settings.share
+    local valid = { prof = true, char = true, cd = true, market = true, stock = true }
+    if not valid[section] then
+        SQ.Print("Usage: /sq share <prof|char|cd|market|stock> on|off")
+        return
+    end
+    if onOff == "on" then
+        share[section] = true
+    elseif onOff == "off" then
+        share[section] = false
+    else
+        SQ.Print("Usage: /sq share <prof|char|cd|market|stock> on|off")
+        return
+    end
+    SQ.Print("Sharing " .. section .. ": " .. (share[section] and "on" or "off"))
+end, "share <prof|char|cd|market|stock> on|off - what the directory sends about you")
+
+SQ.RegisterSlash("dir", function()
+    local character = SQ.NormalizeUnit("player")
+    local entry = character and SideQuestDB.directory[character]
+    local sections = {}
+    for _, section in ipairs({ "prof", "char", "cd", "market", "stock" }) do
+        table.insert(sections, section .. "=" .. (SideQuestDB.settings.share[section] and "on" or "off"))
+    end
+    local known = 0
+    for _ in pairs(SideQuestDB.directory) do
+        known = known + 1
+    end
+    SQ.Print("Directory: " .. known .. " character(s) known. Sharing " .. table.concat(sections, ", ") .. ".")
+    if entry and entry.seen_at then
+        SQ.Print("My record last updated " .. tostring(entry.seen_at) .. ".")
+    end
+end, "dir - directory sharing status")
 
 --------------------------------------------------------------------------
 -- Bootstrap

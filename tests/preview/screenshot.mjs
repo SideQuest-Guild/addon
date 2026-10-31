@@ -18,7 +18,7 @@ const htmlDir = path.join(here, "html");
 // --docs: capture just the window (no margin or caption) at 2x as JPEG for the views shown in the README, into
 // docs/screenshots/. Otherwise capture every view, with its caption, into tests/preview/out/.
 const DOCS = process.argv.includes("--docs");
-const DOCS_VIEWS = ["you", "guild", "ledger", "console-raid-night", "console-loot", "bidpopup"];
+const DOCS_VIEWS = ["you", "guild", "crafters", "market", "ledger", "console-raid-night", "console-loot", "bidpopup"];
 const outDir = DOCS ? path.join(here, "..", "..", "docs", "screenshots") : path.join(here, "out");
 mkdirSync(outDir, { recursive: true });
 

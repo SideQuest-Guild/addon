@@ -39,15 +39,48 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 |---|---|
 | You | Your PR and where it ranks, your last four weeks of points, your next raid with Going, Maybe and Can't buttons, and who's online. |
 | Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. |
-| Crafters | Type a recipe or a profession to see who can make it, online people first. |
+| Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill; and who has Transmute, Mooncloth and other craft cooldowns ready. |
+| Market | What guildmates sell and want to buy, open requests for materials, and who holds an item. Mine lists and edits your own. |
 | Raids | Upcoming events, how many have signed up for each role, and your own answer. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
 | News | Guild announcements and recent activity. |
+
+Click someone on the Guild tab to see their level, spec, item level, professions, Onyxia attunement, tracked
+reputations and cooldowns. Hover any item to see which guildmates craft, sell, buy or hold it.
 
 Your raid sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
 
 If you can come to a raid but the group is full, type `/sq standby`. An officer approves it and you earn EP as if you
 were there.
+
+## What the addon shares
+
+SideQuest keeps a record of your character and shares it with the guild automatically: your professions and skill,
+your level, class, spec and item level, your craft cooldowns, your Onyxia attunement and the few reputations the guild
+tracks, what you sell and want to buy, and the crafting materials in your bags and bank (never gold or gear). That's
+how the Crafters and Market tabs work for guildmates who are offline, and officers' syncs carry it to the website,
+where only signed-in guild members see it.
+
+Turn any part off on the You tab, or with `/sq share <prof|char|cd|market|stock> on|off`. `/sq dir` shows what you
+share and how many guildmates the addon has heard from. Open each profession window once so the guild knows your
+recipes; skill levels update by themselves.
+
+<img src="docs/screenshots/crafters.jpg" alt="The Crafters tab: every Tailor in the guild with their skill" width="49%"> <img src="docs/screenshots/market.jpg" alt="The Market tab: who sells, holds and asks for an item" width="49%">
+
+### Selling, buying and asking for materials
+
+Use the Market tab's Mine view, or these commands. An item can be a shift-clicked link, an item ID, or a name in
+quotes.
+
+| Command | What it does |
+|---|---|
+| `/sq sell <item> <price> [qty] [crafted]` | List something you sell, for example `/sq sell "Bolt of Runecloth" 1g20s 20`. |
+| `/sq buy <item> <price>` | Put up a standing offer to buy a material. |
+| `/sq request <item> <qty> [price] [note]` | Ask the guild for materials you need. |
+| `/sq unrequest <item>` | Take a request down. |
+
+Prices are gold, silver and copper (`1g20s`, `35s`, `80c`) or a plain number of gold (`1.5`). Leave the price off and
+buyers whisper you instead. With Auctionator or TradeSkillMaster installed, the Mine view suggests a price.
 
 ## For officers
 
@@ -100,6 +133,8 @@ The other Console tabs:
 | `/sq export clear` | officers | Clears what was sent, once the website has accepted it. |
 | `/sq import` | officers | Loads points and events from the website. |
 | `/sq roster` | officers | Reads the guild roster now. |
+| `/sq share <prof\|char\|cd\|market\|stock> on\|off` | everyone | Turns a part of your shared directory record on or off. |
+| `/sq dir` | everyone | Shows directory sharing status and how many characters are known. |
 | `/sq bid <item link>` | officers | Opens bidding on an item that isn't in the loot window. |
 | `/sq undo <id>` | officers | Cancels a points award or loot record. |
 
@@ -159,8 +194,8 @@ luacheck SideQuest tests             # lint
 uv run --directory uploader pytest   # uploader tests
 ```
 
-The tests also write `tests/fixtures/export_v1.txt` and `export_v2.txt`, sample raid records that the website's tests
-import. Copy them to the website repo when they change.
+The tests also write `tests/fixtures/export_v1.txt`, `export_v2.txt` and `export_v2_directory.txt`, sample raid and
+directory records that the website's tests import. Copy them to the website repo when they change.
 
 `tests/preview/` draws every tab and popup as an image so you can check the layout without the game. See
 [tests/preview/README.md](tests/preview/README.md).

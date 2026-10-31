@@ -208,6 +208,26 @@ function Comm.SendPrepAnswer(payload)
     Comm.SendJSON("PREP_A", payload, "RAID")
 end
 
+function Comm.SendDirV(payload)
+    Comm.SendJSON("DIR_V", payload, "GUILD")
+end
+
+function Comm.SendDirQ(payload)
+    Comm.SendJSON("DIR_Q", payload, "GUILD")
+end
+
+function Comm.SendDirR(payload)
+    Comm.SendJSON("DIR_R", payload, "GUILD")
+end
+
+function Comm.SendDirLQ(payload)
+    Comm.SendJSON("DIR_LQ", payload, "GUILD")
+end
+
+function Comm.SendDirL(payload)
+    Comm.SendJSON("DIR_L", payload, "GUILD")
+end
+
 --------------------------------------------------------------------------
 -- Request/answer suppression: every request/answer pair in the contract
 -- waits a random 0-2s delay before answering, and an answer seen from
@@ -218,15 +238,16 @@ end
 local pendingAnswers = {} -- requestKey -> { done=bool } for the in-flight timer, if any
 local answeredKeys = {} -- requestKey -> true once any answer (ours or someone else's) has been seen/sent
 
---- Schedule `answerFn` after a random 0-2s delay under `requestKey`; call
--- Comm.SuppressAnswer(requestKey) from the handler for the matching answer
--- message type (including our own, which is a harmless no-op) to cancel it
--- before it fires, or to stop a not-yet-scheduled answer from ever firing.
-function Comm.ScheduleAnswer(requestKey, answerFn)
+--- Schedule `answerFn` after a random `minMs`-`maxMs` delay (default 0-2000)
+-- under `requestKey`; call Comm.SuppressAnswer(requestKey) from the handler
+-- for the matching answer message type (including our own, which is a
+-- harmless no-op) to cancel it before it fires, or to stop a not-yet-
+-- scheduled answer from ever firing.
+function Comm.ScheduleAnswer(requestKey, answerFn, minMs, maxMs)
     if answeredKeys[requestKey] or pendingAnswers[requestKey] then
         return -- already answered, or already about to
     end
-    local delay = math.random(0, 2000) / 1000
+    local delay = math.random(minMs or 0, maxMs or 2000) / 1000
     local fired = { done = false }
     pendingAnswers[requestKey] = fired
     local function run()
@@ -259,6 +280,31 @@ end
 function Comm.ResetAnswers()
     pendingAnswers = {}
     answeredKeys = {}
+end
+
+--------------------------------------------------------------------------
+-- Per-key send ceiling: at most once every `seconds` for a given key, used
+-- by the directory's DIR_Q/DIR_R throttle (docs/directory.md: "at most one
+-- ... every 30s, from any one client").
+--------------------------------------------------------------------------
+
+local rateLimits = {} -- key -> GetServerTime() it was last allowed
+
+--- True (and marks it sent) the first time this is called for `key`, or
+-- again once `seconds` have passed since the last time it returned true.
+function Comm.RateLimit(key, seconds)
+    local nowTs = GetServerTime and GetServerTime() or 0
+    local last = rateLimits[key]
+    if last and (nowTs - last) < seconds then
+        return false
+    end
+    rateLimits[key] = nowTs
+    return true
+end
+
+--- Test/reset helper: clear rate-limit state between scenarios.
+function Comm.ResetRateLimits()
+    rateLimits = {}
 end
 
 if CreateFrame then

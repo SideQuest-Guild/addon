@@ -8,34 +8,7 @@ local ROOT = SCRIPT_DIR .. "../"
 
 dofile(SCRIPT_DIR .. "wowstub.lua")
 
-local ADDON_FILES = {
-    "SideQuest/Libs/Json.lua",
-    "SideQuest/Libs/Base64.lua",
-    "SideQuest/Core.lua",
-    "SideQuest/Rules.lua",
-    "SideQuest/Codec.lua",
-    "SideQuest/Comm.lua",
-    "SideQuest/Recorder.lua",
-    "SideQuest/Loot.lua",
-    "SideQuest/Standings.lua",
-    "SideQuest/Events.lua",
-    "SideQuest/Roster.lua",
-    "SideQuest/Professions.lua",
-    "SideQuest/News.lua",
-    "SideQuest/Signups.lua",
-    "SideQuest/Sheet.lua",
-    "SideQuest/Crafters.lua",
-    "SideQuest/Announce.lua",
-    "SideQuest/Recruits.lua",
-    "SideQuest/Bank.lua",
-    "SideQuest/Prep.lua",
-    "SideQuest/Sync.lua",
-    "SideQuest/UI/Skin.lua",
-    "SideQuest/UI/Main.lua",
-    "SideQuest/UI/BidPopup.lua",
-}
-
-for _, f in ipairs(ADDON_FILES) do
+for _, f in ipairs(dofile(SCRIPT_DIR .. "addon_files.lua")(ROOT)) do
     dofile(ROOT .. f)
 end
 
@@ -95,6 +68,8 @@ local function resetAddon()
     SideQuest.Recorder.ended = false
     SideQuest.Loot.activeBid = nil
     SideQuest.Comm.ResetAnswers()
+    SideQuest.Comm.ResetRateLimits()
+    SideQuest.Directory.ResetState()
     SideQuest.Sync.ResetInboxState()
     WowStub.isOfficer = false
     WowStub.officerNoteCalls = 0
@@ -834,6 +809,26 @@ test("inbox: officer status unknown at first, then known on retry", function()
     assertEq(SideQuestDB.standings.generated_at, 200, "staged import applied once officer status was known")
     assertTrue(WowStub.officerNoteCalls >= 3, "retried until officer status was known")
 end)
+
+--------------------------------------------------------------------------
+-- more suites: every tests/test_*.lua file, called with the helpers above
+--------------------------------------------------------------------------
+
+do
+    local helpers = { test = test, assertEq = assertEq, assertTrue = assertTrue, resetAddon = resetAddon }
+    local listing = io.popen('ls "' .. SCRIPT_DIR .. '"')
+    local suites = {}
+    for name in listing:lines() do
+        if name:match("^test_.+%.lua$") then
+            table.insert(suites, name)
+        end
+    end
+    listing:close()
+    table.sort(suites)
+    for _, name in ipairs(suites) do
+        dofile(SCRIPT_DIR .. name)(helpers)
+    end
+end
 
 --------------------------------------------------------------------------
 -- run

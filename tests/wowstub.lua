@@ -21,7 +21,20 @@ WowStub = {
     convertToRaidCalls = 0,
     -- v2
     guildRoster = {}, -- list of { name, rank, rankIndex, level, class, zone, online }
-    tradeSkill = nil, -- { name, skill, maxSkill, recipes = { { id, name, type } } } or nil (window closed)
+    professions = {}, -- array (up to 5) of { name, skillLine, skill, maxSkill }; see GetProfessions()
+    openTradeSkill = nil, -- { professionID, skillLineID, professionName, skillLevel, maxSkillLevel, linked, guild, recipes, child } or nil
+    guildTradeSkillsEnabled = false,
+    guildTradeSkills = {}, -- list of { name, playerName, curSkill, maxSkill }
+    skillLines = {}, -- list of { name, isHeader, skill, maxSkill } for the C_SkillInfo fallback
+    spec = nil, -- { index, name } or nil
+    quests = {}, -- questId -> true/false
+    reputations = {}, -- factionId -> { reaction, currentStanding }
+    spellCooldowns = {}, -- spellId -> { startTime, duration }
+    spellNames = {}, -- spellId -> name
+    knownSpells = {}, -- spellId -> true
+    itemCooldowns = {}, -- itemId -> { startTime, duration }
+    containers = {}, -- bagId -> array of { itemID, stackCount } (1-indexed slots)
+    avgItemLevel = nil, avgItemLevelEquipped = nil, avgItemLevelPvp = nil,
     bankTransactions = {}, -- tabIndex -> list of { type, name, itemID, itemLink, count, money, year, month, day }
     inCombat = false,
     buffs = {}, -- list of buff names on "player"
@@ -37,6 +50,11 @@ WowStub = {
 
 function GetServerTime()
     return WowStub.time
+end
+
+-- GetTime() is the client's uptime clock, a different number from server time.
+function GetTime()
+    return WowStub.time - 1700000000
 end
 
 function WowStub.Advance(seconds)
@@ -92,6 +110,23 @@ function UnitClass(unit)
         return nil, nil
     end
     return u.class, u.class
+end
+
+function UnitLevel(unit)
+    local u = WowStub.units[unit]
+    return u and u.level or 1
+end
+
+function UnitRace(unit)
+    local u = WowStub.units[unit]
+    if not u then
+        return nil, nil
+    end
+    return u.race, u.race
+end
+
+function GetAverageItemLevel()
+    return WowStub.avgItemLevel or 0, WowStub.avgItemLevelEquipped or 0, WowStub.avgItemLevelPvp or 0
 end
 
 function IsInRaid()
@@ -187,6 +222,17 @@ C_Item = {
     GetItemCount = function(itemId)
         return WowStub.itemCounts[itemId] or 0
     end,
+    GetItemNameByID = function(itemId)
+        local item = WowStub.items and WowStub.items[itemId]
+        return item and item.name or nil
+    end,
+    GetItemCooldown = function(itemId)
+        local cd = WowStub.itemCooldowns[itemId]
+        if not cd then
+            return 0, 0, 1
+        end
+        return cd.startTime or 0, cd.duration or 0, 1
+    end,
 }
 
 -- GetItemInfo/C_Item.GetItemInfo: unlike GetItemInfoInstant (id/type/equipLoc,
@@ -208,27 +254,174 @@ end
 C_Item.GetItemInfo = GetItemInfo
 
 --------------------------------------------------------------------------
--- Professions (v2)
+-- Professions (directory "prof" section, docs/directory.md)
 --------------------------------------------------------------------------
 
-function GetTradeSkillLine()
-    if not WowStub.tradeSkill then
+-- GetProfessions/GetProfessionInfo: WowStub.professions is a plain array (up
+-- to 5 entries) of { name, skillLine, skill, maxSkill }; its slot order maps
+-- directly to GetProfessions()'s (primary1, primary2, archaeology, fishing,
+-- cooking) returns.
+function GetProfessions()
+    local list = WowStub.professions
+    local function slot(i)
+        return list[i] and i or nil
+    end
+    return slot(1), slot(2), slot(3), slot(4), slot(5)
+end
+
+function GetProfessionInfo(index)
+    local p = WowStub.professions[index]
+    if not p then
         return nil
     end
-    return WowStub.tradeSkill.name, WowStub.tradeSkill.skill, WowStub.tradeSkill.maxSkill
+    return p.name, p.icon or 0, p.skill, p.maxSkill, 0, 0, p.skillLine
 end
 
-function GetNumTradeSkills()
-    return WowStub.tradeSkill and #WowStub.tradeSkill.recipes or 0
+-- WowStub.openTradeSkill: { professionID, skillLineID, professionName, skillLevel, maxSkillLevel,
+-- linked = bool, guild = bool, recipes = { { id, name, learned, previewItemID } }, child = nil or the
+-- same shape (a specialization tab) } or nil when no profession window is open.
+C_TradeSkillUI = {
+    GetBaseProfessionInfo = function()
+        local t = WowStub.openTradeSkill
+        if not t then
+            return { professionID = 0 }
+        end
+        return {
+            professionID = t.professionID or 1,
+            skillLineID = t.skillLineID,
+            professionName = t.professionName,
+            skillLevel = t.skillLevel,
+            maxSkillLevel = t.maxSkillLevel,
+        }
+    end,
+    GetChildProfessionInfo = function()
+        local t = WowStub.openTradeSkill
+        if not t or not t.child then
+            return { professionID = 0 }
+        end
+        return {
+            professionID = t.child.professionID or 2,
+            skillLineID = t.child.skillLineID,
+            professionName = t.child.professionName,
+            skillLevel = t.child.skillLevel,
+            maxSkillLevel = t.child.maxSkillLevel,
+        }
+    end,
+    GetAllRecipeIDs = function()
+        local t = WowStub.openTradeSkill
+        local ids = {}
+        for _, r in ipairs(t and t.recipes or {}) do
+            table.insert(ids, r.id)
+        end
+        return ids
+    end,
+    GetRecipeInfo = function(id)
+        local t = WowStub.openTradeSkill
+        for _, r in ipairs(t and t.recipes or {}) do
+            if r.id == id then
+                return { learned = r.learned, name = r.name, previewItemID = r.previewItemID }
+            end
+        end
+        return nil
+    end,
+    IsTradeSkillLinked = function()
+        return WowStub.openTradeSkill and WowStub.openTradeSkill.linked or false
+    end,
+    IsTradeSkillGuild = function()
+        return WowStub.openTradeSkill and WowStub.openTradeSkill.guild or false
+    end,
+    IsGuildTradeSkillsEnabled = function()
+        return WowStub.guildTradeSkillsEnabled or false
+    end,
+}
+
+-- WowStub.skillLines: array of { name, isHeader, skill, maxSkill } for the C_SkillInfo fallback path
+-- Professions.lua uses when GetProfessions is unavailable.
+C_SkillInfo = {
+    GetNumSkillLines = function()
+        return #(WowStub.skillLines or {})
+    end,
+    GetSkillLineInfo = function(i)
+        local line = (WowStub.skillLines or {})[i]
+        if not line then
+            return nil
+        end
+        return line.name, line.isHeader or false, false, line.skill, 0, line.maxSkill
+    end,
+}
+
+-- WowStub.spec: { index, name } or nil.
+C_SpecializationInfo = {
+    GetSpecialization = function()
+        return WowStub.spec and WowStub.spec.index or nil
+    end,
+    GetSpecializationInfo = function(index)
+        if not WowStub.spec or WowStub.spec.index ~= index then
+            return nil
+        end
+        return index, WowStub.spec.name
+    end,
+}
+
+-- WowStub.spellCooldowns: spellId -> { startTime, duration } on the GetTime() clock; WowStub.spellNames:
+-- spellId -> name. GetSpellCooldown returns Mainline's SpellCooldownInfo table.
+C_Spell = {
+    GetSpellCooldown = function(spellId)
+        local cd = WowStub.spellCooldowns[spellId] or {}
+        return { startTime = cd.startTime or 0, duration = cd.duration or 0, isEnabled = true, modRate = 1 }
+    end,
+    GetSpellName = function(spellId)
+        return WowStub.spellNames[spellId]
+    end,
+}
+
+-- WowStub.knownSpells: spellId -> true.
+C_SpellBook = {
+    IsSpellKnown = function(spellId)
+        return WowStub.knownSpells[spellId] or false
+    end,
+}
+
+-- WowStub.quests: questId -> true/false.
+C_QuestLog = {
+    IsQuestFlaggedCompleted = function(questId)
+        return WowStub.quests[questId] or false
+    end,
+}
+
+-- WowStub.reputations: factionId -> { reaction, currentStanding }.
+C_Reputation = {
+    GetFactionDataByID = function(factionId)
+        return WowStub.reputations[factionId]
+    end,
+}
+
+-- WowStub.containers: bagId -> array of { itemID, stackCount } (1-indexed slots).
+C_Container = {
+    GetContainerNumSlots = function(bagId)
+        return #(WowStub.containers[bagId] or {})
+    end,
+    GetContainerItemInfo = function(bagId, slot)
+        local bag = WowStub.containers[bagId]
+        return bag and bag[slot] or nil
+    end,
+}
+
+-- WowStub.guildTradeSkills: array of { name, playerName, curSkill, maxSkill } for the native guild
+-- profession seed (docs/directory.md "Members who don't run SideQuest").
+function GetNumGuildTradeSkill()
+    return #WowStub.guildTradeSkills
 end
 
-function GetTradeSkillInfo(i)
-    local r = WowStub.tradeSkill and WowStub.tradeSkill.recipes[i]
+function GetGuildTradeSkillInfo(i)
+    local r = WowStub.guildTradeSkills[i]
     if not r then
         return nil
     end
-    return r.name, r.type or "trade", nil, nil, nil, r.id
+    return r.name, r.playerName, r.curSkill, r.maxSkill
 end
+
+function QueryGuildRecipes() end
 
 --------------------------------------------------------------------------
 -- Guild bank (v2)

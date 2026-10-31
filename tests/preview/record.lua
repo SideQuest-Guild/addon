@@ -91,15 +91,7 @@ end
 -- 2. Load the addon under the patched stub.
 --------------------------------------------------------------------------
 
-local ADDON_FILES = {
-    "SideQuest/Libs/Json.lua", "SideQuest/Libs/Base64.lua", "SideQuest/Core.lua", "SideQuest/Rules.lua",
-    "SideQuest/Codec.lua", "SideQuest/Comm.lua", "SideQuest/Recorder.lua", "SideQuest/Loot.lua",
-    "SideQuest/Standings.lua", "SideQuest/Events.lua", "SideQuest/Roster.lua", "SideQuest/Professions.lua",
-    "SideQuest/News.lua", "SideQuest/Signups.lua", "SideQuest/Sheet.lua", "SideQuest/Crafters.lua",
-    "SideQuest/Announce.lua", "SideQuest/Recruits.lua", "SideQuest/Bank.lua", "SideQuest/Prep.lua",
-    "SideQuest/Sync.lua", "SideQuest/UI/Skin.lua", "SideQuest/UI/Main.lua", "SideQuest/UI/BidPopup.lua",
-}
-for _, f in ipairs(ADDON_FILES) do
+for _, f in ipairs(dofile(ROOT .. "tests/addon_files.lua")(ROOT)) do
     dofile(ROOT .. f)
 end
 SideQuest.InitDB()
@@ -214,6 +206,72 @@ SideQuest.Crafters.results = {
         recipes = {} },
 }
 
+-- guild directory demo data (docs/directory.md shape): a handful of
+-- members' prof/char/cd/market/stock sections, including the player's
+-- own (Demo1-Whitemane) for the Market "Mine" editor and the Guild tab's
+-- member detail.
+local function dirSection(d, at, relayed)
+    return { v = SideQuest.Directory.Hash(d), at = at or (WowStub.time - 600), d = d, relayed = relayed or false }
+end
+SideQuestDB.directory = {
+    ["Demo1-Whitemane"] = {
+        seen_at = WowStub.time,
+        prof = dirSection({ professions = {
+            { name = "Tailoring", skill_line = 197, skill = 285, max_skill = 300,
+              recipes = { 18560, 18401, 18402 }, recipes_at = WowStub.time - 3600 },
+        } }),
+        char = dirSection({ level = 30, class = "PRIEST", race = "Human", spec = "Holy", item_level = 40.2,
+            attunements = { "onyxia" }, reputations = { { faction_id = 529, standing = 6, value = 4200 } } }),
+        cd = dirSection({ cooldowns = { { key = "mooncloth", ready_at = 0 } } }),
+        market = dirSection({
+            sell = { { item_id = 14048, price = 15000, qty = 10, crafted = true } },
+            buy = { { item_id = 12360, price = 30000 } },
+            requests = { { id = "Demo1-Whitemane-1", item_id = 2454, qty = 2, price = 5000, note = "for a demo quest", at = WowStub.time - 1800 } },
+        }),
+    },
+    ["Demo2-Whitemane"] = {
+        seen_at = WowStub.time,
+        char = dirSection({ level = 30, class = "WARRIOR", race = "Human", spec = "Protection", item_level = 42.3 }),
+        cd = dirSection({ cooldowns = { { key = "transmute", ready_at = WowStub.time + 9000 } } }),
+    },
+    ["Demo3-Whitemane"] = {
+        seen_at = WowStub.time,
+        market = dirSection({ sell = { { item_id = 14048, price = 12000, qty = 20, crafted = false } } }),
+    },
+    ["Demo4-Whitemane"] = {
+        seen_at = WowStub.time,
+        prof = dirSection({ professions = {
+            { name = "Blacksmithing", skill_line = 164, skill = 150, max_skill = 300, recipes = { 1 }, recipes_at = WowStub.time - 7200 },
+            { name = "Tailoring", skill_line = 197, skill = 200, max_skill = 300, recipes = { 2, 3 }, recipes_at = WowStub.time - 7200 },
+        } }),
+    },
+    ["Demo5-Whitemane"] = {
+        seen_at = WowStub.time,
+        market = dirSection({ buy = { { item_id = 12360, price = 35000 } } }),
+    },
+    ["Demo6-Whitemane"] = {
+        seen_at = WowStub.time,
+        prof = dirSection({ professions = {
+            { name = "Blacksmithing", skill_line = 164, skill = 170, max_skill = 300, recipes = { 1 }, recipes_at = WowStub.time - 1800 },
+        } }),
+        cd = dirSection({ cooldowns = { { key = "transmute", ready_at = 0 } } }),
+    },
+    ["Demo7-Whitemane"] = {
+        seen_at = WowStub.time,
+        market = dirSection({ requests = { { id = "Demo7-Whitemane-1", item_id = 12360, qty = 4, price = 35000, note = "for Arcanite Reaper", at = WowStub.time - 600 } } }),
+    },
+    ["Demo8-Whitemane"] = {
+        seen_at = WowStub.time,
+        stock = dirSection({ bags = { { 14048, 20 }, { 12360, 3 } }, bank = { { 14256, 40 } }, bank_at = WowStub.time - 86400 }),
+    },
+    ["Demo9-Whitemane"] = {
+        seen_at = WowStub.time - 10800,
+        prof = dirSection({ professions = {
+            { name = "Tailoring", skill_line = 197, skill = 140, max_skill = 300, recipes = { 4, 5, 6, 7, 8 }, recipes_at = WowStub.time - 10800 },
+        } }),
+    },
+}
+
 -- a recruit, with checklist + a vote
 SideQuestDB.officerData.recruits = {
     { id = "r1", character = "DemoRecruit-Whitemane", class = "MAGE", status = "trial", note = "Found in LFG",
@@ -237,6 +295,11 @@ WowStub.items[30896] = {
     itemId = 30896, name = "Demo Glory of the Defender", quality = 4, equipLoc = "INVTYPE_CHEST",
     icon = "Interface\\Icons\\INV_Chest_Plate04", itemType = "Armor", itemSubType = "Plate", classID = 4, subclassID = 4,
 }
+-- the market and stock demo items, so rows show names, as they do in game
+for id, name in pairs({ [14048] = "Bolt of Runecloth", [12360] = "Arcanite Bar", [2454] = "Elixir of Lion's Strength",
+    [14256] = "Felcloth" }) do
+    WowStub.items[id] = { itemId = id, name = name, quality = 1, classID = 7, subclassID = 0 }
+end
 
 --------------------------------------------------------------------------
 -- 4. Anchor resolver: walk WowStub.frames (creation order) and compute
@@ -1007,8 +1070,50 @@ SideQuest.Loot.activeBid = {
 
 local VIEWS = {
     { name = "you", setup = function() UI.ShowTab("You") end },
-    { name = "guild", setup = function() UI.ShowTab("Guild") end },
-    { name = "crafters", setup = function() UI.ShowTab("Crafters") end },
+    { name = "guild", setup = function() UI.ShowTab("Guild"); UI.panels.Guild.chamber.selectedCharacter = nil end },
+    { name = "guild-detail", setup = function()
+        UI.ShowTab("Guild")
+        UI.panels.Guild.chamber.selectedCharacter = "Demo1-Whitemane"
+        UI.RefreshGuild()
+    end },
+    { name = "crafters-search", setup = function()
+        UI.ShowTab("Crafters")
+        UI.ShowCraftersSub("Search")
+        UI.panels.Crafters.searchChamber.lastQuery = "Tailoring"
+        UI.RefreshCraftersSearch()
+    end },
+    { name = "crafters-professions", setup = function()
+        UI.ShowTab("Crafters")
+        UI.ShowCraftersSub("Professions")
+        UI.panels.Crafters.professionsChamber.profession = "Tailoring"
+        UI.RefreshCraftersProfessions()
+    end },
+    { name = "crafters", setup = function()
+        UI.ShowTab("Crafters")
+        UI.ShowCraftersSub("Professions")
+        UI.panels.Crafters.professionsChamber.profession = "Tailoring"
+        UI.RefreshCraftersProfessions()
+    end },
+    { name = "crafters-cooldowns", setup = function()
+        UI.ShowTab("Crafters")
+        UI.ShowCraftersSub("Cooldowns")
+    end },
+    { name = "market-browse", setup = function()
+        UI.ShowTab("Market")
+        UI.ShowMarketSub("Browse")
+        UI.panels.Market.browseChamber.lookupItemId = 14048
+        UI.RefreshMarketBrowse()
+    end },
+    { name = "market-mine", setup = function()
+        UI.ShowTab("Market")
+        UI.ShowMarketSub("Mine")
+    end },
+    { name = "market", setup = function()
+        UI.ShowTab("Market")
+        UI.ShowMarketSub("Browse")
+        UI.panels.Market.browseChamber.lookupItemId = 14048
+        UI.RefreshMarketBrowse()
+    end },
     { name = "raids", setup = function() UI.ShowTab("Raids") end },
     { name = "ledger", setup = function() UI.ShowTab("Ledger") end },
     { name = "news", setup = function() UI.ShowTab("News") end },

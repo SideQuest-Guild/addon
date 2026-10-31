@@ -13,8 +13,8 @@ globals = {
 
 read_globals = {
     -- WoW client API used by the addon
-    "CreateFrame", "UIParent", "GetServerTime", "GetNormalizedRealmName",
-    "UnitName", "UnitGUID", "UnitClass", "IsInRaid", "IsInGroup",
+    "CreateFrame", "UIParent", "GetServerTime", "GetTime", "GetNormalizedRealmName",
+    "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace", "IsInRaid", "IsInGroup",
     "GetNumGroupMembers", "IsInInstance", "GetInstanceInfo",
     "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
     "ConvertToRaid", "InviteUnit", "GetGuildInfo",
@@ -23,25 +23,35 @@ read_globals = {
     "StaticPopup_Show", "StaticPopupDialogs",
     -- v2: roster, professions, bank, prep, group placement
     "GetNumGuildMembers", "GetGuildRosterInfo",
-    "C_TradeSkillUI", "GetTradeSkillLine", "GetNumTradeSkills", "GetTradeSkillInfo",
+    "C_TradeSkillUI", "GetProfessions", "GetProfessionInfo",
+    "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo", "QueryGuildRecipes",
     "C_GuildBank",
     "InCombatLockdown", "SendChatMessage", "ChatFrame_SendTell",
     "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
     "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo", "IsRaidLeader", "IsPartyLeader", "GameTooltip",
     "C_Texture", "NineSliceUtil", "CreateColor", "ColorMixin",
+    "C_Reputation", "TooltipDataProcessor", "hooksecurefunc", "ChatEdit_InsertLink",
+    -- directory: professions/character/cooldowns/stock
+    "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog",
+    "C_Container", "GetAverageItemLevel",
+    -- optional third-party price hints (Market.SuggestPrice), never required
+    "Auctionator", "TSM_API",
 }
 
 -- Test files additionally define/read the WoW API stub and its control table.
 files["tests/wowstub.lua"] = {
     globals = {
-        "WowStub", "GetServerTime", "UnitName", "UnitGUID", "UnitClass",
+        "WowStub", "GetServerTime", "GetTime", "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace",
         "IsInRaid", "IsInGroup", "GetNumGroupMembers", "GetNormalizedRealmName",
         "issecretvalue", "C_GuildInfo", "GetGuildInfo", "IsInInstance",
         "GetInstanceInfo", "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
         "C_Item", "ConvertToRaid", "InviteUnit", "Enum", "C_ChatInfo",
         "C_Timer", "CreateFrame", "UIParent", "DEFAULT_CHAT_FRAME",
         "GetNumGuildMembers", "GetGuildRosterInfo", "C_TradeSkillUI",
-        "GetTradeSkillLine", "GetNumTradeSkills", "GetTradeSkillInfo",
+        "GetProfessions", "GetProfessionInfo", "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo",
+        "QueryGuildRecipes", "GetAverageItemLevel",
+        "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog", "C_Reputation",
+        "C_Container",
         "C_GuildBank", "InCombatLockdown", "SendChatMessage",
         "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
@@ -55,5 +65,13 @@ files["tests/run_tests.lua"] = {
 }
 
 files["tests/preview/record.lua"] = {
+    globals = { "WowStub" },
+}
+
+files["tests/test_directory.lua"] = {
+    globals = { "WowStub" },
+}
+
+files["tests/test_ui_directory.lua"] = {
     globals = { "WowStub" },
 }

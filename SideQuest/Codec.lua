@@ -83,6 +83,96 @@ local function exportRecruits(recruits)
     return out
 end
 
+-- directory.md: every stored record this client holds, newest `at` wins on the site. `d` stays nil
+-- (the key is simply absent, like every other optional field this codec already omits) for a section
+-- the owner stopped sharing; the site treats an absent `d` the same as the contract's literal `null`.
+local DIRECTORY_SECTIONS = { "prof", "char", "cd", "market", "stock" }
+
+local function exportDirectory(directory)
+    local out = {}
+    for character, entry in pairs(directory or {}) do
+        local sections = {}
+        local any = false
+        for _, section in ipairs(DIRECTORY_SECTIONS) do
+            local sec = entry[section]
+            if sec then
+                sections[section] = { v = sec.v, at = sec.at, d = sec.d }
+                any = true
+            end
+        end
+        if any then
+            table.insert(out, { character = character, sections = sections })
+        end
+    end
+    return out
+end
+
+-- Every item ID and recipe (spell) ID the directory export mentions, so the site can be told their
+-- names; item/spell names are static client data, nameable regardless of who holds the directory entry.
+local function collectDirectoryIds(directory)
+    local itemIds, recipeIds = {}, {}
+    for _, entry in pairs(directory or {}) do
+        local prof = entry.prof and entry.prof.d
+        if prof then
+            for _, p in ipairs(prof.professions or {}) do
+                for _, recipeId in ipairs(p.recipes or {}) do
+                    recipeIds[recipeId] = true
+                end
+            end
+        end
+        local market = entry.market and entry.market.d
+        if market then
+            for _, row in ipairs(market.sell or {}) do
+                itemIds[row.item_id] = true
+            end
+            for _, row in ipairs(market.buy or {}) do
+                itemIds[row.item_id] = true
+            end
+            for _, row in ipairs(market.requests or {}) do
+                itemIds[row.item_id] = true
+            end
+        end
+        local stock = entry.stock and entry.stock.d
+        if stock then
+            for _, row in ipairs(stock.bags or {}) do
+                itemIds[row[1]] = true
+            end
+            for _, row in ipairs(stock.bank or {}) do
+                itemIds[row[1]] = true
+            end
+        end
+    end
+    return itemIds, recipeIds
+end
+
+local function exportItemNames(itemIds)
+    local out = {}
+    if not (C_Item and C_Item.GetItemNameByID) then
+        return out
+    end
+    for itemId in pairs(itemIds) do
+        local ok, name = pcall(C_Item.GetItemNameByID, itemId)
+        if ok and name then
+            out[tostring(itemId)] = name
+        end
+    end
+    return out
+end
+
+local function exportRecipeNames(recipeIds)
+    local out = {}
+    if not (C_Spell and C_Spell.GetSpellName) then
+        return out
+    end
+    for recipeId in pairs(recipeIds) do
+        local ok, name = pcall(C_Spell.GetSpellName, recipeId)
+        if ok and name then
+            out[tostring(recipeId)] = name
+        end
+    end
+    return out
+end
+
 --- Build the export payload table (contract-shaped) from the addon's pending
 --- data. Does not mutate SideQuestDB; callers decide when to clear `pending`.
 -- @param recorderName string normalized "Name-Realm" of the recorder
@@ -111,9 +201,15 @@ function Codec.BuildExportPayload(recorderName, guildName, realmName)
         announcements = arr(pending.announcements or {}),
         recruits = arr(exportRecruits(pending.recruits or {})),
         member_notes = arr(pending.member_notes or {}),
+        directory = arr(exportDirectory(db.directory or {})),
     }
     if pending.roster then
         payload.roster = { taken_at = pending.roster.taken_at, members = arr(pending.roster.members or {}) }
+    end
+    do
+        local itemIds, recipeIds = collectDirectoryIds(db.directory or {})
+        payload.item_names = exportItemNames(itemIds)
+        payload.recipe_names = exportRecipeNames(recipeIds)
     end
     return payload
 end

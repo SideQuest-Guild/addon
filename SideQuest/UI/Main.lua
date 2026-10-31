@@ -66,6 +66,36 @@ local QUALITY_COLOR = {
     [3] = { 0, 0.44, 0.87 }, [4] = { 0.64, 0.21, 0.93 }, [5] = { 1, 0.5, 0 },
 }
 
+-- Directory view fallbacks, used only while SideQuest.Data (Data.lua) has
+-- not yet populated its tables: a static profession name list (so the
+-- Crafters > Professions picker always has something to cycle through)
+-- and one placeholder craft cooldown so the Cooldowns view has a shape to
+-- show before Data.COOLDOWNS exists. Real data always wins when present.
+local PROFESSION_FALLBACK = {
+    "Alchemy", "Blacksmithing", "Enchanting", "Engineering", "Herbalism",
+    "Inscription", "Jewelcrafting", "Leatherworking", "Mining", "Skinning",
+    "Tailoring", "Cooking", "Fishing", "First Aid",
+}
+local COOLDOWN_FALLBACK = {
+    { key = "transmute", label = "Transmute", profession = "Alchemy" },
+    { key = "mooncloth", label = "Mooncloth", profession = "Tailoring" },
+}
+local STANDING_WORD = {
+    [1] = "Hated", [2] = "Hostile", [3] = "Unfriendly", [4] = "Neutral",
+    [5] = "Friendly", [6] = "Honored", [7] = "Revered", [8] = "Exalted",
+}
+
+-- The five directory sections settings.share toggles, in docs/directory
+-- .md's table order, each with the one plain sentence the Sharing
+-- checklist shows next to it.
+local SHARE_SECTIONS = {
+    { key = "prof", label = "Professions", sentence = "Shares your professions, skill levels and known recipes." },
+    { key = "char", label = "Character", sentence = "Shares your level, spec, item level, attunements and tracked reputations." },
+    { key = "cd", label = "Cooldowns", sentence = "Shares your craft cooldowns and when each is ready." },
+    { key = "market", label = "Market", sentence = "Shares what you sell, your standing buy offers and your requests." },
+    { key = "stock", label = "Stock", sentence = "Shares the crafting materials you hold in bags and bank." },
+}
+
 -- Imported class tokens may arrive lowercase from the site (contract v2
 -- `members[].class`, `events[].signups[].role`'s sibling `class`); every
 -- CLASS_COLOR/CLASS_WORD lookup goes through this so case never hides the
@@ -98,9 +128,11 @@ local NEWS_KIND_WORD = {
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
 
-local TABS = { "You", "Guild", "Crafters", "Raids", "Ledger", "News" }
+local TABS = { "You", "Guild", "Crafters", "Market", "Raids", "Ledger", "News" }
 local OFFICER_TAB = "Console"
 local CONSOLE_SUBTABS = { "Raid Night", "Loot", "Roster", "Recruits", "Bank", "Announce", "Sync" }
+local CRAFTERS_SUBTABS = { "Search", "Professions", "Cooldowns" }
+local MARKET_SUBTABS = { "Browse", "Mine" }
 
 local function now()
     return GetServerTime and GetServerTime() or 0
@@ -144,6 +176,33 @@ local function parseItemId(itemLink)
     return tonumber(itemLink) or tonumber(tostring(itemLink):match("item:(%d+)"))
 end
 
+--- The item ID typed or shift-clicked into an item box: an ID, a link or a
+-- name the client knows.
+local function parseItemInput(box)
+    local text = box:GetText()
+    if SideQuest.Market and SideQuest.Market.ParseItemArg then
+        return SideQuest.Market.ParseItemArg(text)
+    end
+    return parseItemId(text)
+end
+
+-- Shift-clicking an item while one of these boxes has focus puts its link in
+-- the box, the way the chat box takes links.
+local itemLinkBoxes = {}
+local function acceptItemLinks(box)
+    table.insert(itemLinkBoxes, box)
+end
+if hooksecurefunc and ChatEdit_InsertLink then
+    hooksecurefunc("ChatEdit_InsertLink", function(link)
+        for _, box in ipairs(itemLinkBoxes) do
+            if box:IsVisible() and box:HasFocus() then
+                box:SetText(link)
+                return
+            end
+        end
+    end)
+end
+
 --- Resolve an item link to its name/quality/icon/slot word/GP cost. Shared
 -- by the raider-facing bid popup and the officer console's Loot sub-view,
 -- so item resolution (and its "unknown until identified" fallback) lives
@@ -151,8 +210,8 @@ end
 local function resolveItemInfo(itemLink)
     local itemId = parseItemId(itemLink)
     local name, quality, equipLoc, icon
-    if itemId and GetItemInfo then
-        local n, _, q, _, _, _, _, _, eq, ic = GetItemInfo(itemId)
+    if itemId then
+        local n, _, q, _, _, _, _, _, eq, ic = SideQuest.GetItemInfo(itemId)
         name, quality, equipLoc, icon = n, q, eq, ic
     end
     if itemId and not equipLoc and C_Item and C_Item.GetItemInfoInstant then
@@ -276,6 +335,193 @@ local function classText(fs, character, className)
     local color = (key and CLASS_COLOR[key]) or C.ink
     fs:SetTextColor(color[1], color[2], color[3], 1)
     fs:SetText(displayName(character) .. (key and (" " .. CLASS_WORD[key]) or ""))
+end
+
+--------------------------------------------------------------------------
+-- Directory helpers: relative time, craft-cooldown countdowns, money,
+-- fallback labels and the newest "at" across a stored record's sections
+-- (its freshness). Shared by Crafters, Market, Guild-detail and Tooltip.
+--------------------------------------------------------------------------
+
+--- "Xh ago" / "Xd ago" / "just now" / "never", for a server-time timestamp.
+local function ago(ts)
+    if not ts or ts <= 0 then
+        return "never"
+    end
+    local ageSeconds = math.max(0, now() - ts)
+    local hours = math.floor(ageSeconds / 3600)
+    if hours < 1 then
+        return "just now"
+    elseif hours < 48 then
+        return hours .. "h ago"
+    end
+    return math.floor(hours / 24) .. "d ago"
+end
+
+--- "Ready now" / "Ready in Xm" / "Ready in Xh" / "Ready in Xd" for a craft
+-- cooldown's ready_at (0 or past means ready now, per docs/directory.md).
+local function readyWord(readyAt)
+    if not readyAt or readyAt <= now() then
+        return "Ready now"
+    end
+    local secs = readyAt - now()
+    local hours = math.floor(secs / 3600)
+    if hours < 1 then
+        return "Ready in " .. math.max(1, math.floor(secs / 60)) .. "m"
+    elseif hours < 48 then
+        return "Ready in " .. hours .. "h"
+    end
+    return "Ready in " .. math.floor(hours / 24) .. "d"
+end
+
+--- Copper to "Ng Ns Nc" (docs/directory.md market prices are copper; nil
+-- means "whisper me", per the same contract).
+local function formatMoney(copper)
+    if not copper then
+        return "Whisper me"
+    end
+    copper = math.floor(copper + 0.5)
+    local gold = math.floor(copper / 10000)
+    local silver = math.floor((copper % 10000) / 100)
+    local cop = copper % 100
+    local parts = {}
+    if gold > 0 then table.insert(parts, gold .. "g") end
+    if silver > 0 or gold > 0 then table.insert(parts, silver .. "s") end
+    table.insert(parts, cop .. "c")
+    return table.concat(parts, " ")
+end
+
+--- Copper to display text: SideQuest.Market.FormatPrice once Market.lua
+-- has it (the addon's one source of truth for money formatting), else
+-- the local fallback above (headless tests/preview before it loads).
+local function money(copper)
+    if not copper then
+        return "Whisper me"
+    end
+    if SideQuest.Market and SideQuest.Market.FormatPrice then
+        return SideQuest.Market.FormatPrice(copper)
+    end
+    return formatMoney(copper)
+end
+
+--- Free-text price ("1g20s", "50s", "3g") to copper, or nil: SideQuest
+-- .Market.ParsePrice once Market.lua has it, else a plain gold-number
+-- fallback so the editor still works in the meantime.
+local function parsePrice(text)
+    if not text or text == "" then
+        return nil
+    end
+    if SideQuest.Market and SideQuest.Market.ParsePrice then
+        return SideQuest.Market.ParsePrice(text)
+    end
+    local gold = tonumber(text)
+    return gold and math.floor(gold * 10000 + 0.5) or nil
+end
+
+--- Caps a request note's display length (the contract allows up to 80
+-- chars, which would otherwise run under the row's Whisper/Remove button).
+local function truncateNote(note, max)
+    max = max or 40
+    if not note or #note <= max then
+        return note
+    end
+    return note:sub(1, max - 1) .. "..."
+end
+
+--- Title-cases a snake/kebab key into a readable label, for attunement or
+-- cooldown keys SideQuest.Data hasn't labelled yet.
+local function labelFromKey(key)
+    if not key then
+        return ""
+    end
+    local words = {}
+    for w in tostring(key):gmatch("[^_%-]+") do
+        table.insert(words, w:sub(1, 1):upper() .. w:sub(2))
+    end
+    return table.concat(words, " ")
+end
+
+-- Section keys in storage order, per docs/directory.md's "Where it lives".
+local DIRECTORY_SECTIONS = { "prof", "char", "cd", "market", "stock" }
+
+--- The newest `at` across a stored directory entry's sections (how fresh
+-- that member's record is), falling back to `seen_at`; nil when nothing
+-- has ever been heard about them.
+local function recordFreshness(entry)
+    if not entry then
+        return nil
+    end
+    local newest
+    for _, key in ipairs(DIRECTORY_SECTIONS) do
+        local sec = entry[key]
+        if sec and sec.at and (not newest or sec.at > newest) then
+            newest = sec.at
+        end
+    end
+    return newest or entry.seen_at
+end
+
+--- Profession names to cycle through: SideQuest.Data.PROFESSIONS once
+-- Data.lua has it, else the static fallback (see PROFESSION_FALLBACK).
+local function professionNames()
+    local data = SideQuest.Data and SideQuest.Data.PROFESSIONS
+    if data and #data > 0 then
+        local names = {}
+        for _, p in ipairs(data) do
+            if p.name then
+                table.insert(names, p.name)
+            end
+        end
+        if #names > 0 then
+            return names
+        end
+    end
+    return PROFESSION_FALLBACK
+end
+
+--- Craft cooldown definitions ({key, label, profession}), label-sorted:
+-- SideQuest.Data.COOLDOWNS (a dict keyed by cooldown key) once Data.lua
+-- has it, else the static fallback.
+local function cooldownDefs()
+    local data = SideQuest.Data and SideQuest.Data.COOLDOWNS
+    if data and next(data) then
+        local out = {}
+        for key, def in pairs(data) do
+            table.insert(out, { key = key, label = def.label, profession = def.profession })
+        end
+        table.sort(out, function(a, b) return (a.label or a.key) < (b.label or b.key) end)
+        return out
+    end
+    return COOLDOWN_FALLBACK
+end
+
+--- An attunement key's label: SideQuest.Data.ATTUNEMENTS (a dict keyed by
+-- attunement key) once Data.lua has it, else the key itself, title-cased.
+local function attunementLabel(key)
+    local data = SideQuest.Data and SideQuest.Data.ATTUNEMENTS
+    local def = data and data[key]
+    if def and def.label then
+        return def.label
+    end
+    return labelFromKey(key)
+end
+
+--- A faction's display label: the live client data when the faction is
+-- known there, else SideQuest.Data.REPUTATIONS's own label, else the ID.
+local function reputationLabel(factionId)
+    local info = C_Reputation and C_Reputation.GetFactionDataByID and C_Reputation.GetFactionDataByID(factionId)
+    if info and info.name then
+        return info.name
+    end
+    local data = SideQuest.Data and SideQuest.Data.REPUTATIONS
+    if data then
+        for _, r in ipairs(data) do
+            if r.faction_id == factionId and r.label then
+                return r.label
+            end
+        end
+    end
+    return "Faction " .. tostring(factionId)
 end
 
 --------------------------------------------------------------------------
@@ -447,6 +693,7 @@ function UI.BuildMainFrame()
     UI.BuildYouPanel(body)
     UI.BuildGuildPanel(body)
     UI.BuildCraftersPanel(body)
+    UI.BuildMarketPanel(body)
     UI.BuildRaidsPanel(body)
     UI.BuildLedgerPanel(body)
     UI.BuildNewsPanel(body)
@@ -516,6 +763,8 @@ function UI.ShowTab(tabName)
         UI.RefreshGuild()
     elseif tabName == "Crafters" then
         UI.RefreshCrafters()
+    elseif tabName == "Market" then
+        UI.RefreshMarket()
     elseif tabName == "Raids" then
         UI.RefreshRaids()
     elseif tabName == "Ledger" then
@@ -640,6 +889,33 @@ function UI.BuildYouPanel(body)
     end
     local epgpAltsText = makeFontString(content, FONT_BODY, 12, C.mist, "LEFT")
     epgpAltsText:SetPoint("TOPLEFT", badgesText, "BOTTOMLEFT", 0, -6)
+
+    -- Sharing: five checkboxes for settings.share, one plain sentence each
+    -- on what it shares with the guild's directory.
+    local sharingHeading = createSubHeading(content, "Sharing")
+    sharingHeading:SetPoint("TOPLEFT", epgpAltsText, "BOTTOMLEFT", 0, -16)
+    sharingHeading:SetWidth(320)
+    local sharingRows = {}
+    local prevAnchor = sharingHeading
+    for _, section in ipairs(SHARE_SECTIONS) do
+        local cb = createCheckbox(content, 16)
+        cb:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", 0, -8)
+        local labelFS = makeFontString(content, FONT_BODY, 12, C.ink, "LEFT")
+        labelFS:SetPoint("LEFT", cb, "RIGHT", 6, 0)
+        labelFS:SetText(section.label)
+        local sentenceFS = makeFontString(content, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+        sentenceFS:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 2, -2)
+        sentenceFS:SetWidth(310)
+        if sentenceFS.SetWordWrap then sentenceFS:SetWordWrap(true) end
+        sentenceFS:SetText(section.sentence)
+        cb:SetScript("OnClick", function()
+            SideQuestDB.settings.share = SideQuestDB.settings.share or {}
+            SideQuestDB.settings.share[section.key] = cb:GetChecked() and true or false
+        end)
+        sharingRows[section.key] = { checkbox = cb, sentence = sentenceFS }
+        prevAnchor = sentenceFS
+    end
+    you.sharingHeading, you.sharingRows = sharingHeading, sharingRows
 
     you.nameRow, you.rankText, you.prText = nameRow, rankText, prText
     you.historyHeading, you.historyTable, you.baselineText, you.historyEmpty =
@@ -823,9 +1099,14 @@ function UI.RefreshYou()
     you.epgpAltsText:SetText(string.format("Guild EP %.0f  --  attendance %.0f%%  --  alts: %s",
         (member and member.guild_ep) or 0, (member and (member.attendance_rate or 0) * 100) or 0,
         #altNames > 0 and table.concat(altNames, ", ") or "none"))
-    -- the You column is a fixed stack: name, PR, four weeks, next event and
-    -- answers, badges, guild EP line
-    setScrollContentHeight(you.scroll, 400)
+    for _, section in ipairs(SHARE_SECTIONS) do
+        local share = SideQuestDB.settings.share
+        local checked = not share or share[section.key] ~= false
+        you.sharingRows[section.key].checkbox:SetChecked(checked)
+    end
+    -- the You column is a fixed stack: name, PR, four weeks, next event,
+    -- answers, badges, guild EP line, sharing checklist
+    setScrollContentHeight(you.scroll, 610)
 
     -- GUILD NOW
     local rosterMembers = (SideQuestDB.roster and SideQuestDB.roster.members) or {}
@@ -888,6 +1169,128 @@ end
 -- GUILD tab: roster+, header row, search + online/class/rank filters,
 -- alts grouped under their main (expand/collapse), online first
 --------------------------------------------------------------------------
+
+-- A member's directory detail, shown inline under their row once clicked:
+-- level/spec/item level, professions with skill, attunements, tracked
+-- reputations, cooldowns and how fresh the record is.
+local GUILD_DETAIL_INDENT, GUILD_DETAIL_LINE = 28, 16
+
+local function buildGuildDetail(content)
+    local block = CreateFrame("Frame", nil, content)
+    block:SetWidth(540)
+    block.nameRow = createNameRow(block, 14)
+    block.nameRow:SetPoint("TOPLEFT", GUILD_DETAIL_INDENT, 0)
+    block.metaText = makeFontString(block, FONT_BODY, 12, C.mist, "LEFT")
+    block.metaText:SetPoint("LEFT", block.nameRow, "RIGHT", 10, 0)
+    block.freshnessText = makeFontString(block, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+    block.freshnessText:SetPoint("TOPLEFT", block.nameRow, "BOTTOMLEFT", 0, -4)
+
+    block.profHeading = createSubHeading(block, "Professions")
+    block.profHeading:SetWidth(520)
+    block.attuneHeading = createSubHeading(block, "Attunements")
+    block.attuneHeading:SetWidth(520)
+    block.attuneText = makeFontString(block, FONT_BODY, 12, C.mist, "LEFT")
+    block.attuneText:SetWidth(500)
+    if block.attuneText.SetWordWrap then block.attuneText:SetWordWrap(true) end
+    block.repHeading = createSubHeading(block, "Reputations")
+    block.repHeading:SetWidth(520)
+    block.cdHeading = createSubHeading(block, "Cooldowns")
+    block.cdHeading:SetWidth(520)
+    block.profRows, block.repRows, block.cdRows = {}, {}, {}
+    return block
+end
+
+--- Fills `block` with `character`'s directory record and returns the
+-- height it used, so the caller can offset rows below it.
+function UI.PaintGuildDetail(block, character)
+    local Directory = SideQuest.Directory
+    local entry = Directory and Directory.Get and Directory.Get(character)
+    local charData = entry and entry.char and entry.char.d
+    local profData = entry and entry.prof and entry.prof.d
+    local cdData = entry and entry.cd and entry.cd.d
+
+    setNameRow(block.nameRow, character, charData and charData.class)
+    local metaParts = {}
+    if charData and charData.level then table.insert(metaParts, "Level " .. charData.level) end
+    if charData and charData.spec then table.insert(metaParts, charData.spec) end
+    if charData and charData.item_level then table.insert(metaParts, "ilvl " .. string.format("%.1f", charData.item_level)) end
+    block.metaText:SetText(table.concat(metaParts, "  --  "))
+    local freshness = recordFreshness(entry)
+    setStateText(block.freshnessText, freshness and ("Record " .. ago(freshness)) or "No directory record yet", not freshness)
+
+    local y = 34
+    local function listOrEmpty(heading, list, rows, emptyKey, emptyMsg, lineFn)
+        heading:ClearAllPoints()
+        heading:SetPoint("TOPLEFT", 20, -y)
+        y = y + 18
+        for _, r in ipairs(rows) do r:Hide() end
+        if list and #list > 0 then
+            if block[emptyKey] then block[emptyKey]:Hide() end
+            for i, item in ipairs(list) do
+                local row = rows[i]
+                if not row then
+                    row = makeFontString(block, FONT_BODY, 12, C.mist, "LEFT")
+                    rows[i] = row
+                end
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", GUILD_DETAIL_INDENT, -y)
+                row:SetText(lineFn(item))
+                row:Show()
+                y = y + GUILD_DETAIL_LINE
+            end
+        else
+            if not block[emptyKey] then
+                block[emptyKey] = makeFontString(block, FONT_BODY_ITALIC, 11, C.mist2, "LEFT")
+            end
+            block[emptyKey]:ClearAllPoints()
+            block[emptyKey]:SetPoint("TOPLEFT", GUILD_DETAIL_INDENT, -y)
+            block[emptyKey]:SetText(emptyMsg)
+            block[emptyKey]:Show()
+            y = y + GUILD_DETAIL_LINE
+        end
+        y = y + 6
+    end
+
+    listOrEmpty(block.profHeading, profData and profData.professions, block.profRows, "profEmptyText",
+        "No professions on record.", function(p)
+            return p.name .. ": " .. (p.skill or 0) .. " / " .. (p.max_skill or "--")
+        end)
+
+    block.attuneHeading:ClearAllPoints()
+    block.attuneHeading:SetPoint("TOPLEFT", 20, -y)
+    y = y + 18
+    block.attuneText:ClearAllPoints()
+    block.attuneText:SetPoint("TOPLEFT", GUILD_DETAIL_INDENT, -y)
+    if charData and charData.attunements and #charData.attunements > 0 then
+        local labels = {}
+        for _, key in ipairs(charData.attunements) do
+            table.insert(labels, attunementLabel(key))
+        end
+        block.attuneText:SetText(table.concat(labels, ", "))
+    else
+        block.attuneText:SetText("None on record.")
+    end
+    y = y + GUILD_DETAIL_LINE + 6
+
+    listOrEmpty(block.repHeading, charData and charData.reputations, block.repRows, "repEmptyText",
+        "No tracked reputations on record.", function(rep)
+            local label = reputationLabel(rep.faction_id)
+            return label .. ": " .. (STANDING_WORD[rep.standing] or "--") .. (rep.value and (" (" .. rep.value .. ")") or "")
+        end)
+
+    listOrEmpty(block.cdHeading, cdData and cdData.cooldowns, block.cdRows, "cdEmptyText",
+        "No tracked cooldowns on record.", function(cd)
+            local def
+            for _, d in ipairs(cooldownDefs()) do
+                if d.key == cd.key then def = d break end
+            end
+            return (def and (def.label or labelFromKey(def.key)) or labelFromKey(cd.key)) .. ": " .. readyWord(cd.ready_at)
+        end)
+
+    y = y + 4
+    block:SetHeight(y)
+    return y
+end
 
 function UI.BuildGuildPanel(body)
     local panel = CreateFrame("Frame", nil, body)
@@ -980,9 +1383,9 @@ function UI.BuildGuildPanel(body)
     local scroll, content = buildScroll(chamber.inner, -80)
     chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
     chamber.expanded = {}
+    chamber.detailBlock = buildGuildDetail(content)
     panel.chamber = chamber
 end
-
 
 local function buildGuildRow(content)
     local ui = CreateFrame("Button", nil, content)
@@ -1121,16 +1524,15 @@ function UI.RefreshGuild()
             if InviteUnit then InviteUnit(r.character) end
         end)
         ui.inviteBtn:SetEnabled(SideQuest.IsOfficer())
+        ui.selected = (chamber.selectedCharacter == r.character)
         ui:SetScript("OnClick", function()
-            for _, other in ipairs(chamber.rows) do
-                other.selected = false
-            end
-            ui.selected = true
+            chamber.selectedCharacter = (chamber.selectedCharacter == r.character) and nil or r.character
+            UI.RefreshGuild()
         end)
         ui:Show()
     end
 
-    local i = 0
+    local y, i, detailShown = 0, 0, false
     for _, g in ipairs(shownGroups) do
         i = i + 1
         local ui = chamber.rows[i]
@@ -1146,8 +1548,17 @@ function UI.RefreshGuild()
             chamber.expanded[expandKey] = not chamber.expanded[expandKey]
             UI.RefreshGuild()
         end)
-        ui:SetPoint("TOPLEFT", 0, -24 * (i - 1))
+        ui:SetPoint("TOPLEFT", 0, -y)
         paintRow(ui, g.main, 20)
+        y = y + 24
+        if chamber.selectedCharacter == g.main.character then
+            detailShown = true
+            chamber.detailBlock:ClearAllPoints()
+            chamber.detailBlock:SetPoint("TOPLEFT", 20, -y)
+            local used = UI.PaintGuildDetail(chamber.detailBlock, g.main.character)
+            chamber.detailBlock:Show()
+            y = y + used
+        end
         if hasAlts and chamber.expanded[expandKey] then
             for _, alt in ipairs(g.alts) do
                 i = i + 1
@@ -1156,17 +1567,33 @@ function UI.RefreshGuild()
                     altUi = buildGuildRow(chamber.content)
                     chamber.rows[i] = altUi
                 end
-                altUi:SetPoint("TOPLEFT", 0, -24 * (i - 1))
+                altUi:SetPoint("TOPLEFT", 0, -y)
                 paintRow(altUi, alt, 46)
+                y = y + 24
+                if chamber.selectedCharacter == alt.character then
+                    detailShown = true
+                    chamber.detailBlock:ClearAllPoints()
+                    chamber.detailBlock:SetPoint("TOPLEFT", 20, -y)
+                    local used = UI.PaintGuildDetail(chamber.detailBlock, alt.character)
+                    chamber.detailBlock:Show()
+                    y = y + used
+                end
             end
         end
     end
-    setScrollContentHeight(chamber.scroll, 24 * i)
+    if not detailShown then
+        chamber.detailBlock:Hide()
+    end
+    setScrollContentHeight(chamber.scroll, y)
 end
 
 --------------------------------------------------------------------------
--- CRAFTERS tab: search recipes/profession, profession summary row,
--- results as recipe -> crafters (online first, skill, whisper)
+-- CRAFTERS tab: three sub-views on native top tabs (the Console's
+-- pattern) -- Search (recipe/profession lookup: the legacy CRAFT_Q
+-- answers plus the directory's instant WhoCrafts), Professions (who has
+-- a profession, best skill first, online first) and Cooldowns (who has a
+-- craft cooldown and when it's ready). The selected sub-tab names the
+-- view, so these chambers carry no ribbon of their own.
 --------------------------------------------------------------------------
 
 function UI.BuildCraftersPanel(body)
@@ -1175,23 +1602,94 @@ function UI.BuildCraftersPanel(body)
     panel:Hide()
     UI.panels.Crafters = panel
 
-    local chamber = createChamber(panel, "SideQuestCraftersChamber")
-    chamber:SetPoint("TOPLEFT", 12, -12)
-    chamber:SetPoint("BOTTOMRIGHT", -12, 12)
-    createRibbon(chamber, "Crafters")
+    local CRAFTERS_TAB_TOP = 30
+    panel.subButtons = {}
+    local prev
+    for _, name in ipairs(CRAFTERS_SUBTABS) do
+        local btn = UI.CreatePanelTab(panel, name, true)
+        if prev then
+            btn:SetPoint("LEFT", prev, "RIGHT", 3, 0)
+        else
+            btn:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 26, -CRAFTERS_TAB_TOP)
+        end
+        prev = btn
+        UI.SetPanelTabSelected(btn, false)
+        btn:SetScript("OnClick", function()
+            UI.ShowCraftersSub(name)
+        end)
+        panel.subButtons[name] = btn
+    end
+    panel.tabTop = CRAFTERS_TAB_TOP
+    panel.subPanels = {}
+
+    UI.BuildCraftersSearch(panel)
+    UI.BuildCraftersProfessions(panel)
+    UI.BuildCraftersCooldowns(panel)
+end
+
+function UI.ShowCraftersSub(name)
+    local panel = UI.panels.Crafters
+    for subName, sub in pairs(panel.subPanels) do
+        if subName == name then
+            sub:Show()
+            UI.PlayCrossfade(sub)
+        else
+            sub:Hide()
+        end
+    end
+    for subName, btn in pairs(panel.subButtons) do
+        UI.SetPanelTabSelected(btn, subName == name)
+    end
+    panel.activeSub = name
+    if name == "Search" then
+        UI.RefreshCraftersSearch()
+    elseif name == "Professions" then
+        UI.RefreshCraftersProfessions()
+    elseif name == "Cooldowns" then
+        UI.RefreshCraftersCooldowns()
+    end
+end
+
+function UI.RefreshCrafters()
+    local panel = UI.panels and UI.panels.Crafters
+    if not panel then
+        return
+    end
+    UI.ShowCraftersSub(panel.activeSub or "Search")
+end
+
+local function makeCraftersSub(panel, key)
+    local sub = CreateFrame("Frame", nil, panel)
+    sub:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -panel.tabTop)
+    sub:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 6)
+    sub:Hide()
+    panel.subPanels[key] = sub
+    return sub
+end
+
+-- Search: recipe/profession text search, answered from both the legacy
+-- CRAFT_Q/CRAFT_A results and the directory's instant WhoCrafts lookup.
+
+function UI.BuildCraftersSearch(panel)
+    local sub = makeCraftersSub(panel, "Search")
+    local chamber = createChamber(sub, "SideQuestCraftersSearchChamber")
+    chamber:SetAllPoints(sub)
 
     local searchBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
     skinEditBox(searchBox, "Search recipes or crafters")
     searchBox:SetSize(260, 20)
-    searchBox:SetPoint("TOPLEFT", 14, -30)
+    searchBox:SetPoint("TOPLEFT", 14, -10)
     searchBox:SetAutoFocus(false)
     local searchBtn = createButton(chamber.inner, "primary", "Search", 80, 20)
     searchBtn:SetPoint("LEFT", searchBox, "RIGHT", 8, 0)
     searchBtn:SetScript("OnClick", function()
         local text = searchBox:GetText()
         if text and text ~= "" then
-            SideQuest.Crafters.Query(text)
-            UI.RefreshCrafters()
+            if SideQuest.Crafters and SideQuest.Crafters.Query then
+                SideQuest.Crafters.Query(text)
+            end
+            chamber.lastQuery = text
+            UI.RefreshCraftersSearch()
         end
     end)
     chamber.searchBox, chamber.searchBtn = searchBox, searchBtn
@@ -1200,17 +1698,17 @@ function UI.BuildCraftersPanel(body)
     summaryText:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", 0, -8)
     chamber.summaryText = summaryText
 
-    local scroll, content = buildScroll(chamber.inner, -76)
+    local scroll, content = buildScroll(chamber.inner, -56)
     chamber.scroll, chamber.content, chamber.groupRows = scroll, content, {}
-    panel.chamber = chamber
+    panel.searchChamber = chamber
 end
 
-function UI.RefreshCrafters()
+function UI.RefreshCraftersSearch()
     local panel = UI.panels and UI.panels.Crafters
-    if not panel then
+    if not panel or not panel.searchChamber then
         return
     end
-    local chamber = panel.chamber
+    local chamber = panel.searchChamber
 
     for _, g in ipairs(chamber.groupRows) do
         g.header:Hide()
@@ -1218,39 +1716,70 @@ function UI.RefreshCrafters()
     end
 
     -- bucket by recipe name (or by profession, when a crafter matched on
-    -- profession rather than a specific recipe); professions also get a
-    -- one-line summary count.
-    local recipeBuckets, recipeOrder = {}, {}
-    local professionCounts, professionOrder = {}, {}
-    local total = 0
-    for character, row in pairs(SideQuest.Crafters.results or {}) do
-        total = total + 1
-        if not professionCounts[row.profession] then
-            professionCounts[row.profession] = 0
-            table.insert(professionOrder, row.profession)
+    -- profession rather than a specific recipe), merging the legacy
+    -- CRAFT_Q answers with the directory's instant WhoCrafts so the same
+    -- character never appears twice under one recipe.
+    local recipeBuckets, recipeOrder, seenInRecipe = {}, {}, {}
+    local professionMembers, professionOrder = {}, {}
+    local seenCharacters, total = {}, 0
+
+    local function countProfession(profession, character)
+        if not profession then
+            return
         end
-        professionCounts[row.profession] = professionCounts[row.profession] + 1
+        if not professionMembers[profession] then
+            professionMembers[profession] = {}
+            table.insert(professionOrder, profession)
+        end
+        professionMembers[profession][character] = true
+    end
+
+    local function addEntry(recipeKey, character, skill, online)
+        local dedupeKey = recipeKey .. "\0" .. character
+        if seenInRecipe[dedupeKey] then
+            return
+        end
+        seenInRecipe[dedupeKey] = true
+        if not recipeBuckets[recipeKey] then
+            recipeBuckets[recipeKey] = {}
+            table.insert(recipeOrder, recipeKey)
+        end
+        table.insert(recipeBuckets[recipeKey], { character = character, skill = skill, online = online and true or false })
+    end
+
+    for character, row in pairs(SideQuest.Crafters.results or {}) do
+        if not seenCharacters[character] then
+            seenCharacters[character] = true
+            total = total + 1
+        end
+        countProfession(row.profession, character)
         if row.recipes and #row.recipes > 0 then
             for _, recipe in ipairs(row.recipes) do
-                if not recipeBuckets[recipe.name] then
-                    recipeBuckets[recipe.name] = {}
-                    table.insert(recipeOrder, recipe.name)
-                end
-                table.insert(recipeBuckets[recipe.name], { character = character, skill = row.skill, online = row.online and true or false })
+                addEntry(recipe.name, character, row.skill, row.online)
             end
         else
-            local key = "Profession: " .. (row.profession or "?")
-            if not recipeBuckets[key] then
-                recipeBuckets[key] = {}
-                table.insert(recipeOrder, key)
+            addEntry("Profession: " .. (row.profession or "?"), character, row.skill, row.online)
+        end
+    end
+
+    local query = chamber.lastQuery
+    if query and query ~= "" and SideQuest.Directory and SideQuest.Directory.WhoCrafts then
+        for _, hit in ipairs(SideQuest.Directory.WhoCrafts(query) or {}) do
+            if not seenCharacters[hit.character] then
+                seenCharacters[hit.character] = true
+                total = total + 1
             end
-            table.insert(recipeBuckets[key], { character = character, skill = row.skill, online = row.online and true or false })
+            countProfession(hit.profession, hit.character)
+            local recipeKey = hit.recipe_name or ("Profession: " .. (hit.profession or "?"))
+            addEntry(recipeKey, hit.character, hit.skill, hit.online)
         end
     end
 
     local summaryParts = {}
     for _, prof in ipairs(professionOrder) do
-        table.insert(summaryParts, prof .. " (" .. professionCounts[prof] .. ")")
+        local count = 0
+        for _ in pairs(professionMembers[prof]) do count = count + 1 end
+        table.insert(summaryParts, prof .. " (" .. count .. ")")
     end
     if #summaryParts > 0 then
         chamber.summaryText:SetTextColor(C.mist2[1], C.mist2[2], C.mist2[3], 1)
@@ -1317,6 +1846,688 @@ function UI.RefreshCrafters()
         end
         y = y + 6
     end
+    setScrollContentHeight(chamber.scroll, y)
+end
+
+
+--- The learned-recipe count for one member's profession (ByProfession
+-- doesn't carry it, so this reads the member's own prof section) and
+-- when that member was last heard from at all (Directory.Get's seen_at).
+local function craftersRecipeCount(character, profession)
+    local Directory = SideQuest.Directory
+    local d = Directory and Directory.Section and Directory.Section(character, "prof")
+    if not d or not d.professions then
+        return nil
+    end
+    for _, p in ipairs(d.professions) do
+        if p.name == profession and p.recipes then
+            return #p.recipes
+        end
+    end
+    return nil
+end
+
+local function craftersLastSeen(character)
+    local Directory = SideQuest.Directory
+    local entry = Directory and Directory.Get and Directory.Get(character)
+    return entry and entry.seen_at
+end
+
+-- Professions: pick a profession, see every member who has it (best skill
+-- first, online first), their recipe count and when each was last seen.
+
+function UI.BuildCraftersProfessions(panel)
+    local sub = makeCraftersSub(panel, "Professions")
+    local chamber = createChamber(sub, "SideQuestCraftersProfessionsChamber")
+    chamber:SetAllPoints(sub)
+
+    local professionBtn = createButton(chamber.inner, "quiet", "Profession: --", 190, 20)
+    professionBtn:SetPoint("TOPLEFT", 14, -10)
+    professionBtn:SetScript("OnClick", function()
+        local names = professionNames()
+        if #names == 0 then
+            return
+        end
+        local idx = 1
+        for i, v in ipairs(names) do
+            if v == chamber.profession then idx = i end
+        end
+        chamber.profession = names[(idx % #names) + 1]
+        UI.RefreshCraftersProfessions()
+    end)
+    chamber.professionBtn = professionBtn
+
+    local header = CreateFrame("Frame", nil, chamber.inner)
+    header:SetPoint("TOPLEFT", 14, -44)
+    header:SetPoint("TOPRIGHT", -28, -44)
+    header:SetHeight(16)
+    local COLS = { name = 0, skill = 250, recipes = 360, lastSeen = 430 }
+    chamber.cols = COLS
+    local function headerLabel(text, x, w, justify)
+        local fs = makeFontString(header, FONT_BODY, 10, C.mist2, justify or "LEFT")
+        fs:SetPoint("TOPLEFT", x, 0)
+        if w then fs:SetWidth(w) end
+        fs:SetText(trackedCaps(text))
+        return fs
+    end
+    headerLabel("Name", COLS.name)
+    headerLabel("Skill / Max", COLS.skill, 90, "RIGHT")
+    headerLabel("Recipes", COLS.recipes, 60, "RIGHT")
+    headerLabel("Last seen", COLS.lastSeen)
+    local headerLine = hairline(chamber.inner)
+    headerLine:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -3)
+    headerLine:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -3)
+
+    local scroll, content = buildScroll(chamber.inner, -66)
+    chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
+    panel.professionsChamber = chamber
+end
+
+function UI.RefreshCraftersProfessions()
+    local panel = UI.panels and UI.panels.Crafters
+    if not panel or not panel.professionsChamber then
+        return
+    end
+    local chamber = panel.professionsChamber
+    local names = professionNames()
+    chamber.profession = chamber.profession or names[1]
+    chamber.professionBtn:SetText("Profession: " .. (chamber.profession or "--"))
+
+    for _, r in ipairs(chamber.rows) do r:Hide() end
+
+    if not (SideQuest.Directory and SideQuest.Directory.ByProfession) then
+        if not chamber.emptyText then
+            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.emptyText:SetPoint("TOPLEFT")
+        end
+        setStateText(chamber.emptyText, "The directory hasn't synced professions yet.", true)
+        return
+    elseif chamber.emptyText then
+        chamber.emptyText:SetText("")
+    end
+
+    local members = SideQuest.Directory.ByProfession(chamber.profession) or {}
+    table.sort(members, function(a, b)
+        local aOnline, bOnline = a.online and true or false, b.online and true or false
+        if aOnline ~= bOnline then return aOnline end
+        return (a.skill or 0) > (b.skill or 0)
+    end)
+
+    if #members == 0 then
+        if not chamber.noResultText then
+            chamber.noResultText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.noResultText:SetPoint("TOPLEFT")
+        end
+        setStateText(chamber.noResultText, "No one in the directory has " .. tostring(chamber.profession) .. " yet.", false)
+        return
+    elseif chamber.noResultText then
+        chamber.noResultText:SetText("")
+    end
+
+    local COLS = chamber.cols
+    for i, m in ipairs(members) do
+        local row = chamber.rows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, chamber.content)
+            row:SetSize(560, 22)
+            row.nameRow = createNameRow(row, 12)
+            row.nameRow:SetPoint("LEFT", 0, 0)
+            row.skillText = makeFontString(row, FONT_BODY, 12, C.ink, "RIGHT")
+            row.skillText:SetWidth(90)
+            row.recipesText = makeFontString(row, FONT_BODY, 12, C.mist, "RIGHT")
+            row.recipesText:SetWidth(60)
+            row.lastSeenText = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
+            row.lastSeenText:SetWidth(60)
+            row.whisperBtn = createButton(row, "quiet", "Whisper", 66, 18)
+            row.whisperBtn:SetPoint("RIGHT", 0, 0)
+            chamber.rows[i] = row
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -22 * (i - 1))
+        setNameRow(row.nameRow, m.character, nil)
+        row.skillText:ClearAllPoints()
+        row.skillText:SetPoint("LEFT", COLS.skill, 0)
+        row.skillText:SetText((m.skill or 0) .. " / " .. (m.max_skill or "--"))
+        row.recipesText:ClearAllPoints()
+        row.recipesText:SetPoint("LEFT", COLS.recipes, 0)
+        local recipeCount = craftersRecipeCount(m.character, chamber.profession)
+        row.recipesText:SetText(recipeCount and tostring(recipeCount) or "--")
+        row.lastSeenText:ClearAllPoints()
+        row.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)
+        row.lastSeenText:SetText(m.online and "Online" or ago(craftersLastSeen(m.character)))
+        row.whisperBtn:SetScript("OnClick", function()
+            if ChatFrame_SendTell then ChatFrame_SendTell(m.character) end
+        end)
+        row:Show()
+    end
+    setScrollContentHeight(chamber.scroll, 22 * #members)
+end
+
+-- Cooldowns: every tracked craft cooldown, who has it and when it's ready
+-- (ready-first, soonest-ready-next).
+
+function UI.BuildCraftersCooldowns(panel)
+    local sub = makeCraftersSub(panel, "Cooldowns")
+    local chamber = createChamber(sub, "SideQuestCraftersCooldownsChamber")
+    chamber:SetAllPoints(sub)
+
+    local scroll, content = buildScroll(chamber.inner, -10)
+    chamber.scroll, chamber.content, chamber.groupRows = scroll, content, {}
+    panel.cooldownsChamber = chamber
+end
+
+function UI.RefreshCraftersCooldowns()
+    local panel = UI.panels and UI.panels.Crafters
+    if not panel or not panel.cooldownsChamber then
+        return
+    end
+    local chamber = panel.cooldownsChamber
+    for _, g in ipairs(chamber.groupRows) do
+        g.header:Hide()
+        for _, r in ipairs(g.rows) do r:Hide() end
+    end
+
+    if not (SideQuest.Directory and SideQuest.Directory.Cooldowns) then
+        if not chamber.emptyText then
+            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.emptyText:SetPoint("TOPLEFT")
+        end
+        setStateText(chamber.emptyText, "The directory hasn't synced cooldowns yet.", true)
+        return
+    elseif chamber.emptyText then
+        chamber.emptyText:SetText("")
+    end
+
+    local y, gi, any = 0, 0, false
+    for _, def in ipairs(cooldownDefs()) do
+        local holders = SideQuest.Directory.Cooldowns(def.key) or {}
+        if #holders > 0 then
+            any = true
+            gi = gi + 1
+            local g = chamber.groupRows[gi]
+            if not g then
+                g = { header = createSubHeading(chamber.content, ""), rows = {} }
+                g.header:SetWidth(540)
+                chamber.groupRows[gi] = g
+            end
+            g.header:ClearAllPoints()
+            g.header:SetPoint("TOPLEFT", 0, -y)
+            g.header.label:SetText(trackedCaps((def.label or labelFromKey(def.key)) .. (def.profession and (" (" .. def.profession .. ")") or "")))
+            g.header:Show()
+            y = y + 18
+
+            table.sort(holders, function(a, b)
+                local aReady, bReady = (a.ready_at or 0) <= now(), (b.ready_at or 0) <= now()
+                if aReady ~= bReady then return aReady end
+                return (a.ready_at or 0) < (b.ready_at or 0)
+            end)
+            for ri, h in ipairs(holders) do
+                local row = g.rows[ri]
+                if not row then
+                    row = CreateFrame("Frame", nil, chamber.content)
+                    row:SetSize(540, 20)
+                    row.nameRow = createNameRow(row, 12)
+                    row.nameRow:SetPoint("LEFT", 4, 0)
+                    row.readyText = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
+                    row.whisperBtn = createButton(row, "quiet", "Whisper", 66, 18)
+                    row.whisperBtn:SetPoint("RIGHT", 0, 0)
+                    g.rows[ri] = row
+                end
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 0, -y)
+                setNameRow(row.nameRow, h.character, h.class)
+                row.readyText:ClearAllPoints()
+                row.readyText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
+                row.readyText:SetText(readyWord(h.ready_at))
+                row.whisperBtn:SetScript("OnClick", function()
+                    if ChatFrame_SendTell then ChatFrame_SendTell(h.character) end
+                end)
+                row:Show()
+                y = y + 20
+            end
+            y = y + 6
+        end
+    end
+    if not any then
+        if not chamber.emptyText2 then
+            chamber.emptyText2 = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.emptyText2:SetPoint("TOPLEFT")
+        end
+        setStateText(chamber.emptyText2, "No one in the directory has a tracked cooldown yet.", false)
+    elseif chamber.emptyText2 then
+        chamber.emptyText2:SetText("")
+    end
+    setScrollContentHeight(chamber.scroll, y)
+end
+
+--------------------------------------------------------------------------
+-- MARKET tab: Browse (who sells/buys an item and for how much, standing
+-- requests, a "who has it" stock lookup) and Mine (the player's own sell,
+-- buy and request editor with price-suggestion hints).
+--------------------------------------------------------------------------
+
+function UI.BuildMarketPanel(body)
+    local panel = CreateFrame("Frame", nil, body)
+    panel:SetAllPoints(body)
+    panel:Hide()
+    UI.panels.Market = panel
+
+    local MARKET_TAB_TOP = 30
+    panel.subButtons = {}
+    local prev
+    for _, name in ipairs(MARKET_SUBTABS) do
+        local btn = UI.CreatePanelTab(panel, name, true)
+        if prev then
+            btn:SetPoint("LEFT", prev, "RIGHT", 3, 0)
+        else
+            btn:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 26, -MARKET_TAB_TOP)
+        end
+        prev = btn
+        UI.SetPanelTabSelected(btn, false)
+        btn:SetScript("OnClick", function()
+            UI.ShowMarketSub(name)
+        end)
+        panel.subButtons[name] = btn
+    end
+    panel.tabTop = MARKET_TAB_TOP
+    panel.subPanels = {}
+
+    UI.BuildMarketBrowse(panel)
+    UI.BuildMarketMine(panel)
+end
+
+function UI.ShowMarketSub(name)
+    local panel = UI.panels.Market
+    for subName, sub in pairs(panel.subPanels) do
+        if subName == name then
+            sub:Show()
+            UI.PlayCrossfade(sub)
+        else
+            sub:Hide()
+        end
+    end
+    for subName, btn in pairs(panel.subButtons) do
+        UI.SetPanelTabSelected(btn, subName == name)
+    end
+    panel.activeSub = name
+    if name == "Browse" then
+        UI.RefreshMarketBrowse()
+    elseif name == "Mine" then
+        UI.RefreshMarketMine()
+    end
+end
+
+function UI.RefreshMarket()
+    local panel = UI.panels and UI.panels.Market
+    if not panel then
+        return
+    end
+    UI.ShowMarketSub(panel.activeSub or "Browse")
+end
+
+local function makeMarketSub(panel, key)
+    local sub = CreateFrame("Frame", nil, panel)
+    sub:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -panel.tabTop)
+    sub:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 6)
+    sub:Hide()
+    panel.subPanels[key] = sub
+    return sub
+end
+
+-- Browse: an item lookup (sellers and their price, standing buy offers,
+-- who has it in bags/bank), plus the guild's full standing-requests feed.
+
+function UI.BuildMarketBrowse(panel)
+    local sub = makeMarketSub(panel, "Browse")
+    local chamber = createChamber(sub, "SideQuestMarketBrowseChamber")
+    chamber:SetAllPoints(sub)
+
+    local lookupBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
+    skinEditBox(lookupBox, "Item name, link or ID")
+    lookupBox:SetSize(180, 20)
+    lookupBox:SetPoint("TOPLEFT", 14, -10)
+    lookupBox:SetAutoFocus(false)
+    acceptItemLinks(lookupBox)
+    local lookupBtn = createButton(chamber.inner, "primary", "Who has it", 110, 20)
+    lookupBtn:SetPoint("LEFT", lookupBox, "RIGHT", 8, 0)
+    lookupBtn:SetScript("OnClick", function()
+        local itemId = parseItemInput(lookupBox)
+        if itemId then
+            chamber.lookupItemId = itemId
+            UI.RefreshMarketBrowse()
+        end
+    end)
+    chamber.lookupBox, chamber.lookupBtn = lookupBox, lookupBtn
+
+    local resultHeading = createSubHeading(chamber.inner, "Item")
+    resultHeading:SetPoint("TOPLEFT", lookupBox, "BOTTOMLEFT", 0, -10)
+    resultHeading:SetWidth(540)
+    chamber.resultHeading = resultHeading
+
+    local scroll, content = buildScroll(chamber.inner, -72)
+    chamber.scroll, chamber.content = scroll, content
+    chamber.sellRows, chamber.buyRows, chamber.holdRows, chamber.requestRows = {}, {}, {}, {}
+    chamber.sectionHeads = {}
+    panel.browseChamber = chamber
+end
+
+--- One compact "name -- detail" row shared by sellers/buyers/holders/
+-- requests, since none of those lists need more than a whisper button.
+local function marketRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetSize(540, 20)
+    row.nameRow = createNameRow(row, 12)
+    row.nameRow:SetPoint("LEFT", 4, 0)
+    row.detailText = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
+    row.whisperBtn = createButton(row, "quiet", "Whisper", 66, 18)
+    row.whisperBtn:SetPoint("RIGHT", 0, 0)
+    return row
+end
+
+local function paintMarketRow(row, character, detail, class)
+    row:Show()
+    setNameRow(row.nameRow, character, class)
+    row.detailText:ClearAllPoints()
+    row.detailText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
+    row.detailText:SetText(detail)
+    row.whisperBtn:SetScript("OnClick", function()
+        if ChatFrame_SendTell then ChatFrame_SendTell(character) end
+    end)
+end
+
+function UI.RefreshMarketBrowse()
+    local panel = UI.panels and UI.panels.Market
+    if not panel or not panel.browseChamber then
+        return
+    end
+    local chamber = panel.browseChamber
+    for _, rows in ipairs({ chamber.sellRows, chamber.buyRows, chamber.holdRows, chamber.requestRows }) do
+        for _, row in ipairs(rows) do row:Hide() end
+    end
+    for _, head in pairs(chamber.sectionHeads) do head:Hide() end
+
+    local Directory = SideQuest.Directory
+    local y = 0
+
+    local function section(key, title, list, rowSet, detailFn)
+        if not list or #list == 0 then
+            return
+        end
+        local head = chamber.sectionHeads[key]
+        if not head then
+            head = createSubHeading(chamber.content, "")
+            head:SetWidth(540)
+            chamber.sectionHeads[key] = head
+        end
+        head:ClearAllPoints()
+        head:SetPoint("TOPLEFT", 0, -y)
+        head.label:SetText(trackedCaps(title))
+        head:Show()
+        y = y + 18
+        for i, entry in ipairs(list) do
+            local row = rowSet[i]
+            if not row then
+                row = marketRow(chamber.content)
+                rowSet[i] = row
+            end
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -y)
+            paintMarketRow(row, entry.character, detailFn(entry), entry.class)
+            y = y + 20
+        end
+        y = y + 6
+    end
+
+    if chamber.lookupItemId and Directory then
+        local itemId = chamber.lookupItemId
+        chamber.resultHeading.label:SetText(trackedCaps(SideQuest.ItemName(itemId)))
+
+        local sellers = Directory.WhoSells and Directory.WhoSells(itemId) or nil
+        section("sell", "Sellers", sellers, chamber.sellRows, function(e)
+            return money(e.price) .. (e.qty and (" (" .. e.qty .. ")") or "")
+        end)
+
+        local buyers = Directory.WhoBuys and Directory.WhoBuys(itemId) or nil
+        section("buy", "Standing buy offers", buyers, chamber.buyRows, function(e)
+            return money(e.price)
+        end)
+
+        local holders = Directory.WhoHas and Directory.WhoHas(itemId) or nil
+        section("hold", "Who has it", holders, chamber.holdRows, function(e)
+            local parts = {}
+            if e.bags and e.bags > 0 then table.insert(parts, e.bags .. " in bags") end
+            if e.bank and e.bank > 0 then table.insert(parts, e.bank .. " in bank") end
+            return #parts > 0 and table.concat(parts, ", ") or "none counted"
+        end)
+
+        if not sellers and not buyers and not holders then
+            if not chamber.noDirectoryText then
+                chamber.noDirectoryText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+                chamber.noDirectoryText:SetPoint("TOPLEFT", 0, -y)
+            end
+            setStateText(chamber.noDirectoryText, "The directory hasn't synced the market yet.", true)
+            chamber.noDirectoryText:Show()
+            y = y + 20
+        elseif chamber.noDirectoryText then
+            chamber.noDirectoryText:Hide()
+        end
+    else
+        chamber.resultHeading.label:SetText(trackedCaps("Item"))
+        if chamber.noDirectoryText then chamber.noDirectoryText:Hide() end
+    end
+
+    local requests = Directory and Directory.Requests and Directory.Requests() or nil
+    section("requests", "Requests", requests, chamber.requestRows, function(e)
+        local bits = { (e.qty or 1) .. "x " .. SideQuest.ItemName(e.item_id) }
+        if e.price then table.insert(bits, "up to " .. money(e.price)) end
+        if e.note and e.note ~= "" then table.insert(bits, truncateNote(e.note, 40)) end
+        return table.concat(bits, " -- ")
+    end)
+    if not requests then
+        if not chamber.noRequestsText then
+            chamber.noRequestsText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.noRequestsText:SetPoint("TOPLEFT", 0, -y)
+        end
+        setStateText(chamber.noRequestsText, "The directory hasn't synced requests yet.", true)
+        chamber.noRequestsText:Show()
+        y = y + 20
+    elseif chamber.noRequestsText then
+        chamber.noRequestsText:Hide()
+    end
+
+    setScrollContentHeight(chamber.scroll, y)
+end
+
+-- Mine: the player's own sell, buy and request editor, each with a
+-- Market.SuggestPrice hint next to the price field when available.
+
+local function buildMarketEditorRow(parent, placeholderItem, extraFields, buttonText)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetSize(540, 24)
+    local itemBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+    skinEditBox(itemBox, placeholderItem)
+    itemBox:SetSize(140, 20)
+    itemBox:SetPoint("LEFT", 0, 0)
+    itemBox:SetAutoFocus(false)
+    acceptItemLinks(itemBox)
+    row.itemBox = itemBox
+
+    local anchor = itemBox
+    row.fields = {}
+    for _, field in ipairs(extraFields) do
+        local box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+        skinEditBox(box, field.placeholder)
+        box:SetSize(field.width, 20)
+        box:SetPoint("LEFT", anchor, "RIGHT", 8, 0)
+        box:SetAutoFocus(false)
+        if field.numeric then box:SetNumeric(true) end
+        row.fields[field.key] = box
+        anchor = box
+    end
+
+    local hintText = makeFontString(row, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+    hintText:SetPoint("LEFT", anchor, "RIGHT", 8, 0)
+    row.hintText = hintText
+
+    local addBtn = createButton(row, "primary", buttonText, 80, 20)
+    addBtn:SetPoint("RIGHT", 0, 0)
+    row.addBtn = addBtn
+    return row
+end
+
+function UI.BuildMarketMine(panel)
+    local sub = makeMarketSub(panel, "Mine")
+    local chamber = createChamber(sub, "SideQuestMarketMineChamber")
+    chamber:SetAllPoints(sub)
+
+    local scroll, content = buildScroll(chamber.inner, -10)
+    chamber.scroll, chamber.content = scroll, content
+
+    -- Headings and editors are built once and repositioned every refresh
+    -- (their y depends on how many rows the section above has); the list
+    -- rows below each editor are pooled the same way every other dynamic
+    -- list in this file is.
+    local sellHeading = createSubHeading(content, "Sell")
+    sellHeading:SetWidth(540)
+    local sellEditor = buildMarketEditorRow(content, "Item name, link or ID", {
+        { key = "price", placeholder = "Price (e.g. 1g20s)", width = 100, numeric = false },
+        { key = "qty", placeholder = "Qty", width = 50, numeric = true },
+    }, "Sell")
+    sellEditor.addBtn:SetScript("OnClick", function()
+        local itemId = parseItemInput(sellEditor.itemBox)
+        local price = parsePrice(sellEditor.fields.price:GetText())
+        local qty = tonumber(sellEditor.fields.qty:GetText()) or 1
+        if itemId and SideQuest.Market and SideQuest.Market.SetSell then
+            SideQuest.Market.SetSell(itemId, price, qty, false)
+            UI.RefreshMarketMine()
+        end
+    end)
+    sellEditor.itemBox:HookScript("OnTextChanged", function()
+        local itemId = parseItemInput(sellEditor.itemBox)
+        local suggestion = itemId and SideQuest.Market and SideQuest.Market.SuggestPrice and SideQuest.Market.SuggestPrice(itemId)
+        sellEditor.hintText:SetText(suggestion and ("Suggested " .. money(suggestion)) or "")
+    end)
+
+    local buyHeading = createSubHeading(content, "Buy")
+    buyHeading:SetWidth(540)
+    local buyEditor = buildMarketEditorRow(content, "Item name, link or ID", {
+        { key = "price", placeholder = "Price (e.g. 1g20s)", width = 100, numeric = false },
+    }, "Buy")
+    buyEditor.addBtn:SetScript("OnClick", function()
+        local itemId = parseItemInput(buyEditor.itemBox)
+        local price = parsePrice(buyEditor.fields.price:GetText())
+        if itemId and price and SideQuest.Market and SideQuest.Market.SetBuy then
+            SideQuest.Market.SetBuy(itemId, price)
+            UI.RefreshMarketMine()
+        end
+    end)
+    buyEditor.itemBox:HookScript("OnTextChanged", function()
+        local itemId = parseItemInput(buyEditor.itemBox)
+        local suggestion = itemId and SideQuest.Market and SideQuest.Market.SuggestPrice and SideQuest.Market.SuggestPrice(itemId)
+        buyEditor.hintText:SetText(suggestion and ("Suggested " .. money(suggestion)) or "")
+    end)
+
+    local requestHeading = createSubHeading(content, "Requests")
+    requestHeading:SetWidth(540)
+    local requestEditor = buildMarketEditorRow(content, "Item name, link or ID", {
+        { key = "qty", placeholder = "Qty", width = 40, numeric = true },
+        { key = "price", placeholder = "Up to (e.g. 1g20s)", width = 100, numeric = false },
+        { key = "note", placeholder = "Note (optional)", width = 140, numeric = false },
+    }, "Request")
+    requestEditor.addBtn:SetScript("OnClick", function()
+        local itemId = parseItemInput(requestEditor.itemBox)
+        local qty = tonumber(requestEditor.fields.qty:GetText()) or 1
+        local price = parsePrice(requestEditor.fields.price:GetText())
+        local note = requestEditor.fields.note:GetText()
+        if itemId and SideQuest.Market and SideQuest.Market.AddRequest then
+            SideQuest.Market.AddRequest(itemId, qty, price, note)
+            UI.RefreshMarketMine()
+        end
+    end)
+
+    chamber.sellHeading, chamber.sellEditor = sellHeading, sellEditor
+    chamber.buyHeading, chamber.buyEditor = buyHeading, buyEditor
+    chamber.requestHeading, chamber.requestEditor = requestHeading, requestEditor
+    chamber.sellListRows, chamber.buyListRows, chamber.requestListRows = {}, {}, {}
+    panel.mineChamber = chamber
+end
+
+--- One "item -- price/qty" editor-list row with a Remove button.
+local function buildMineListRow(parent, removeFn)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetSize(500, 18)
+    row.text = makeFontString(row, FONT_BODY, 12, C.ink, "LEFT")
+    row.text:SetPoint("LEFT", 0, 0)
+    row.removeBtn = createButton(row, "quiet", "Remove", 66, 16)
+    row.removeBtn:SetPoint("RIGHT", 0, 0)
+    row.removeBtn:SetScript("OnClick", function() removeFn(row.key) end)
+    return row
+end
+
+function UI.RefreshMarketMine()
+    local panel = UI.panels and UI.panels.Market
+    if not panel or not panel.mineChamber then
+        return
+    end
+    local chamber = panel.mineChamber
+    local mine = SideQuest.Directory and SideQuest.Directory.Get and SideQuest.Directory.Get(SideQuest.NormalizeUnit("player"))
+    local marketData = mine and mine.market and mine.market.d or {}
+
+    local y = 0
+    local function section(heading, editor, list, rows, formatFn, removeFn)
+        heading:ClearAllPoints()
+        heading:SetPoint("TOPLEFT", 0, -y)
+        y = y + 18
+        editor:ClearAllPoints()
+        editor:SetPoint("TOPLEFT", 0, -y)
+        y = y + 24 + 6
+        for _, r in ipairs(rows) do r:Hide() end
+        for i, entry in ipairs(list or {}) do
+            local row = rows[i]
+            if not row then
+                row = buildMineListRow(chamber.content, removeFn)
+                rows[i] = row
+            end
+            row.key = entry.item_id or entry.id
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 20, -y)
+            row.text:SetText(formatFn(entry))
+            row:Show()
+            y = y + 18
+        end
+        y = y + 14
+    end
+
+    section(chamber.sellHeading, chamber.sellEditor, marketData.sell, chamber.sellListRows, function(e)
+        local name = SideQuest.ItemName(e.item_id)
+        return name .. " -- " .. money(e.price) .. " x" .. (e.qty or 1)
+    end, function(itemId)
+        if SideQuest.Market and SideQuest.Market.RemoveSell then
+            SideQuest.Market.RemoveSell(itemId)
+            UI.RefreshMarketMine()
+        end
+    end)
+
+    section(chamber.buyHeading, chamber.buyEditor, marketData.buy, chamber.buyListRows, function(e)
+        local name = SideQuest.ItemName(e.item_id)
+        return name .. " -- " .. money(e.price)
+    end, function(itemId)
+        if SideQuest.Market and SideQuest.Market.RemoveBuy then
+            SideQuest.Market.RemoveBuy(itemId)
+            UI.RefreshMarketMine()
+        end
+    end)
+
+    section(chamber.requestHeading, chamber.requestEditor, marketData.requests, chamber.requestListRows, function(e)
+        local name = SideQuest.ItemName(e.item_id)
+        return (e.qty or 1) .. "x " .. name .. (e.price and (" up to " .. money(e.price)) or "") .. (e.note and e.note ~= "" and (" -- " .. truncateNote(e.note, 50)) or "")
+    end, function(id)
+        if SideQuest.Market and SideQuest.Market.RemoveRequest then
+            SideQuest.Market.RemoveRequest(id)
+            UI.RefreshMarketMine()
+        end
+    end)
+
     setScrollContentHeight(chamber.scroll, y)
 end
 
@@ -2702,5 +3913,34 @@ SideQuest.On("SQ_RECRUIT_SAVED", function()
 end)
 
 SideQuest.On("SQ_PREP_ANSWER", function() end) -- surfaced via the Raid Night step buttons' tooltips in-game
+
+-- The directory updates constantly (every received DIR_R/DIR_L section);
+-- debounce to at most one refresh every 2 s, and only for whichever
+-- directory-backed tab is actually open.
+local directoryRefreshPending = false
+SideQuest.On("SQ_DIRECTORY_UPDATED", function()
+    if directoryRefreshPending then
+        return
+    end
+    directoryRefreshPending = true
+    local function run()
+        directoryRefreshPending = false
+        if not UI.main or not UI.main:IsShown() then
+            return
+        end
+        if UI.activeTab == "Crafters" then
+            UI.RefreshCrafters()
+        elseif UI.activeTab == "Market" then
+            UI.RefreshMarket()
+        elseif UI.activeTab == "Guild" then
+            UI.RefreshGuild()
+        end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(2, run)
+    else
+        run()
+    end
+end)
 
 return UI

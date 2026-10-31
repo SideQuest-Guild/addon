@@ -14,12 +14,17 @@ Core.lua
 Rules.lua
 Codec.lua
 Comm.lua
+Data.lua
+Directory.lua
 Recorder.lua
 Loot.lua
 Standings.lua
 Events.lua
 Roster.lua
 Professions.lua
+Character.lua
+Market.lua
+Stock.lua
 News.lua
 Signups.lua
 Sheet.lua
@@ -31,4 +36,5 @@ Prep.lua
 Sync.lua
 UI\Skin.lua
 UI\Main.lua
+UI\Tooltip.lua
 UI\BidPopup.lua
