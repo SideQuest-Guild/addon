@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.1 (2026-11-05)
+
+### Fixed
+
+- Dates show again and the Sync window opens: the addon no longer errors on login, roster updates or export, and a staged import is applied once instead of on every login
+
 ## v0.5.0 (2026-11-05)
 
 ### New
