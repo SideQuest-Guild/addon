@@ -1048,7 +1048,7 @@ the game's default Friz Quadrata is proprietary and is not reproduced here.</div
         esc(name), width, height, tostring(scale))
 
     local path = OUT_DIR:gsub("out/$", "") .. "html/" .. name .. ".html"
-    os.execute("mkdir -p " .. (OUT_DIR:gsub("out/$", "") .. "html"))
+    WowStub.os.execute("mkdir -p " .. (OUT_DIR:gsub("out/$", "") .. "html"))
     local fh = io.open(path, "w")
     fh:write(html)
     fh:close()
@@ -1196,5 +1196,5 @@ if #unknownAtlasList > 0 then
     for _, n in ipairs(unknownAtlasList) do
         io.stderr:write("  - " .. n .. "\n")
     end
-    os.exit(1)
+    WowStub.os.exit(1)
 end

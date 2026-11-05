@@ -310,12 +310,12 @@ end
 -- reuses the sub-heading treatment so there is no second heading style.
 local function dayLabel(ts)
     local d = now() - (ts or now())
-    if d < 20 * 3600 and os.date("%j", ts) == os.date("%j", now()) then
+    if d < 20 * 3600 and date("%j", ts) == date("%j", now()) then
         return "Today"
-    elseif os.date("%j", ts) == os.date("%j", now() - 86400) then
+    elseif date("%j", ts) == date("%j", now() - 86400) then
         return "Yesterday"
     end
-    return os.date("%A, %b %d", ts)
+    return date("%A, %b %d", ts)
 end
 
 --- Empty/error copy in the product's voice (PRODUCT.md principle 3: every
@@ -1103,7 +1103,7 @@ function UI.RefreshYou()
         for i = 1, 4 do
             local weekStart = now() - (4 - i + 1) * 7 * 24 * 60 * 60
             local row = you.historyTable.rows[i]
-            row.week:SetText(os.date("%b %d", weekStart))
+            row.week:SetText(date("%b %d", weekStart))
             row.ep:SetText(string.format("%.0f", epTotals[i]))
             row.gp:SetText(string.format("%.0f", gpTotals[i]))
         end
@@ -1124,7 +1124,7 @@ function UI.RefreshYou()
         you.nextEventTitle:SetText(nextEvt.title or "Event")
         local secs = (nextEvt.starts_at or 0) - now()
         you.nextEventMeta:SetText((secs > 0 and ("in " .. math.floor(secs / 3600) .. "h  --  ") or "in progress  --  ")
-            .. os.date("%a %H:%M", nextEvt.starts_at or now()))
+            .. date("%a %H:%M", nextEvt.starts_at or now()))
         local state, status = SideQuest.Signups.MyState(nextEvt.id)
         local statusToAnswer = { signed = "going", tentative = "maybe", absent = "cant" }
         local currentAnswer = statusToAnswer[status]
@@ -1239,7 +1239,7 @@ function UI.RefreshYou()
         row:SetPoint("TOPLEFT", 0, -32 * (i - 1))
         setNewsIcon(row, item)
         row.title:SetText(item.text or NEWS_KIND_WORD[item.kind] or item.kind)
-        row.meta:SetText((item.character and (displayName(item.character) .. "  ") or "") .. os.date("%m/%d %H:%M", item.at or now()))
+        row.meta:SetText((item.character and (displayName(item.character) .. "  ") or "") .. date("%m/%d %H:%M", item.at or now()))
         row:Show()
     end
     setScrollContentHeight(guildNow.newsScroll, 32 * shown)
@@ -2717,7 +2717,7 @@ function UI.RefreshRaids()
         local isOpen = (evt.starts_at or 0) > now()
         row.mark:SetAtlas(isOpen and "QuestNormal" or "QuestTurnin")
         row.title:SetText(evt.title or "Event")
-        row.meta:SetText((EVENT_KIND_LABELS[evt.kind] or "Event") .. "  --  " .. os.date("%A %b %d, %H:%M", evt.starts_at or now()))
+        row.meta:SetText((EVENT_KIND_LABELS[evt.kind] or "Event") .. "  --  " .. date("%A %b %d, %H:%M", evt.starts_at or now()))
 
         local roleCounts = { tank = 0, healer = 0, dps = 0 }
         for _, s in ipairs(evt.signups or {}) do
@@ -3014,7 +3014,7 @@ function UI.RefreshNews()
         row:SetPoint("TOPLEFT", 0, -y)
         setNewsIcon(row, item)
         row.title:SetText(item.text or NEWS_KIND_WORD[item.kind] or item.kind)
-        row.meta:SetText((item.character and (displayName(item.character) .. "  ") or "") .. os.date("%H:%M", item.at or now()))
+        row.meta:SetText((item.character and (displayName(item.character) .. "  ") or "") .. date("%H:%M", item.at or now()))
         row:Show()
         y = y + 32
     end
@@ -3281,7 +3281,7 @@ function UI.RefreshConsoleRaidNight()
     for i, step in ipairs(chamber.steps) do
         local row = chamber.stepRows[i]
         if step.doneAt then
-            row.timeText:SetText(os.date("%H:%M", step.doneAt))
+            row.timeText:SetText(date("%H:%M", step.doneAt))
             row.label:SetTextColor(C.mist2[1], C.mist2[2], C.mist2[3], 1)
             row.numPlate:SetVertexColor(C.stone[1], C.stone[2], C.stone[3], 1)
             row.num:Hide() -- the seal stands in for the number once a step is done
@@ -3619,8 +3619,8 @@ function UI.RefreshConsoleRoster()
         end
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
-        row.text:SetText(m.name .. " -- last seen " .. os.date("%Y-%m-%d", m.last_seen_at or 0)
-            .. (m.last_raid_at and (", last raid " .. os.date("%Y-%m-%d", m.last_raid_at)) or ", never raided"))
+        row.text:SetText(m.name .. " -- last seen " .. date("%Y-%m-%d", m.last_seen_at or 0)
+            .. (m.last_raid_at and (", last raid " .. date("%Y-%m-%d", m.last_raid_at)) or ", never raided"))
         row.rankBtn:SetScript("OnClick", function()
             SideQuest.Recruits.AddNote(m.name, "Rank suggestion: demote for inactivity")
         end)
@@ -3854,7 +3854,7 @@ function UI.RefreshConsoleAnnounce()
         end
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -18 * (i - 1))
-        row:SetText("\"" .. item.text .. "\"  --  " .. os.date("%m/%d %H:%M", item.at or now())
+        row:SetText("\"" .. item.text .. "\"  --  " .. date("%m/%d %H:%M", item.at or now())
             .. (item.discord and "  (Discord queued)" or ""))
         row:Show()
     end
@@ -3933,7 +3933,7 @@ function UI.RefreshConsoleSync()
     local chamber = panel.syncChamber
     local at = SideQuestDB.guild and SideQuestDB.guild.generated_at or 0
     if at > 0 then
-        chamber.lastSyncText:SetText("Last sync: " .. os.date("%Y-%m-%d %H:%M", at))
+        chamber.lastSyncText:SetText("Last sync: " .. date("%Y-%m-%d %H:%M", at))
     else
         setStateText(chamber.lastSyncText, "Never synced yet.", true)
     end

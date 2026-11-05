@@ -6,6 +6,15 @@ SideQuest = SideQuest or {}
 SideQuest.Sync = {}
 local Sync = SideQuest.Sync
 
+-- WoW has no `os` library; `date` is the client's global copy of os.date.
+local function formatStagedTime(ts)
+    ts = tonumber(ts)
+    if not ts then
+        return "at an unknown time"
+    end
+    return date("%Y-%m-%d %H:%M", ts)
+end
+
 function Sync.BuildExport()
     local recorder = SideQuest.NormalizeUnit("player") or "Unknown-Unknown"
     local guildName = GetGuildInfo and select(1, GetGuildInfo("player")) or ""
@@ -36,7 +45,7 @@ function Sync.ApplyImport(payload)
         return false
     end
     SideQuest.Standings.LoadFromImport(payload)
-    SideQuest.Print("Imported standings generated at " .. tostring(payload.generated_at))
+    SideQuest.Print("Imported standings generated " .. formatStagedTime(payload.generated_at) .. ".")
 
     local publicPart = nil
     if payload.v == 2 then
@@ -151,14 +160,6 @@ function Sync.ResetInboxState()
     inboxAttempts = 0
 end
 
-local function formatStagedTime(ts)
-    ts = tonumber(ts)
-    if not ts then
-        return "at an unknown time"
-    end
-    return os.date("%Y-%m-%d %H:%M", ts)
-end
-
 local function applyInbox(inbox)
     SideQuest.WhenOutOfCombat(function()
         if Sync.ImportString(inbox.payload) then
@@ -185,6 +186,9 @@ function Sync.ProcessInbox()
     end
 
     if SideQuest.IsOfficer() then
+        -- Clear the inbox before applying it: if anything in the import fails, it must not be re-applied on every
+        -- later login and roster update.
+        SideQuestDB.inbox = nil
         local stagedAt = tonumber(inbox.generated_at) or 0
         local haveAt = (SideQuestDB.standings and SideQuestDB.standings.generated_at) or 0
         if stagedAt < haveAt then
@@ -193,7 +197,6 @@ function Sync.ProcessInbox()
         else
             applyInbox(inbox)
         end
-        SideQuestDB.inbox = nil
         return
     end
 

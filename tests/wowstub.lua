@@ -3,6 +3,14 @@
 -- LuaJIT (5.1 semantics) outside the game. Exposes a `WowStub` control
 -- table tests use to drive roster/instance/comm state and fire events.
 
+-- The WoW client has no `os` (or `io`) library: it exposes `date` and `time` as globals instead. Drop `os` here
+-- so addon code that reaches for it fails under test exactly as it fails in game. Test harness code that really
+-- needs it (exit codes, mkdir) uses `WowStub.os`.
+date = os.date
+time = os.time
+local hostOs = os
+os = nil
+
 WowStub = {
     time = 1793490000,
     chatLog = {},
@@ -43,6 +51,7 @@ WowStub = {
     raidSubgroups = {}, -- unit ("raid1"...) -> current subgroup
     subgroupCalls = {}, -- recorded SetRaidSubgroup(index, group) calls
 }
+WowStub.os = hostOs
 
 --------------------------------------------------------------------------
 -- Time

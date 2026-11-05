@@ -13,7 +13,7 @@ globals = {
 
 read_globals = {
     -- WoW client API used by the addon
-    "CreateFrame", "UIParent", "GetServerTime", "GetTime", "GetNormalizedRealmName",
+    "CreateFrame", "UIParent", "GetServerTime", "GetTime", "GetNormalizedRealmName", "date",
     "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace", "IsInRaid", "IsInGroup",
     "GetNumGroupMembers", "IsInInstance", "GetInstanceInfo",
     "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
@@ -40,10 +40,14 @@ read_globals = {
     "Auctionator", "TSM_API",
 }
 
+-- The WoW client has no `os` or `io` library (only the `date`/`time` globals): using them errors in game.
+files["SideQuest/"] = { not_globals = { "os", "io" } }
+
 -- Test files additionally define/read the WoW API stub and its control table.
 files["tests/wowstub.lua"] = {
     globals = {
         "WowStub", "GetServerTime", "GetTime", "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace",
+        "os", "date", "time",
         "IsInRaid", "IsInGroup", "GetNumGroupMembers", "GetNormalizedRealmName",
         "issecretvalue", "C_GuildInfo", "GetGuildInfo", "IsInInstance",
         "GetInstanceInfo", "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",

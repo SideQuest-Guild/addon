@@ -847,5 +847,5 @@ end
 
 print(string.format("\n%d passed, %d failed", passCount, #failures))
 if #failures > 0 then
-    os.exit(1)
+    WowStub.os.exit(1)
 end
