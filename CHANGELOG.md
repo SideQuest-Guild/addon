@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0 (2026-11-05)
+
+### New
+
+- A crest button on the minimap opens the window (drag it to move, /sq minimap to hide it), and the addon list shows the guild crest
+
 ## v0.2.0 (2026-10-31)
 
 ### New
