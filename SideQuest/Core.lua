@@ -75,7 +75,10 @@ local function defaultDB()
         mySignups = {}, -- event_id -> { status, sentAt, acked }
         addonVersions = {}, -- character -> { version, seenAt } learned from HELLO
         prepAnswers = {}, -- character -> prep report, cleared each time an officer opens a new PREP_Q
-        ui = { pos = nil, width = nil, height = nil, scale = nil, tab = nil },
+        ui = {
+            pos = nil, width = nil, height = nil, scale = nil, tab = nil,
+            minimap = { hide = false, angle = 190 }, -- angle in degrees round the rim, 0 = right
+        },
     }
 end
 

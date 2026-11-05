@@ -1,6 +1,8 @@
 ## Interface: 16001
 ## Title: SideQuest Guild
 ## Notes: EPGP loot, attendance and progression sync for the SideQuest guild.
+## IconTexture: Interface\AddOns\SideQuest\Media\Skin\CrestPortrait
+## AddonCompartmentFunc: SideQuest_OnAddonCompartmentClick
 ## Author: SideQuest
 ## Version: @project-version@
 ## SavedVariables: SideQuestDB
@@ -38,3 +40,4 @@ UI\Skin.lua
 UI\Main.lua
 UI\Tooltip.lua
 UI\BidPopup.lua
+UI\MinimapButton.lua

@@ -18,7 +18,7 @@ download the zip from [GitHub releases](https://github.com/SideQuest-Guild/addon
 CurseForge and GitHub get the same zip, built by GitHub Actions and signed. [SECURITY.md](SECURITY.md) shows how to
 check that a zip you downloaded came from this repo.
 
-In game, type `/sq` to open the window.
+In game, click the crest on the minimap or type `/sq` to open the window. Drag the crest round the minimap to move it.
 
 ## Loot points
 
@@ -129,6 +129,7 @@ The other Console tabs:
 | `/sq` | everyone | Opens or closes the window. |
 | `/sq standby` | everyone | Asks to be on standby tonight. Officers in the raid add themselves. |
 | `/sq help` | everyone | Lists every command. |
+| `/sq minimap` | everyone | Hides or shows the minimap button. |
 | `/sq export` | officers | Makes the text to paste into the website. |
 | `/sq export clear` | officers | Clears what was sent, once the website has accepted it. |
 | `/sq import` | officers | Loads points and events from the website. |

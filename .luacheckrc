@@ -8,7 +8,7 @@ unused_args = false -- WoW event handler signatures are fixed; many args are unu
 -- few globals the addon itself defines and mutates across files.
 globals = {
     "SideQuestDB", "SideQuest", "SideQuestJSON", "SideQuestBase64",
-    "SLASH_SIDEQUEST1", "SlashCmdList",
+    "SLASH_SIDEQUEST1", "SlashCmdList", "SideQuest_OnAddonCompartmentClick",
 }
 
 read_globals = {
@@ -34,6 +34,8 @@ read_globals = {
     -- directory: professions/character/cooldowns/stock
     "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog",
     "C_Container", "GetAverageItemLevel",
+    -- minimap button
+    "Minimap", "GetCursorPosition",
     -- optional third-party price hints (Market.SuggestPrice), never required
     "Auctionator", "TSM_API",
 }
@@ -51,7 +53,7 @@ files["tests/wowstub.lua"] = {
         "GetProfessions", "GetProfessionInfo", "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo",
         "QueryGuildRecipes", "GetAverageItemLevel",
         "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog", "C_Reputation",
-        "C_Container",
+        "C_Container", "Minimap", "GetCursorPosition",
         "C_GuildBank", "InCombatLockdown", "SendChatMessage",
         "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
@@ -74,4 +76,8 @@ files["tests/test_directory.lua"] = {
 
 files["tests/test_ui_directory.lua"] = {
     globals = { "WowStub" },
+}
+
+files["tests/test_minimap.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
 }

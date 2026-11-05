@@ -716,6 +716,12 @@ function CreateFrame(kind, name, parent, template)
 end
 
 UIParent = newMockRegion("Frame", "UIParent", nil, nil)
+Minimap = CreateFrame("Frame", "Minimap", UIParent)
+Minimap:SetSize(140, 140)
+
+function GetCursorPosition()
+    return 0, 0
+end
 
 --------------------------------------------------------------------------
 -- Atlases: real Forever ("Camelot") chrome art, fetched out-of-band by
