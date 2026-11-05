@@ -132,6 +132,23 @@ return function(h)
         assertTrue(chamber.buyRows[1]:IsShown(), "a buyer row is shown")
     end)
 
+    test("market: Browse says what to do when nothing is looked up or nothing matches", function()
+        resetAddon()
+        SideQuest.UI.main = nil
+        setupPlayer()
+        SideQuestDB.directory = {}
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Market")
+        SideQuest.UI.ShowMarketSub("Browse")
+        local chamber = SideQuest.UI.panels.Market.browseChamber
+        assertTrue(chamber.stateLines.item:GetText():find("Who has it") ~= nil, "before a lookup it says how to start one")
+        assertTrue(chamber.stateLines.requests:IsShown(), "an empty requests feed says so")
+        chamber.lookupItemId = 14048
+        SideQuest.UI.RefreshMarketBrowse()
+        assertTrue(chamber.stateLines.item:GetText():find("No one in the directory") ~= nil,
+            "a lookup nobody can answer says so instead of showing nothing")
+    end)
+
     test("market: Mine lists the player's own sell/buy/request entries and removes them", function()
         resetAddon()
         SideQuest.UI.main = nil
@@ -172,5 +189,10 @@ return function(h)
         chamber.selectedCharacter = nil
         SideQuest.UI.RefreshGuild()
         assertTrue(not chamber.detailBlock:IsShown(), "clearing the selection hides the detail block again")
+        chamber.selectedCharacter = "Alt1-Whitemane"
+        SideQuest.UI.RefreshGuild()
+        chamber.searchBox:SetText("nobody")
+        SideQuest.UI.RefreshGuild()
+        assertTrue(not chamber.detailBlock:IsShown(), "filtering the selected member out hides their detail too")
     end)
 end

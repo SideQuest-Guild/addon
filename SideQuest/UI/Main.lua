@@ -209,6 +209,17 @@ if hooksecurefunc and ChatEdit_InsertLink then
     end)
 end
 
+--- Enter in a search field lets go of the keyboard (InputBoxTemplate only
+-- does that on Escape) and, given its button, presses it.
+local function submitOnEnter(box, btn)
+    box:SetScript("OnEnterPressed", function(self)
+        self:ClearFocus()
+        if btn then
+            btn:Click()
+        end
+    end)
+end
+
 --- Resolve an item link to its name/quality/icon/slot word/GP cost. Shared
 -- by the raider-facing bid popup and the officer console's Loot sub-view,
 -- so item resolution (and its "unknown until identified" fallback) lives
@@ -1374,6 +1385,7 @@ function UI.BuildGuildPanel(body)
     end)
     skinEditBox(searchBox, "Search members")
     chamber.searchBox = searchBox
+    submitOnEnter(searchBox) -- it filters as you type; Enter just lets go
 
     local onlineOnly = createCheckbox(chamber.inner, 16)
     onlineOnly:SetPoint("LEFT", searchBox, "RIGHT", 10, 0)
@@ -1500,6 +1512,7 @@ function UI.RefreshGuild()
         end
         setStateText(chamber.emptyText, "Roster API unavailable here; sync from the site for a snapshot.", true)
         for _, r in ipairs(chamber.rows) do r:Hide() end
+        chamber.detailBlock:Hide()
         return
     elseif chamber.emptyText then
         chamber.emptyText:SetText("")
@@ -1547,6 +1560,9 @@ function UI.RefreshGuild()
     for _, r in ipairs(chamber.rows) do
         r:Hide()
     end
+    -- shown again below only under its member's row; left up, it would
+    -- sit over the empty-list line at its last position
+    chamber.detailBlock:Hide()
     if #shownGroups == 0 then
         if not chamber.noResultText then
             chamber.noResultText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
@@ -1594,7 +1610,7 @@ function UI.RefreshGuild()
         ui:Show()
     end
 
-    local y, i, detailShown = 0, 0, false
+    local y, i = 0, 0
     for _, g in ipairs(shownGroups) do
         i = i + 1
         local ui = chamber.rows[i]
@@ -1614,7 +1630,6 @@ function UI.RefreshGuild()
         paintRow(ui, g.main, 20)
         y = y + 24
         if chamber.selectedCharacter == g.main.character then
-            detailShown = true
             chamber.detailBlock:ClearAllPoints()
             chamber.detailBlock:SetPoint("TOPLEFT", 20, -y)
             local used = UI.PaintGuildDetail(chamber.detailBlock, g.main.character)
@@ -1633,7 +1648,6 @@ function UI.RefreshGuild()
                 paintRow(altUi, alt, 46)
                 y = y + 24
                 if chamber.selectedCharacter == alt.character then
-                    detailShown = true
                     chamber.detailBlock:ClearAllPoints()
                     chamber.detailBlock:SetPoint("TOPLEFT", 20, -y)
                     local used = UI.PaintGuildDetail(chamber.detailBlock, alt.character)
@@ -1642,9 +1656,6 @@ function UI.RefreshGuild()
                 end
             end
         end
-    end
-    if not detailShown then
-        chamber.detailBlock:Hide()
     end
     setScrollContentHeight(chamber.scroll, y)
 end
@@ -1755,6 +1766,7 @@ function UI.BuildCraftersSearch(panel)
         end
     end)
     chamber.searchBox, chamber.searchBtn = searchBox, searchBtn
+    submitOnEnter(searchBox, searchBtn)
 
     local summaryText = makeFontString(chamber.inner, FONT_BODY, 11, C.mist2, "LEFT")
     summaryText:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", 0, -8)
@@ -2275,6 +2287,7 @@ function UI.BuildMarketBrowse(panel)
         end
     end)
     chamber.lookupBox, chamber.lookupBtn = lookupBox, lookupBtn
+    submitOnEnter(lookupBox, lookupBtn)
 
     local resultHeading = createSubHeading(chamber.inner, "Item")
     resultHeading:SetPoint("TOPLEFT", lookupBox, "BOTTOMLEFT", 0, -10)
@@ -2322,14 +2335,13 @@ function UI.RefreshMarketBrowse()
         for _, row in ipairs(rows) do row:Hide() end
     end
     for _, head in pairs(chamber.sectionHeads) do head:Hide() end
+    chamber.stateLines = chamber.stateLines or {}
+    for _, fs in pairs(chamber.stateLines) do fs:Hide() end
 
     local Directory = SideQuest.Directory
     local y = 0
 
-    local function section(key, title, list, rowSet, detailFn)
-        if not list or #list == 0 then
-            return
-        end
+    local function heading(key, title)
         local head = chamber.sectionHeads[key]
         if not head then
             head = createSubHeading(chamber.content, "")
@@ -2341,6 +2353,29 @@ function UI.RefreshMarketBrowse()
         head.label:SetText(trackedCaps(title))
         head:Show()
         y = y + 18
+    end
+
+    -- one plain line in the list's flow, placed at the current y each time
+    local function stateLine(key, text)
+        local fs = chamber.stateLines[key]
+        if not fs then
+            fs = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            fs:SetWidth(540)
+            fs:SetWordWrap(true)
+            chamber.stateLines[key] = fs
+        end
+        fs:ClearAllPoints()
+        fs:SetPoint("TOPLEFT", 0, -y)
+        setStateText(fs, text, false)
+        fs:Show()
+        y = y + 26
+    end
+
+    local function section(key, title, list, rowSet, detailFn)
+        if #list == 0 then
+            return
+        end
+        heading(key, title)
         for i, entry in ipairs(list) do
             local row = rowSet[i]
             if not row then
@@ -2355,21 +2390,22 @@ function UI.RefreshMarketBrowse()
         y = y + 6
     end
 
-    if chamber.lookupItemId and Directory then
+    if chamber.lookupItemId then
         local itemId = chamber.lookupItemId
-        chamber.resultHeading.label:SetText(trackedCaps(SideQuest.ItemName(itemId)))
+        local itemName = SideQuest.ItemName(itemId)
+        chamber.resultHeading.label:SetText(trackedCaps(itemName))
 
-        local sellers = Directory.WhoSells and Directory.WhoSells(itemId) or nil
+        local sellers = Directory.WhoSells(itemId)
         section("sell", "Sellers", sellers, chamber.sellRows, function(e)
             return money(e.price) .. (e.qty and (" (" .. e.qty .. ")") or "")
         end)
 
-        local buyers = Directory.WhoBuys and Directory.WhoBuys(itemId) or nil
+        local buyers = Directory.WhoBuys(itemId)
         section("buy", "Standing buy offers", buyers, chamber.buyRows, function(e)
             return money(e.price)
         end)
 
-        local holders = Directory.WhoHas and Directory.WhoHas(itemId) or nil
+        local holders = Directory.WhoHas(itemId)
         section("hold", "Who has it", holders, chamber.holdRows, function(e)
             local parts = {}
             if e.bags and e.bags > 0 then table.insert(parts, e.bags .. " in bags") end
@@ -2377,39 +2413,26 @@ function UI.RefreshMarketBrowse()
             return #parts > 0 and table.concat(parts, ", ") or "none counted"
         end)
 
-        if not sellers and not buyers and not holders then
-            if not chamber.noDirectoryText then
-                chamber.noDirectoryText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
-                chamber.noDirectoryText:SetPoint("TOPLEFT", 0, -y)
-            end
-            setStateText(chamber.noDirectoryText, "The directory hasn't synced the market yet.", true)
-            chamber.noDirectoryText:Show()
-            y = y + 20
-        elseif chamber.noDirectoryText then
-            chamber.noDirectoryText:Hide()
+        if #sellers == 0 and #buyers == 0 and #holders == 0 then
+            stateLine("item", "No one in the directory sells, wants or carries " .. itemName
+                .. " yet. Post a request on Mine and the guild will see it.")
         end
     else
         chamber.resultHeading.label:SetText(trackedCaps("Item"))
-        if chamber.noDirectoryText then chamber.noDirectoryText:Hide() end
+        stateLine("item", "Type an item name or ID, or shift-click an item into the box, then press Who has it.")
     end
 
-    local requests = Directory and Directory.Requests and Directory.Requests() or nil
-    section("requests", "Requests", requests, chamber.requestRows, function(e)
-        local bits = { (e.qty or 1) .. "x " .. SideQuest.ItemName(e.item_id) }
-        if e.price then table.insert(bits, "up to " .. money(e.price)) end
-        if e.note and e.note ~= "" then table.insert(bits, truncateNote(e.note, 40)) end
-        return table.concat(bits, " -- ")
-    end)
-    if not requests then
-        if not chamber.noRequestsText then
-            chamber.noRequestsText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
-            chamber.noRequestsText:SetPoint("TOPLEFT", 0, -y)
-        end
-        setStateText(chamber.noRequestsText, "The directory hasn't synced requests yet.", true)
-        chamber.noRequestsText:Show()
-        y = y + 20
-    elseif chamber.noRequestsText then
-        chamber.noRequestsText:Hide()
+    local requests = Directory.Requests()
+    if #requests == 0 then
+        heading("requests", "Requests")
+        stateLine("requests", "No one has asked the guild for anything yet.")
+    else
+        section("requests", "Requests", requests, chamber.requestRows, function(e)
+            local bits = { (e.qty or 1) .. "x " .. SideQuest.ItemName(e.item_id) }
+            if e.price then table.insert(bits, "up to " .. money(e.price)) end
+            if e.note and e.note ~= "" then table.insert(bits, truncateNote(e.note, 40)) end
+            return table.concat(bits, " -- ")
+        end)
     end
 
     setScrollContentHeight(chamber.scroll, y)
@@ -2791,7 +2814,8 @@ function UI.BuildLedgerPanel(body)
     headerLine:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -3)
     headerLine:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -3)
 
-    local scroll, content = buildScroll(chamber.inner, -76)
+    -- button (-30..-50), header (-62..-76), rule at -79: the list starts below it
+    local scroll, content = buildScroll(chamber.inner, -84)
     chamber.scroll, chamber.content, chamber.rows, chamber.lootRows = scroll, content, {}, {}
     panel.chamber = chamber
 end
