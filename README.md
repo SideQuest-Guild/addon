@@ -130,6 +130,7 @@ The other Console tabs:
 | `/sq standby` | everyone | Asks to be on standby tonight. Officers in the raid add themselves. |
 | `/sq help` | everyone | Lists every command. |
 | `/sq minimap` | everyone | Hides or shows the minimap button. |
+| `/sq scale <0.75-2>` | everyone | Makes the window bigger or smaller (1.25 by default); `/sq scale reset` goes back. |
 | `/sq export` | officers | Makes the text to paste into the website. |
 | `/sq export clear` | officers | Clears what was sent, once the website has accepted it. |
 | `/sq import` | officers | Loads points and events from the website. |

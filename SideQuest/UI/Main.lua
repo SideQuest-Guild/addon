@@ -127,6 +127,12 @@ local NEWS_KIND_WORD = {
 
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
+-- The layout is drawn in 860x560 units with 10-13 pt Garamond, which reads
+-- small next to the game's own Friz Quadrata windows; 1.25 brings it to the
+-- size of Blizzard and big addon option windows. /sq scale changes it.
+local WINDOW_DEFAULT_SCALE, WINDOW_SCALE_MIN, WINDOW_SCALE_MAX = 1.25, 0.75, 2
+-- room for the tab row hanging below the frame and the crest above it
+local WINDOW_OVERHANG_H = 50
 
 local TABS = { "You", "Guild", "Crafters", "Market", "Raids", "Ledger", "News" }
 local OFFICER_TAB = "Console"
@@ -563,15 +569,20 @@ function UI.BuildMainFrame()
 
     local main = CreateFrame("Frame", "SideQuestMainFrame", UIParent, "BackdropTemplate")
     main:SetSize(SideQuestDB.ui.width or WINDOW_DEFAULT_W, SideQuestDB.ui.height or WINDOW_DEFAULT_H)
+    -- Above the world-facing HUD (quest/waypoint arrows and their labels
+    -- live at MEDIUM and would otherwise draw over and between the
+    -- chambers); toplevel so it rises over other panels when clicked.
+    main:SetFrameStrata("HIGH")
+    main:SetToplevel(true)
+    -- a bigger scale or a smaller screen never leaves it half off-screen
+    main:SetClampedToScreen(true)
     local pos = SideQuestDB.ui.pos
     if pos then
         main:SetPoint(pos.point, UIParent, pos.point, pos.x, pos.y)
     else
         main:SetPoint("CENTER")
     end
-    if SideQuestDB.ui.scale and main.SetScale then
-        main:SetScale(SideQuestDB.ui.scale)
-    end
+    UI.ApplyWindowScale(main)
     -- Night ground under the native title band (PortraitFrameTemplate's Bg
     -- runs from (2, -21) to (-2, 2)).
     local fill = main:CreateTexture(nil, "BACKGROUND")
@@ -786,6 +797,38 @@ function UI.Show()
         UI.ShowTab(UI.activeTab or SideQuestDB.ui.tab or "You")
     end)
 end
+
+--- Sets the window's scale from SideQuestDB.ui.scale (default 1.25), shrunk
+-- if needed so the frame and its tab row still fit the screen's height.
+function UI.ApplyWindowScale(main)
+    main = main or UI.main
+    if not main then
+        return
+    end
+    local scale = SideQuestDB.ui.scale or WINDOW_DEFAULT_SCALE
+    local screenH = UIParent:GetHeight() or 0
+    local frameH = (main:GetHeight() or 0) + WINDOW_OVERHANG_H
+    if screenH > 0 and frameH > 0 then
+        scale = math.min(scale, screenH / frameH)
+    end
+    main:SetScale(scale)
+end
+
+SideQuest.RegisterSlash("scale", function(rest)
+    local arg = (rest or ""):lower()
+    local value = tonumber(arg)
+    if arg == "reset" then
+        SideQuestDB.ui.scale = nil
+    elseif value and value >= WINDOW_SCALE_MIN and value <= WINDOW_SCALE_MAX then
+        SideQuestDB.ui.scale = value
+    else
+        SideQuest.Print(string.format("Usage: /sq scale <%.2f-%.2f> or /sq scale reset (now %.2f)",
+            WINDOW_SCALE_MIN, WINDOW_SCALE_MAX, SideQuestDB.ui.scale or WINDOW_DEFAULT_SCALE))
+        return
+    end
+    UI.ApplyWindowScale()
+    SideQuest.Print(string.format("Window scale: %.2f", SideQuestDB.ui.scale or WINDOW_DEFAULT_SCALE))
+end, "scale <0.75-2>|reset - make the SideQuest window bigger or smaller")
 
 function UI.Toggle()
     if UI.main and UI.main:IsShown() then
