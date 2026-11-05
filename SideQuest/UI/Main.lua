@@ -1,6 +1,6 @@
 -- SideQuest/UI/Main.lua
 -- The Guild Sheet: one movable, resizable window that opens on YOU (not a
--- roster grid), with bottom tabs for Guild, Crafters, Raids, Ledger, News
+-- roster grid), with bottom tabs for Guild, Crafters, Events, Ledger, News
 -- and (officers) Console. Visual authority: sidequest-guild/website/DESIGN.md
 -- (night blue, chamfered chamber framing, ribbon headings, class/quality
 -- colours paired with text, no unicode icons, no eyebrow labels), carried
@@ -124,6 +124,12 @@ local NEWS_KIND_WORD = {
     boss_kill = "Boss kill", first_kill = "First kill", loot = "Loot", announcement = "Announcement",
     level = "Level up", joined = "Joined", badge = "Badge",
 }
+--- Site EventKind -> display label (events.py EVENT_KIND_LABELS), shown next
+-- to each event's date/time on the Events tab.
+local EVENT_KIND_LABELS = {
+    raid = "Raid", dungeon = "Dungeon", world_boss = "World Boss", leveling = "Leveling",
+    pvp = "PvP", social = "Social", transmog = "Transmog", other = "Other",
+}
 
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
@@ -135,6 +141,9 @@ local WINDOW_DEFAULT_SCALE, WINDOW_SCALE_MIN, WINDOW_SCALE_MAX = 1.25, 0.75, 2
 local WINDOW_OVERHANG_H = 50
 
 local TABS = { "You", "Guild", "Crafters", "Market", "Raids", "Ledger", "News" }
+-- Internal tab keys (and SideQuestDB.ui.tab's saved value) stay as-is;
+-- TAB_LABELS only changes what's drawn on the tab button.
+local TAB_LABELS = { Raids = "Events" }
 local OFFICER_TAB = "Console"
 local CONSOLE_SUBTABS = { "Raid Night", "Loot", "Roster", "Recruits", "Bank", "Announce", "Sync" }
 local CRAFTERS_SUBTABS = { "Search", "Professions", "Cooldowns" }
@@ -695,7 +704,7 @@ function UI.BuildMainFrame()
     -- frame's bottom-left, each next one 3 to the right of the last.
     local prev
     for _, tabName in ipairs(allTabs) do
-        local btn = UI.CreatePanelTab(main, tabName, false, tabName == OFFICER_TAB)
+        local btn = UI.CreatePanelTab(main, TAB_LABELS[tabName] or tabName, false, tabName == OFFICER_TAB)
         if prev then
             btn:SetPoint("LEFT", prev, "RIGHT", 3, 0)
         else
@@ -1112,7 +1121,7 @@ function UI.RefreshYou()
     local events = SideQuest.Events.Get()
     local nextEvt = events[1]
     if nextEvt then
-        you.nextEventTitle:SetText(nextEvt.title or "Raid")
+        you.nextEventTitle:SetText(nextEvt.title or "Event")
         local secs = (nextEvt.starts_at or 0) - now()
         you.nextEventMeta:SetText((secs > 0 and ("in " .. math.floor(secs / 3600) .. "h  --  ") or "in progress  --  ")
             .. os.date("%a %H:%M", nextEvt.starts_at or now()))
@@ -1136,7 +1145,7 @@ function UI.RefreshYou()
         end
         you.badgesHeading:SetPoint("TOPLEFT", you.signupState, "BOTTOMLEFT", 0, -16)
     else
-        setStateText(you.nextEventTitle, "No raids scheduled yet", true)
+        setStateText(you.nextEventTitle, "No events scheduled yet", true)
         you.nextEventMeta:SetText("")
         setStateText(you.signupState, "", false)
         -- nothing to answer: no buttons, and badges follow the title
@@ -2632,7 +2641,7 @@ function UI.RefreshMarketMine()
 end
 
 --------------------------------------------------------------------------
--- RAIDS tab: date/time, role counts, your answer, officer actions
+-- EVENTS tab: date/time, role counts, your answer, officer actions
 --------------------------------------------------------------------------
 
 function UI.BuildRaidsPanel(body)
@@ -2644,7 +2653,7 @@ function UI.BuildRaidsPanel(body)
     local chamber = createChamber(panel, "SideQuestRaidsChamber")
     chamber:SetPoint("TOPLEFT", 12, -12)
     chamber:SetPoint("BOTTOMRIGHT", -12, 12)
-    createRibbon(chamber, "Raids")
+    createRibbon(chamber, "Events")
 
     local scroll, content = buildScroll(chamber.inner, -34)
     chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
@@ -2673,7 +2682,7 @@ function UI.RefreshRaids()
             chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
             chamber.emptyText:SetPoint("TOPLEFT")
         end
-        setStateText(chamber.emptyText, "No raids scheduled yet.", true)
+        setStateText(chamber.emptyText, "No events scheduled yet.", true)
         return
     elseif chamber.emptyText then
         chamber.emptyText:SetText("")
@@ -2707,8 +2716,8 @@ function UI.RefreshRaids()
         y = y + (isOfficer and 92 or 70)
         local isOpen = (evt.starts_at or 0) > now()
         row.mark:SetAtlas(isOpen and "QuestNormal" or "QuestTurnin")
-        row.title:SetText(evt.title or "Raid")
-        row.meta:SetText((evt.kind or "raid") .. "  --  " .. os.date("%A %b %d, %H:%M", evt.starts_at or now()))
+        row.title:SetText(evt.title or "Event")
+        row.meta:SetText((EVENT_KIND_LABELS[evt.kind] or "Event") .. "  --  " .. os.date("%A %b %d, %H:%M", evt.starts_at or now()))
 
         local roleCounts = { tank = 0, healer = 0, dps = 0 }
         for _, s in ipairs(evt.signups or {}) do

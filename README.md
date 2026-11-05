@@ -1,10 +1,10 @@
 # SideQuest Guild
 
 A World of Warcraft: Forever addon for the SideQuest guild. Members use it to see the roster, find crafters, sign up
-for raids and check their loot points. Officers use it to run raid nights, hand out loot and send the night's record
+for events and check their loot points. Officers use it to run raid nights, hand out loot and send the night's record
 to [sidequest-guild.com](https://sidequest-guild.com).
 
-![The You tab: your points, your next raid, who's online and guild news](docs/screenshots/you.jpg)
+![The You tab: your points, your next event, who's online and guild news](docs/screenshots/you.jpg)
 
 These pictures are drawn outside the game from the addon's own code and art, with WoW: Forever's own window frame,
 tabs and icons, and made-up guild members. Lighting and a few small details differ in game.
@@ -37,18 +37,18 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 
 | Tab | What it shows |
 |---|---|
-| You | Your PR and where it ranks, your last four weeks of points, your next raid with Going, Maybe and Can't buttons, and who's online. |
+| You | Your PR and where it ranks, your last four weeks of points, your next event with Going, Maybe and Can't buttons, and who's online. |
 | Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. |
 | Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill; and who has Transmute, Mooncloth and other craft cooldowns ready. |
 | Market | What guildmates sell and want to buy, open requests for materials, and who holds an item. Mine lists and edits your own. |
-| Raids | Upcoming events, how many have signed up for each role, and your own answer. |
+| Events | Upcoming events, how many have signed up for each role, and your own answer. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
 | News | Guild announcements and recent activity. |
 
 Click someone on the Guild tab to see their level, spec, item level, professions, Onyxia attunement, tracked
 reputations and cooldowns. Hover any item to see which guildmates craft, sell, buy or hold it.
 
-Your raid sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
+Your event sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
 
 If you can come to a raid but the group is full, type `/sq standby`. An officer approves it and you earn EP as if you
 were there.
