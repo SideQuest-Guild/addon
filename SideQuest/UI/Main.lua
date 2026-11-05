@@ -815,11 +815,19 @@ function UI.BuildYouPanel(body)
     local scroll, content = buildScroll(you.inner, -30)
     you.scroll, you.content = scroll, content
 
+    -- state lines ("No standings yet -- ...") run longer than the column:
+    -- they wrap at the sub-headings' width instead of running under the
+    -- scroll bar and off the chamber
+    local function wrapToColumn(fs)
+        fs:SetWidth(320)
+        fs:SetWordWrap(true)
+        return fs
+    end
     local nameRow = createNameRow(content, 16)
     nameRow:SetPoint("TOPLEFT", 0, 0)
-    local rankText = makeFontString(content, FONT_BODY, 12, C.mist, "LEFT")
+    local rankText = wrapToColumn(makeFontString(content, FONT_BODY, 12, C.mist, "LEFT"))
     rankText:SetPoint("TOPLEFT", nameRow, "BOTTOMLEFT", 0, -4)
-    local prText = makeFontString(content, FONT_BODY, 13, C.ink, "LEFT")
+    local prText = wrapToColumn(makeFontString(content, FONT_BODY, 13, C.ink, "LEFT"))
     prText:SetPoint("TOPLEFT", rankText, "BOTTOMLEFT", 0, -10)
 
     -- EP/GP history: a compact labelled table (four weeks, dated, EP and GP
@@ -857,16 +865,16 @@ function UI.BuildYouPanel(body)
     local baselineText = makeFontString(content, FONT_BODY_ITALIC, 10, C.inkFaint, "LEFT")
     baselineText:SetPoint("TOPLEFT", historyTable, "BOTTOMLEFT", 0, -2)
     baselineText:SetText("GP floor 100 -- it never decays below this baseline.")
-    local historyEmpty = makeFontString(content, FONT_BODY, 11, C.mist2, "LEFT")
+    local historyEmpty = wrapToColumn(makeFontString(content, FONT_BODY, 11, C.mist2, "LEFT"))
     historyEmpty:SetPoint("TOPLEFT", historyHeading, "BOTTOMLEFT", 0, -6)
     historyEmpty:Hide()
 
     local nextEventHeading = createSubHeading(content, "Next event")
     nextEventHeading:SetPoint("TOPLEFT", baselineText, "BOTTOMLEFT", 0, -14)
     nextEventHeading:SetWidth(320)
-    local nextEventTitle = makeFontString(content, FONT_BODY, 13, C.ink, "LEFT")
+    local nextEventTitle = wrapToColumn(makeFontString(content, FONT_BODY, 13, C.ink, "LEFT"))
     nextEventTitle:SetPoint("TOPLEFT", nextEventHeading, "BOTTOMLEFT", 0, -6)
-    local nextEventMeta = makeFontString(content, FONT_BODY, 11, C.mist2, "LEFT")
+    local nextEventMeta = wrapToColumn(makeFontString(content, FONT_BODY, 11, C.mist2, "LEFT"))
     nextEventMeta:SetPoint("TOPLEFT", nextEventTitle, "BOTTOMLEFT", 0, -2)
 
     local answerButtons = {}
@@ -875,19 +883,15 @@ function UI.BuildYouPanel(body)
         btn:SetPoint("TOPLEFT", nextEventMeta, "BOTTOMLEFT", (i - 1) * 78, -8)
         answerButtons[answer[1]] = btn
     end
-    local signupState = makeFontString(content, FONT_BODY, 11, C.mist2, "LEFT")
+    local signupState = wrapToColumn(makeFontString(content, FONT_BODY, 11, C.mist2, "LEFT"))
     signupState:SetPoint("TOPLEFT", answerButtons.going, "BOTTOMLEFT", 0, -8)
 
     local badgesHeading = createSubHeading(content, "Badges")
     badgesHeading:SetPoint("TOPLEFT", signupState, "BOTTOMLEFT", 0, -16)
     badgesHeading:SetWidth(320)
-    local badgesText = makeFontString(content, FONT_BODY, 12, C.flavor, "LEFT")
+    local badgesText = wrapToColumn(makeFontString(content, FONT_BODY, 12, C.flavor, "LEFT"))
     badgesText:SetPoint("TOPLEFT", badgesHeading, "BOTTOMLEFT", 0, -6)
-    badgesText:SetWidth(320)
-    if badgesText.SetWordWrap then
-        badgesText:SetWordWrap(true)
-    end
-    local epgpAltsText = makeFontString(content, FONT_BODY, 12, C.mist, "LEFT")
+    local epgpAltsText = wrapToColumn(makeFontString(content, FONT_BODY, 12, C.mist, "LEFT"))
     epgpAltsText:SetPoint("TOPLEFT", badgesText, "BOTTOMLEFT", 0, -6)
 
     -- Sharing: five checkboxes for settings.share, one plain sentence each
@@ -1019,6 +1023,7 @@ function UI.RefreshYou()
         you.historyTable:Show()
         you.baselineText:Show()
         you.historyEmpty:Hide()
+        you.nextEventHeading:SetPoint("TOPLEFT", you.baselineText, "BOTTOMLEFT", 0, -14)
         local cutoff = now() - 28 * 24 * 60 * 60
         local epTotals, gpTotals = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }
         for _, entry in ipairs(sheet.ledger) do
@@ -1044,6 +1049,9 @@ function UI.RefreshYou()
         you.baselineText:Hide()
         you.historyEmpty:Show()
         setStateText(you.historyEmpty, "No sheet yet -- opening Ledger asks an officer for yours.", true)
+        -- hidden regions still hold their space as anchors: hang the next
+        -- section off the line that is showing
+        you.nextEventHeading:SetPoint("TOPLEFT", you.historyEmpty, "BOTTOMLEFT", 0, -14)
     end
 
     -- next event + sign-up state, with the current answer highlighted
@@ -1058,6 +1066,7 @@ function UI.RefreshYou()
         local statusToAnswer = { signed = "going", tentative = "maybe", absent = "cant" }
         local currentAnswer = statusToAnswer[status]
         for answer, btn in pairs(you.answerButtons) do
+            btn:Show()
             btn:SetScript("OnClick", function()
                 SideQuest.Signups.Answer(nextEvt.id, answer)
                 UI.RefreshYou()
@@ -1071,13 +1080,17 @@ function UI.RefreshYou()
         else
             setStateText(you.signupState, "Not signed yet", false)
         end
+        you.badgesHeading:SetPoint("TOPLEFT", you.signupState, "BOTTOMLEFT", 0, -16)
     else
         setStateText(you.nextEventTitle, "No raids scheduled yet", true)
         you.nextEventMeta:SetText("")
         setStateText(you.signupState, "", false)
+        -- nothing to answer: no buttons, and badges follow the title
         for _, btn in pairs(you.answerButtons) do
             btn:SetSelected(false)
+            btn:Hide()
         end
+        you.badgesHeading:SetPoint("TOPLEFT", you.nextEventTitle, "BOTTOMLEFT", 0, -16)
     end
 
     local badges = (member and member.badges) or {}
@@ -1120,6 +1133,7 @@ function UI.RefreshYou()
     end
     table.sort(onlineRows, function(a, b) return (a.character or "") < (b.character or "") end)
     guildNow.onlineText:SetText(online .. " online")
+    local shownOnline = math.min(#onlineRows, #guildNow.onlineList.rows)
     for i, row in ipairs(guildNow.onlineList.rows) do
         local m = onlineRows[i]
         if m then
@@ -1132,6 +1146,9 @@ function UI.RefreshYou()
             row.zoneFS:Hide()
         end
     end
+    -- the list is only as tall as its rows, so "See all" and the news
+    -- follow the count instead of leaving five empty lines
+    guildNow.onlineList:SetHeight(math.max(1, 14 * shownOnline))
 
     local newsItems = SideQuest.News.Get()
     for _, row in ipairs(guildNow.newsRows) do
@@ -1141,6 +1158,8 @@ function UI.RefreshYou()
         if not guildNow.emptyText then
             guildNow.emptyText = makeFontString(guildNow.newsContent, FONT_BODY, 12, C.mist2, "LEFT")
             guildNow.emptyText:SetPoint("TOPLEFT")
+            guildNow.emptyText:SetWidth(300)
+            guildNow.emptyText:SetWordWrap(true)
         end
         setStateText(guildNow.emptyText, "No news yet -- boss kills, loot and announcements show up here.", true)
     elseif guildNow.emptyText then
@@ -2922,6 +2941,7 @@ function UI.BuildToast()
     local toast = createChamber(UIParent, "SideQuestToast")
     toast:SetSize(360, 80)
     toast:SetPoint("TOP", 0, -60)
+    toast:SetFrameStrata("DIALOG")
     local ribbon = createRibbon(toast, "Announcement", 22)
     local officerText = makeFontString(toast.inner, FONT_BODY, 12, C.gold, "CENTER")
     officerText:SetPoint("TOP", 0, -10)

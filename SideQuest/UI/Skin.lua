@@ -101,7 +101,9 @@ end
 -- WoW FontStrings have no letter-spacing; tracked caps are built by hand
 -- with U+2009 (thin space) between glyphs (verified present in all three
 -- shipped fonts' cmaps; U+200A hair space is not -- see Media/PROVENANCE.md).
-local THIN_SPACE = "\xE2\x80\x89" -- UTF-8 for U+2009
+-- Decimal escapes: the game runs Lua 5.1, which has no hex escape and
+-- would print the letters "xE2x80x89" instead.
+local THIN_SPACE = "\226\128\137" -- UTF-8 for U+2009
 local function trackedCaps(text)
     local out = {}
     for i = 1, #text do
@@ -256,6 +258,33 @@ end
 
 local RIBBON_TEX_W, RIBBON_CAP_PX, RIBBON_H = 256, 40, 32
 
+-- The client loads an addon font file the first time it draws it, and
+-- GetStringWidth reads 0 until then, so a ribbon or tab sized only at build
+-- time collapses to its padding. `fitToText` sizes the frame now and again
+-- every time it shows, retrying for a couple of seconds while the label
+-- still measures 0. Returns the refit function for callers that change the
+-- label later.
+local FIT_RETRIES, FIT_RETRY_DELAY = 20, 0.1
+
+local function fitToText(frame, label, fit)
+    local function attempt(triesLeft)
+        local w = label.GetStringWidth and label:GetStringWidth() or 0
+        fit(w)
+        local text = label:GetText()
+        if w <= 0 and text and text ~= "" and triesLeft > 0 and C_Timer then
+            C_Timer.After(FIT_RETRY_DELAY, function()
+                attempt(triesLeft - 1)
+            end)
+        end
+    end
+    local function refit()
+        attempt(FIT_RETRIES)
+    end
+    frame:HookScript("OnShow", refit)
+    refit()
+    return refit
+end
+
 local function createRibbon(chamber, text)
     local ribbon = CreateFrame("Frame", nil, chamber)
     ribbon:SetHeight(RIBBON_H)
@@ -266,12 +295,14 @@ local function createRibbon(chamber, text)
     label:SetPoint("CENTER", 0, 1)
     shade(label)
     ribbon.label = label
+    label:SetText(trackedCaps(text or ""))
+    local refit = fitToText(ribbon, label, function(w)
+        ribbon:SetWidth(math.max(132, w + 2 * (RIBBON_CAP_PX / 2) + 28))
+    end)
     function ribbon:SetLabel(t)
         label:SetText(trackedCaps(t or ""))
-        local w = (label.GetStringWidth and label:GetStringWidth() or 0)
-        self:SetWidth(math.max(132, w + 2 * (RIBBON_CAP_PX / 2) + 28))
+        refit()
     end
-    ribbon:SetLabel(text)
     return ribbon
 end
 
@@ -486,6 +517,9 @@ local function buildScroll(parent, top)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(10, 10)
     scroll:SetScrollChild(content)
+    -- The template hides its slider (thumb and channel with it) whenever
+    -- the content fits, instead of parking an inert thumb at the top.
+    scroll.scrollBarHideable = true
 
     -- The template's own slider does the scrolling (wheel, drag, range);
     -- it is reskinned rather than replaced: a dark channel, the gilded
@@ -645,8 +679,9 @@ local function createPanelTab(parent, text, isTop, isOfficer)
         mark:SetPoint("RIGHT", label, "LEFT", -5, 0)
         tab.mark = mark
     end
-    local textW = label.GetStringWidth and label:GetStringWidth() or 60
-    tab:SetWidth(textW + TAB_SIDES_PADDING + (isOfficer and 22 or 12))
+    fitToText(tab, label, function(w)
+        tab:SetWidth(w + TAB_SIDES_PADDING + (isOfficer and 22 or 12))
+    end)
     return tab
 end
 

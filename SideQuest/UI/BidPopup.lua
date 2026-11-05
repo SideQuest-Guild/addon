@@ -64,6 +64,8 @@ function UI.BuildBidPopup()
 
     local popup = UI.CreateChamber(UIParent, "SideQuestBidPopup")
     popup:SetSize(340, 236)
+    -- over the main window (HIGH), which may be open when a bid starts
+    popup:SetFrameStrata("DIALOG")
     popup:SetPoint("TOP", 0, -200)
     popup:Hide()
     local ribbon = UI.CreateRibbon(popup, "Bidding")
