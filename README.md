@@ -13,7 +13,7 @@ tabs and icons, and made-up guild members. Lighting and a few small details diff
 
 Install **SideQuest Guild** from [CurseForge](https://www.curseforge.com/projects/1773662) with the CurseForge app, or
 download the zip from [GitHub releases](https://github.com/SideQuest-Guild/addon/releases) and unzip it into
-`_classic_beta_/Interface/AddOns/`. You should end up with `Interface/AddOns/SideQuest/SideQuest.toc`.
+`_forever_/Interface/AddOns/`. You should end up with `Interface/AddOns/SideQuest/SideQuest.toc`.
 
 CurseForge and GitHub get the same zip, built by GitHub Actions and signed. [SECURITY.md](SECURITY.md) shows how to
 check that a zip you downloaded came from this repo.
@@ -149,7 +149,7 @@ After the raid, the record has to reach the website. Pick whichever is easiest:
    the next login picks up the new points on its own.
 2. Type `/sq export`, copy the text and paste it on the [sync page](https://sidequest-guild.com/officers/sync/).
 3. Upload the addon's save file on the same page. It is at
-   `_classic_beta_/WTF/Account/<your account>/SavedVariables/SideQuest.lua`, and WoW writes it when you log out or type
+   `_forever_/WTF/Account/<your account>/SavedVariables/SideQuest.lua`, and WoW writes it when you log out or type
    `/reload`.
 4. Let `sidequest-sync` upload it for you, as below.
 
