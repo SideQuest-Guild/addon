@@ -595,16 +595,17 @@ function Directory.WhoCrafts(query)
     return out
 end
 
---- Members with profession `name`, best skill first.
+--- Members with profession `name`, best skill first; every member's every
+-- profession when `name` is nil. Each entry names its `profession`.
 function Directory.ByProfession(name)
     local out = {}
     for character, entry in pairs(SideQuestDB.directory) do
         local prof = entry.prof and entry.prof.d
         if prof then
             for _, p in ipairs(prof.professions or {}) do
-                if p.name == name then
+                if name == nil or p.name == name then
                     table.insert(out, {
-                        character = character, skill = p.skill, max_skill = p.max_skill,
+                        character = character, profession = p.name, skill = p.skill, max_skill = p.max_skill,
                         online = Directory.IsOnline(character),
                     })
                 end

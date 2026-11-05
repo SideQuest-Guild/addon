@@ -1935,26 +1935,33 @@ local function craftersLastSeen(character)
     return entry and entry.seen_at
 end
 
--- Professions: pick a profession, see every member who has it (best skill
--- first, online first), their recipe count and when each was last seen.
+-- Professions: every member's professions by default (online first, then
+-- by profession, best skill first); the button narrows to one profession
+-- and cycles back round to all. Each row shows the recipe count and when
+-- that member was last seen.
+
+local function professionLabel(profession)
+    return "Profession: " .. (profession or "All")
+end
 
 function UI.BuildCraftersProfessions(panel)
     local sub = makeCraftersSub(panel, "Professions")
     local chamber = createChamber(sub, "SideQuestCraftersProfessionsChamber")
     chamber:SetAllPoints(sub)
 
-    local professionBtn = createButton(chamber.inner, "quiet", "Profession: --", 190, 20)
+    -- chamber.profession nil means all; a click steps All -> first ->
+    -- ... -> last -> All
+    local professionBtn = createButton(chamber.inner, "quiet", professionLabel(nil), 190, 20)
     professionBtn:SetPoint("TOPLEFT", 14, -10)
     professionBtn:SetScript("OnClick", function()
         local names = professionNames()
-        if #names == 0 then
-            return
-        end
-        local idx = 1
+        local nextName = names[1]
         for i, v in ipairs(names) do
-            if v == chamber.profession then idx = i end
+            if v == chamber.profession then
+                nextName = names[i + 1]
+            end
         end
-        chamber.profession = names[(idx % #names) + 1]
+        chamber.profession = nextName
         UI.RefreshCraftersProfessions()
     end)
     chamber.professionBtn = professionBtn
@@ -1963,7 +1970,7 @@ function UI.BuildCraftersProfessions(panel)
     header:SetPoint("TOPLEFT", 14, -44)
     header:SetPoint("TOPRIGHT", -28, -44)
     header:SetHeight(16)
-    local COLS = { name = 0, skill = 250, recipes = 360, lastSeen = 430 }
+    local COLS = { name = 0, profession = 150, skill = 250, recipes = 360, lastSeen = 430 }
     chamber.cols = COLS
     local function headerLabel(text, x, w, justify)
         local fs = makeFontString(header, FONT_BODY, 10, C.mist2, justify or "LEFT")
@@ -1973,6 +1980,7 @@ function UI.BuildCraftersProfessions(panel)
         return fs
     end
     headerLabel("Name", COLS.name)
+    headerLabel("Profession", COLS.profession)
     headerLabel("Skill / Max", COLS.skill, 90, "RIGHT")
     headerLabel("Recipes", COLS.recipes, 60, "RIGHT")
     headerLabel("Last seen", COLS.lastSeen)
@@ -1991,9 +1999,7 @@ function UI.RefreshCraftersProfessions()
         return
     end
     local chamber = panel.professionsChamber
-    local names = professionNames()
-    chamber.profession = chamber.profession or names[1]
-    chamber.professionBtn:SetText("Profession: " .. (chamber.profession or "--"))
+    chamber.professionBtn:SetText(professionLabel(chamber.profession))
 
     for _, r in ipairs(chamber.rows) do r:Hide() end
 
@@ -2012,7 +2018,9 @@ function UI.RefreshCraftersProfessions()
     table.sort(members, function(a, b)
         local aOnline, bOnline = a.online and true or false, b.online and true or false
         if aOnline ~= bOnline then return aOnline end
-        return (a.skill or 0) > (b.skill or 0)
+        if a.profession ~= b.profession then return (a.profession or "") < (b.profession or "") end
+        if (a.skill or 0) ~= (b.skill or 0) then return (a.skill or 0) > (b.skill or 0) end
+        return a.character < b.character
     end)
 
     if #members == 0 then
@@ -2020,7 +2028,9 @@ function UI.RefreshCraftersProfessions()
             chamber.noResultText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
             chamber.noResultText:SetPoint("TOPLEFT")
         end
-        setStateText(chamber.noResultText, "No one in the directory has " .. tostring(chamber.profession) .. " yet.", false)
+        setStateText(chamber.noResultText, chamber.profession
+            and ("No one in the directory has " .. chamber.profession .. " yet.")
+            or "No one has shared their professions yet.", false)
         return
     elseif chamber.noResultText then
         chamber.noResultText:SetText("")
@@ -2038,6 +2048,8 @@ function UI.RefreshCraftersProfessions()
             row.skillText:SetWidth(90)
             row.recipesText = makeFontString(row, FONT_BODY, 12, C.mist, "RIGHT")
             row.recipesText:SetWidth(60)
+            row.professionText = makeFontString(row, FONT_BODY, 12, C.mist, "LEFT")
+            row.professionText:SetWidth(95)
             row.lastSeenText = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
             row.lastSeenText:SetWidth(60)
             row.whisperBtn = createButton(row, "quiet", "Whisper", 66, 18)
@@ -2047,12 +2059,15 @@ function UI.RefreshCraftersProfessions()
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -22 * (i - 1))
         setNameRow(row.nameRow, m.character, nil)
+        row.professionText:ClearAllPoints()
+        row.professionText:SetPoint("LEFT", COLS.profession, 0)
+        row.professionText:SetText(m.profession or "")
         row.skillText:ClearAllPoints()
         row.skillText:SetPoint("LEFT", COLS.skill, 0)
         row.skillText:SetText((m.skill or 0) .. " / " .. (m.max_skill or "--"))
         row.recipesText:ClearAllPoints()
         row.recipesText:SetPoint("LEFT", COLS.recipes, 0)
-        local recipeCount = craftersRecipeCount(m.character, chamber.profession)
+        local recipeCount = craftersRecipeCount(m.character, m.profession)
         row.recipesText:SetText(recipeCount and tostring(recipeCount) or "--")
         row.lastSeenText:ClearAllPoints()
         row.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)

@@ -1085,13 +1085,13 @@ local VIEWS = {
     { name = "crafters-professions", setup = function()
         UI.ShowTab("Crafters")
         UI.ShowCraftersSub("Professions")
-        UI.panels.Crafters.professionsChamber.profession = "Tailoring"
+        UI.panels.Crafters.professionsChamber.profession = nil -- the default: every profession
         UI.RefreshCraftersProfessions()
     end },
     { name = "crafters", setup = function()
         UI.ShowTab("Crafters")
         UI.ShowCraftersSub("Professions")
-        UI.panels.Crafters.professionsChamber.profession = "Tailoring"
+        UI.panels.Crafters.professionsChamber.profession = nil
         UI.RefreshCraftersProfessions()
     end },
     { name = "crafters-cooldowns", setup = function()

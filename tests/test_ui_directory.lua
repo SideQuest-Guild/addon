@@ -55,6 +55,41 @@ return function(h)
         assertTrue(chamber.rows[2].nameRow.nameFS:GetText():find("Alt2") ~= nil, "offline member listed second")
     end)
 
+    test("crafters: Professions view lists every profession until one is chosen", function()
+        resetAddon()
+        SideQuest.UI.main = nil
+        setupPlayer()
+        SideQuestDB.roster = { taken_at = 1000, members = {} }
+        SideQuestDB.directory = {
+            ["Alt1-Whitemane"] = { seen_at = 1000, prof = { v = "x", at = 1000, d = {
+                professions = {
+                    { name = "Tailoring", skill_line = 197, skill = 200, max_skill = 300 },
+                    { name = "Skinning", skill_line = 393, skill = 22, max_skill = 75 },
+                },
+            } } },
+            ["Alt2-Whitemane"] = { seen_at = 900, prof = { v = "y", at = 900, d = {
+                professions = { { name = "Mining", skill_line = 186, skill = 150, max_skill = 225 } },
+            } } },
+        }
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Crafters")
+        SideQuest.UI.ShowCraftersSub("Professions")
+        local chamber = SideQuest.UI.panels.Crafters.professionsChamber
+        local function shown()
+            local out = {}
+            for _, row in ipairs(chamber.rows) do
+                if row:IsShown() then
+                    table.insert(out, row.professionText:GetText())
+                end
+            end
+            return table.concat(out, ",")
+        end
+        assertEq(shown(), "Mining,Skinning,Tailoring", "every member's every profession, by profession")
+        chamber.profession = "Mining"
+        SideQuest.UI.RefreshCraftersProfessions()
+        assertEq(shown(), "Mining", "choosing a profession narrows the list")
+    end)
+
     test("crafters: Cooldowns view groups holders by cooldown, ready-first", function()
         resetAddon()
         SideQuest.UI.main = nil

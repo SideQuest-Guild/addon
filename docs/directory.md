@@ -103,7 +103,8 @@ Lookups that the UI and the tooltip share live in `SideQuest.Directory` too, so 
 
 - `Directory.WhoCrafts(query)` → `{ { character, profession, skill, recipe_id, recipe_name, online } }` (recipe name
   or profession substring)
-- `Directory.ByProfession(name)` → members with that profession, best skill first
+- `Directory.ByProfession(name)` → members with that profession, best skill first; every member's every
+  profession (each entry names its `profession`) when `name` is nil
 - `Directory.WhoHas(itemId)` → `{ { character, bags, bank, online } }`
 - `Directory.WhoSells(itemId)`, `Directory.WhoBuys(itemId)`, `Directory.Requests()`
 - `Directory.Cooldowns(key)` → who has it and when it's ready
