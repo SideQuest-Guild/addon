@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.2 (2026-11-05)
+
+### Fixed
+
+- The guild crest in the window's corner shows whole again instead of half hidden under the header painting
+
 ## v0.5.1 (2026-11-05)
 
 ### Fixed
