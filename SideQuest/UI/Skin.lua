@@ -593,17 +593,27 @@ UI.WINDOW_TITLE_H = 21
 -- the title band and the native close button. Returns the close button so
 -- Main.lua can wire it to the frame it owns.
 local function applyWindowChrome(main, title)
-    NineSliceUtil.ApplyLayout(main, PORTRAIT_FRAME_LAYOUT)
+    -- Textures on `main` itself draw under every child frame, whatever their
+    -- layer, so the header painting (a child frame) covered the lower half of
+    -- the crest and the portrait ring. The border, crest, title and close
+    -- button live on their own frame raised above the window's content, the
+    -- way PortraitFrameTemplate keeps its NineSlice on top. It takes no mouse
+    -- input, so clicks still reach the content beneath it.
+    local chrome = CreateFrame("Frame", nil, main)
+    chrome:SetAllPoints(main)
+    chrome:SetFrameLevel(main:GetFrameLevel() + 20)
+    main.chrome = chrome
+    NineSliceUtil.ApplyLayout(chrome, PORTRAIT_FRAME_LAYOUT)
 
     -- The crest is drawn already round (CrestPortrait.tga), under the
     -- corner piece's portrait ring, where a native window shows a face.
-    local crest = main:CreateTexture(nil, "OVERLAY", nil, -1)
+    local crest = chrome:CreateTexture(nil, "OVERLAY", nil, -1)
     crest:SetSize(58, 58)
     crest:SetPoint("TOPLEFT", main, "TOPLEFT", -3, 5)
     crest:SetTexture(MEDIA_TEX .. "CrestPortrait")
     main.crest = crest
 
-    local titleText = makeFontString(main, FONT_DISPLAY, 13, C.gold, "CENTER")
+    local titleText = makeFontString(chrome, FONT_DISPLAY, 13, C.gold, "CENTER")
     titleText:SetPoint("TOPLEFT", main, "TOPLEFT", 60, -1)
     titleText:SetPoint("TOPRIGHT", main, "TOPRIGHT", -60, -1)
     titleText:SetHeight(UI.WINDOW_TITLE_H - 2)
@@ -611,7 +621,7 @@ local function applyWindowChrome(main, title)
     shade(titleText)
     main.titleText = titleText
 
-    local closeBtn = CreateFrame("Button", nil, main, "UIPanelCloseButton")
+    local closeBtn = CreateFrame("Button", nil, chrome, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", main, "TOPRIGHT", 1, 0)
     main.closeBtn = closeBtn
     return closeBtn

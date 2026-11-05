@@ -573,14 +573,25 @@ local function newMockRegion(kind, name, parent, template)
     self.SetScript = function(_, handler, fn) scripts[handler] = fn end
     self.GetScript = function(_, handler) return scripts[handler] end
 
+    -- Regions remember their draw layer (and sublevel) so the preview can
+    -- stack them the way the client does; SetDrawLayer changes it later.
+    local function region(regionKind, rName, layer, tmpl, subLevel)
+        local r = newMockRegion(regionKind, rName, self, tmpl)
+        r.__layer, r.__subLevel = layer, subLevel
+        return r
+    end
     self.CreateFontString = function(_, fsName, layer, tmpl)
-        return newMockRegion("FontString", fsName, self, tmpl)
+        return region("FontString", fsName, layer or "ARTWORK", tmpl)
     end
-    self.CreateTexture = function(_, texName, layer, tmpl)
-        return newMockRegion("Texture", texName, self, tmpl)
+    self.CreateTexture = function(_, texName, layer, tmpl, subLevel)
+        return region("Texture", texName, layer or "ARTWORK", tmpl, subLevel)
     end
-    self.CreateMaskTexture = function(_, texName, layer, tmpl)
-        return newMockRegion("MaskTexture", texName, self, tmpl)
+    self.CreateMaskTexture = function(_, texName, layer, tmpl, subLevel)
+        return region("MaskTexture", texName, layer or "ARTWORK", tmpl, subLevel)
+    end
+    self.SetDrawLayer = function(_, layer, subLevel)
+        self.__layer, self.__subLevel = layer, subLevel
+        return self
     end
 
     -- Animations: only the end state matters for a static preview render,
@@ -673,7 +684,16 @@ local NUMERIC_GETTERS = {
     GetWidth = function(t) return lastSize(t, "w") end,
     GetHeight = function(t) return lastSize(t, "h") end,
     GetStringWidth = stringWidth,
-    GetFrameLevel = function() return 1 end,
+    -- A frame sits one level above its parent unless SetFrameLevel moved it;
+    -- a region (texture, font string) draws at its frame's level.
+    GetFrameLevel = function(t)
+        local level = rawget(t, "__level")
+        if level then
+            return level
+        end
+        local parent = rawget(t, "__parent")
+        return parent and parent:GetFrameLevel() or 0
+    end,
 }
 
 -- Only PascalCase keys (the WoW API convention: SetPoint, CreateTexture,
@@ -696,6 +716,8 @@ end
 
 function CreateFrame(kind, name, parent, template)
     local self = newMockRegion(kind, name, parent, template)
+    self.__level = parent and parent:GetFrameLevel() + 1 or 0
+    self.SetFrameLevel = function(_, level) self.__level = level end
     if template == "UIPanelCloseButton" then
         -- Real template: a 32x32 button whose Normal texture is the
         -- red-lacquer Camelot exit button; Pushed/Disabled/Highlight

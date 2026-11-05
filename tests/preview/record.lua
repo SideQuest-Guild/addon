@@ -737,7 +737,29 @@ local function esc(s)
     return (s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
 end
 
---- Collect every visible (IsShown) descendant of `root`, in creation order.
+-- The client draws by frame level first, then each frame's regions by
+-- layer and sublevel; creation order only breaks ties. Painting in plain
+-- creation order hid a header painting that covered the window's crest.
+local LAYER_RANK = { BACKGROUND = 1, BORDER = 2, ARTWORK = 3, OVERLAY = 4, HIGHLIGHT = 5 }
+
+local function drawKey(obj, index)
+    local layer = rawget(obj, "__layer")
+    return {
+        level = obj:GetFrameLevel(),
+        layer = layer and (LAYER_RANK[layer] or 3) or 0, -- a frame's own box sits under its regions
+        subLevel = rawget(obj, "__subLevel") or 0,
+        index = index,
+    }
+end
+
+local function drawsBefore(a, b)
+    if a.level ~= b.level then return a.level < b.level end
+    if a.layer ~= b.layer then return a.layer < b.layer end
+    if a.subLevel ~= b.subLevel then return a.subLevel < b.subLevel end
+    return a.index < b.index
+end
+
+--- Collect every visible (IsShown) descendant of `root`, in the order the client draws them.
 local function visibleDescendants(root)
     local list = {}
     for _, entry in ipairs(WowStub.frames) do
@@ -763,6 +785,14 @@ local function visibleDescendants(root)
                 table.insert(list, obj)
             end
         end
+    end
+    local keyed = {}
+    for i, obj in ipairs(list) do
+        keyed[i] = { obj = obj, key = drawKey(obj, i) }
+    end
+    table.sort(keyed, function(a, b) return drawsBefore(a.key, b.key) end)
+    for i, entry in ipairs(keyed) do
+        list[i] = entry.obj
     end
     return list
 end
