@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.0 (2026-11-05)
+
+### New
+
+- The window opens 25% bigger, about the size of the game's own windows, and /sq scale makes it bigger or smaller
+- Crafters > Professions lists every guildmate's professions by default, with a Profession column; the button narrows it to one and steps back to All
+
+### Fixed
+
+- The window's headings, tabs and title read properly in game instead of as "XE2X80X89" codes, it draws above quest arrows, and the You tab no longer leaves gaps or empty buttons
+- Empty Guild, Ledger and Market views say what to do instead of overlapping text or a blank panel, and Enter runs a search
+
 ## v0.3.0 (2026-11-05)
 
 ### New
