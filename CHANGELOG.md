@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.0 (2026-11-05)
+
+### New
+
+- The Raids tab is now Events, and each event shows its kind as the website names it (World Boss, PvP, Social, ...)
+
 ## v0.4.0 (2026-11-05)
 
 ### New
