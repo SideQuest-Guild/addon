@@ -114,6 +114,10 @@ files["tests/test_ui_console.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }
 
+files["tests/test_ui_empty_states.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
 files["tests/test_bank.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }

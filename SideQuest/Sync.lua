@@ -101,7 +101,8 @@ SideQuest.RegisterSlash("export", function(rest)
     end
     local str = Sync.BuildExport()
     SideQuest.Fire("SQ_SHOW_EXPORT", str)
-    SideQuest.Print("Export ready (" .. #str .. " chars). Opening the Sync window.")
+    SideQuest.Print("Export ready (" .. #str .. " chars). SideQuest Companion uploads it on its own after "
+        .. "/reload or logout -- otherwise paste it on sidequest-guild.com/officers/sync/. Opening the Sync window.")
 end, "build/show the export string, or 'clear' to drop pending data")
 
 SideQuest.RegisterSlash("import", function(rest)

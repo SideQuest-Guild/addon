@@ -758,18 +758,18 @@ function UI.RefreshFreshness()
     end
     local at = SideQuestDB.guild and SideQuestDB.guild.generated_at or 0
     if at <= 0 then
-        setStateText(main.freshness, "Never synced -- ask an officer", true)
+        setStateText(main.freshness, "No site data yet -- ask an officer", true)
         return
     end
     local ageSeconds = math.max(0, now() - at)
     local hours = math.floor(ageSeconds / 3600)
     local text
     if hours < 1 then
-        text = "Synced just now"
+        text = "Site data from just now"
     elseif hours < 48 then
-        text = "Synced " .. hours .. "h ago"
+        text = "Site data from " .. hours .. "h ago"
     else
-        text = "Synced " .. math.floor(hours / 24) .. "d ago"
+        text = "Site data from " .. math.floor(hours / 24) .. "d ago"
     end
     setStateText(main.freshness, text, false)
 end
@@ -1576,8 +1576,21 @@ function UI.RefreshGuild()
         if not chamber.noResultText then
             chamber.noResultText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
             chamber.noResultText:SetPoint("TOPLEFT")
+            chamber.noResultText:SetWidth(500)
+            chamber.noResultText:SetWordWrap(true)
         end
-        setStateText(chamber.noResultText, query == "" and "No members match these filters." or "No one matches '" .. query .. "'.", true)
+        local message
+        if #order == 0 then
+            -- No member groups at all, before any filter is applied: nobody has ever
+            -- been imported or swept, not "filters hide everyone".
+            message = "No guild data yet -- SideQuest Companion loads it at login, "
+                .. "or ask an officer to paste the site's import with /sq import."
+        elseif query ~= "" then
+            message = "No one matches '" .. query .. "'."
+        else
+            message = "No members match these filters."
+        end
+        setStateText(chamber.noResultText, message, true)
         return
     elseif chamber.noResultText then
         chamber.noResultText:SetText("")
@@ -2681,8 +2694,15 @@ function UI.RefreshRaids()
         if not chamber.emptyText then
             chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
             chamber.emptyText:SetPoint("TOPLEFT")
+            chamber.emptyText:SetWidth(500)
+            chamber.emptyText:SetWordWrap(true)
         end
-        setStateText(chamber.emptyText, "No events scheduled yet.", true)
+        -- generated_at stays 0 until the first import ever lands; distinguish that
+        -- from an import that simply has no upcoming events right now.
+        local everImported = SideQuestDB.standings and (SideQuestDB.standings.generated_at or 0) > 0
+        setStateText(chamber.emptyText, everImported and "No events scheduled right now."
+            or "No event data yet -- SideQuest Companion loads it at login, "
+                .. "or ask an officer to paste the site's import with /sq import.", true)
         return
     elseif chamber.emptyText then
         chamber.emptyText:SetText("")
@@ -3899,8 +3919,17 @@ function UI.BuildConsoleSync(panel)
     end)
     skinEditBox(editBox, "Paste import text")
 
+    local syncHelpText = makeFontString(chamber.inner, FONT_BODY, 11, C.mist2, "LEFT")
+    syncHelpText:SetPoint("TOPLEFT", editBox, "BOTTOMLEFT", 0, -10)
+    syncHelpText:SetWidth(520)
+    if syncHelpText.SetWordWrap then syncHelpText:SetWordWrap(true) end
+    syncHelpText:SetText("SideQuest Companion uploads Export on its own after /reload or logout, and loads "
+        .. "the site's latest Import the next time you log in -- nothing to paste. Without it, paste Export above "
+        .. "on sidequest-guild.com/officers/sync/, then paste the site's Import text above or with /sq import.")
+    chamber.syncHelpText = syncHelpText
+
     local pendingHeading = createSubHeading(chamber.inner, "Pending (not yet exported)")
-    pendingHeading:SetPoint("TOPLEFT", editBox, "BOTTOMLEFT", 0, -14)
+    pendingHeading:SetPoint("TOPLEFT", syncHelpText, "BOTTOMLEFT", 0, -14)
     pendingHeading:SetWidth(520)
 
     -- two labelled columns instead of one long "--"-joined line.
@@ -3955,9 +3984,9 @@ function UI.RefreshConsoleSync()
     local chamber = panel.syncChamber
     local at = SideQuestDB.guild and SideQuestDB.guild.generated_at or 0
     if at > 0 then
-        chamber.lastSyncText:SetText("Last sync: " .. date("%Y-%m-%d %H:%M", at))
+        chamber.lastSyncText:SetText("Site data from: " .. date("%Y-%m-%d %H:%M", at))
     else
-        setStateText(chamber.lastSyncText, "Never synced yet.", true)
+        setStateText(chamber.lastSyncText, "No site data imported yet.", true)
     end
     local p = SideQuestDB.pending
     for i, def in ipairs(chamber.pendingKeys) do
