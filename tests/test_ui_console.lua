@@ -11,15 +11,46 @@ return function(h)
         SideQuest.UI.ShowTab("Console")
         SideQuestDB.officerData.inactive = {
             { member_id = 1, name = "Never Seen" },
-            { member_id = 2, name = "Seen Once", last_seen_at = 1762300800, last_raid_at = 1762300800 },
+            { member_id = 2, name = "Seen Once", level = 58, last_seen_at = 1762300800, last_raid_at = 1762300800 },
+            { member_id = 3, name = "No Raids", level = 42, last_seen_at = 1762300800 },
+        }
+        SideQuestDB.officerData.unseen = {
+            { member_id = 4, name = "Fresh Recruit" },
         }
         SideQuest.UI.RefreshConsoleRoster()
 
-        local rows = SideQuest.UI.panels.Console.rosterChamber.rows
-        local never, seen = rows[1].text:GetText(), rows[2].text:GetText()
+        local chamber = SideQuest.UI.panels.Console.rosterChamber
+        local rows = chamber.rows
+        local never, seen, noRaids = rows[1].text:GetText(), rows[2].text:GetText(), rows[3].text:GetText()
         h.assertTrue(never:find("no login on record", 1, true) ~= nil, "missing last-seen reads as no login: " .. never)
         h.assertTrue(never:find("1969", 1, true) == nil and never:find("1970", 1, true) == nil, "no epoch date")
         h.assertTrue(seen:find("last seen " .. date("%Y-%m-%d", 1762300800), 1, true) ~= nil, "a real date still shows")
+        h.assertTrue(seen:find("level 58", 1, true) ~= nil, "a known level shows: " .. seen)
+        h.assertTrue(seen:find("last raid", 1, true) ~= nil, "a known raid date shows: " .. seen)
+        h.assertTrue(noRaids:find("never raided", 1, true) == nil, "no fake 'never raided' when the raid date is unknown: " .. noRaids)
+        h.assertTrue(chamber.unseenText:GetText():find("1 member has no login on record yet", 1, true) ~= nil,
+            "unseen count line: " .. chamber.unseenText:GetText())
+
+        SideQuestDB.officerData.inactive = {}
+        SideQuestDB.officerData.unseen = {}
+        SideQuest.UI.RefreshConsoleRoster()
+        h.assertTrue(chamber.inactiveEmpty:GetText():find("No one has been away more than 14 days", 1, true) ~= nil,
+            "plain empty state: " .. chamber.inactiveEmpty:GetText())
+        h.assertEq(chamber.unseenText:GetText(), "", "no unseen line once everyone has a record")
+    end)
+
+    h.test("console roster: the sweep button reads clearly and explains itself", function()
+        h.resetAddon()
+        SideQuest.UI.main = nil
+        WowStub.SetUnit("player", { name = "Officer1", realm = "Whitemane", class = "PRIEST", guid = "Player-1-CONSOLE4" })
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Console")
+
+        local chamber = SideQuest.UI.panels.Console.rosterChamber
+        h.assertEq(chamber.sweepBtn:GetText(), "Read roster now", "button names the action, not 'sweep'")
+        h.assertTrue(chamber.sweepHint:GetText():find("removes no one", 1, true) ~= nil
+            or chamber.sweepHint:GetText():find("Removes no one", 1, true) ~= nil,
+            "hint says it's non-destructive: " .. chamber.sweepHint:GetText())
     end)
 
     h.test("Raid Night recording control: disabled outside a raid, enabled and toggling inside one", function()

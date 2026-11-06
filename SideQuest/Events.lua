@@ -65,7 +65,7 @@ function Events.InviteSigned(eventId)
     local invited = {}
     for _, signup in ipairs(roster) do
         if InviteUnit then
-            InviteUnit(signup.character)
+            InviteUnit(SideQuest.GameName(signup.character))
         end
         invited[#invited + 1] = signup.character
     end

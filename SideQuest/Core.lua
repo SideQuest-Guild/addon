@@ -8,7 +8,7 @@ local SQ = SideQuest
 
 SQ.ADDON_NAME = "SideQuest"
 SQ.ADDON_VERSION = "1.0.0" -- stamped literally; packager replaces @project-version@ in the .toc, not here
-SQ.CURRENT_DB_VERSION = 2
+SQ.CURRENT_DB_VERSION = 3
 
 --------------------------------------------------------------------------
 -- SavedVariables defaults + migrations
@@ -76,6 +76,7 @@ local function defaultDB()
             recruits = {},
             member_notes = {},
             inactive = {},
+            unseen = {}, -- guild members with no roster sweep, Battle.net login, or raid presence on record at all
         },
         roster = { taken_at = 0, members = {} }, -- this character's own latest GuildRoster sweep
         professions = {}, -- this character's own latest profession scans, keyed "Character|Profession"
@@ -101,6 +102,112 @@ local MIGRATIONS = {
         if minimap.angle then
             minimap.minimapPos = minimap.angle
             minimap.angle = nil
+        end
+    end,
+
+    -- 2 -> 3: before this fix, every name read off the guild roster, chat
+    -- senders, guild trade skill scans and typed-in text went through the
+    -- old realm-only NormalizeName, which on Forever (no realms, "First
+    -- Surname" identity) mis-keyed them as "First Surname-<realm>" --
+    -- a different string from the player's own correct "First-Surname"
+    -- key (SQ.NormalizeUnit, built straight from UnitName's name+surname
+    -- return). Rekey every stored character identity to SQ.CanonicalName
+    -- now that it exists; non-Forever saves round-trip unchanged since
+    -- CanonicalName keeps producing "Name-Realm" there.
+    [2] = function(db)
+        local function rekey(name)
+            if type(name) ~= "string" or name == "" then
+                return name
+            end
+            return (SQ.CanonicalName and SQ.CanonicalName(name)) or name
+        end
+
+        -- character -> record maps: merge an old-form entry into the
+        -- canonical key, keeping whichever side looks newer.
+        local function rekeyMap(tbl, timeField)
+            if type(tbl) ~= "table" then
+                return
+            end
+            local renames = {}
+            for key in pairs(tbl) do
+                local canon = rekey(key)
+                if canon ~= key then
+                    renames[key] = canon
+                end
+            end
+            for old, canon in pairs(renames) do
+                local oldVal, newVal = tbl[old], tbl[canon]
+                tbl[old] = nil
+                if newVal == nil then
+                    tbl[canon] = oldVal
+                elseif timeField and type(oldVal) == "table" and type(newVal) == "table" then
+                    local oldT, newT = oldVal[timeField] or 0, newVal[timeField] or 0
+                    if oldT > newT then
+                        tbl[canon] = oldVal
+                    end
+                end
+                -- else: a canonical entry already exists and looks as new
+                -- or newer; keep it, drop the stale duplicate.
+            end
+        end
+
+        -- lists of row tables carrying a `.character` field.
+        local function rekeyRows(rows)
+            if type(rows) ~= "table" then
+                return
+            end
+            for _, row in ipairs(rows) do
+                if type(row) == "table" and row.character then
+                    row.character = rekey(row.character)
+                end
+            end
+        end
+
+        rekeyMap(db.directory, "seen_at")
+        rekeyMap(db.addonVersions, "seenAt")
+        rekeyMap(db.prepAnswers, "at")
+
+        if type(db.standby) == "table" then
+            local seen, out = {}, {}
+            for _, name in ipairs(db.standby) do
+                local canon = rekey(name)
+                if not seen[canon] then
+                    seen[canon] = true
+                    out[#out + 1] = canon
+                end
+            end
+            db.standby = out
+        end
+
+        if db.roster then
+            rekeyRows(db.roster.members)
+        end
+        if db.pending and db.pending.roster then
+            rekeyRows(db.pending.roster.members)
+        end
+        if db.pending then
+            rekeyRows(db.pending.professions)
+            rekeyRows(db.pending.signups)
+        end
+
+        -- `professions` is keyed "Character|Profession".
+        if type(db.professions) == "table" then
+            local renames = {}
+            for key, row in pairs(db.professions) do
+                local char, prof = key:match("^(.-)%|(.*)$")
+                if char then
+                    local canon = rekey(char)
+                    if canon ~= char then
+                        renames[key] = canon .. "|" .. prof
+                    end
+                end
+            end
+            for old, newKey in pairs(renames) do
+                if db.professions[newKey] == nil then
+                    db.professions[newKey] = db.professions[old]
+                end
+                db.professions[old] = nil
+            end
         end
     end,
 }
@@ -272,17 +379,85 @@ function SQ.SafeUnitGUID(unit)
 end
 
 --------------------------------------------------------------------------
--- Name normalization: "Name-Realm"
+-- Name normalization: Forever has no realms; a character is "First
+-- Surname" (CHARACTERNAME_SURNAME_SEPARATOR = " ", confirmed in
+-- Ketho/BlizzardInterfaceResources forever branch Resources/LuaEnum.lua's
+-- Constants.CharacterNameSeparatorConsts). The client mixes two shapes of
+-- that identity across its own APIs: UnitName(unit) returns the two parts
+-- separately ("Legs", "Behindhead"); everything else (GetGuildRosterInfo,
+-- CHAT_MSG_ADDON senders, GetGuildTradeSkillInfo, typed-in text) hands
+-- back one string joined with a space, sometimes with a trailing
+-- realm/surname an old call site tacked on. CanonicalName folds every
+-- shape into the one key this addon stores and compares everywhere:
+-- "First-Surname" (the link form, CHARACTERNAME_LINK_SEPARATOR = "-") on
+-- Forever, "Name-Realm" elsewhere -- unchanged from before Forever.
 --------------------------------------------------------------------------
 
-function SQ.NormalizeName(name, realm)
+--- True on the Forever client (no realms, first-name/surname identity).
+-- RegionalUniqueNamesEnabled is Forever's own flag for this (Gethe/wow-ui-
+-- source, forever branch). WOW_PROJECT_ID == WOW_PROJECT_CAMELOT (18) is
+-- the same check other Forever addons (DBM, BagBrother) use, and is kept
+-- as a second signal in case the first is ever renamed or missing.
+function SQ.IsForever()
+    if type(RegionalUniqueNamesEnabled) == "function" then
+        local ok, enabled = pcall(RegionalUniqueNamesEnabled)
+        if ok and enabled then
+            return true
+        end
+    end
+    if WOW_PROJECT_ID and WOW_PROJECT_CAMELOT and WOW_PROJECT_ID == WOW_PROJECT_CAMELOT then
+        return true
+    end
+    return false
+end
+
+--- Canonicalize any name SideQuest reads off the client or types in by
+-- hand into the one key it stores and compares everywhere. `second`, when
+-- given, is a true second part (UnitName(unit)'s surname return, or a
+-- realm on non-Forever clients) -- never a full name by itself. `name`
+-- alone may already be a complete "First Surname"/"First-Surname"
+-- (optionally with a stray "-Realm"/"-Surname" tail some call site
+-- added); that's told apart from a true pair by whether `name` itself
+-- already contains a space or hyphen. Returns nil for a secret or empty
+-- name.
+function SQ.CanonicalName(name, second)
+    name = SQ.Unsecret(name)
     if not name or name == "" then
         return nil
     end
+    second = SQ.Unsecret(second)
+
+    if SQ.IsForever() then
+        if second and second ~= "" and not name:find(" ", 1, true) and not name:find("-", 1, true) then
+            -- A true (first, surname) pair, e.g. straight from UnitName(unit).
+            local surname = second:match("^([^-]+)") or second
+            return name .. "-" .. surname:gsub("%s", "")
+        end
+        -- `name` is already a complete identity string: link-ify its
+        -- surname separator (prefer the client's own conversion), then
+        -- keep only the first two hyphen-joined parts -- dropping any
+        -- trailing "-Realm"/"-Surname" an old call site appended.
+        local full = name
+        if full:find(" ", 1, true) then
+            if C_NameUtil and C_NameUtil.ReplaceSurnameSeparatorWithLinkSeparator then
+                local ok, linked = pcall(C_NameUtil.ReplaceSurnameSeparatorWithLinkSeparator, full)
+                if ok and linked then
+                    full = SQ.Unsecret(linked) or full
+                end
+            end
+            full = full:gsub(" ", "-", 1)
+        end
+        local first, surname = full:match("^([^-]+)-([^-]+)")
+        if not first then
+            return full -- single token: nothing to split
+        end
+        return first .. "-" .. surname
+    end
+
     if name:find("-", 1, true) then
         return name
     end
-    realm = realm
+    local realm = second
     if not realm or realm == "" then
         if GetNormalizedRealmName then
             realm = GetNormalizedRealmName()
@@ -293,12 +468,30 @@ function SQ.NormalizeName(name, realm)
     return name .. "-" .. realm
 end
 
+SQ.NormalizeName = SQ.CanonicalName
+
 function SQ.NormalizeUnit(unit)
     local name, realm = SQ.SafeUnitName(unit)
     if not name then
         return nil
     end
-    return SQ.NormalizeName(name, realm)
+    return SQ.CanonicalName(name, realm)
+end
+
+--- The form the game's own whisper/invite calls expect for `character` (a
+-- CanonicalName key). On Forever that's "First Surname": Blizzard's player
+-- link handler passes the link's raw name straight to
+-- ChatFrameUtil.SendTell and only converts to the "-" link form for /who
+-- (Blizzard_UIPanels_Game/Mainline/ItemRefHandlers.lua, forever branch).
+-- Elsewhere the canonical "Name-Realm" key is already the game's form.
+function SQ.GameName(character)
+    if not character or not SQ.IsForever() then
+        return character
+    end
+    local separator = Constants and Constants.CharacterNameSeparatorConsts
+        and Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR or " "
+    local first, surname = character:match("^([^-]+)-([^-]+)$")
+    return first and (first .. separator .. surname) or character
 end
 
 --------------------------------------------------------------------------

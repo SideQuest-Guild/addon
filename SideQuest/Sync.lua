@@ -64,6 +64,7 @@ function Sync.ApplyImport(payload)
             SideQuestDB.officerData.recruits = payload.officer.recruits or {}
             SideQuestDB.officerData.member_notes = payload.officer.member_notes or {}
             SideQuestDB.officerData.inactive = payload.officer.inactive or {}
+            SideQuestDB.officerData.unseen = payload.officer.unseen or {}
         end
     end
 
@@ -141,6 +142,7 @@ SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, _sender)
         SideQuestDB.officerData.recruits = off.recruits or SideQuestDB.officerData.recruits
         SideQuestDB.officerData.member_notes = off.member_notes or SideQuestDB.officerData.member_notes
         SideQuestDB.officerData.inactive = off.inactive or SideQuestDB.officerData.inactive
+        SideQuestDB.officerData.unseen = off.unseen or SideQuestDB.officerData.unseen
         SideQuest.Fire("SQ_OFFICER_DATA_UPDATED")
     end
 end)

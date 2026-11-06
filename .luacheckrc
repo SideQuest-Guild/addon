@@ -20,10 +20,12 @@ read_globals = {
     "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
     "ConvertToRaid", "InviteUnit", "GetGuildInfo",
     "C_GuildInfo", "C_ChatInfo", "C_Item", "C_Timer", "Enum", "C_Calendar", "C_DateAndTime",
+    -- Forever client identity (no realms, First-Surname)
+    "RegionalUniqueNamesEnabled", "WOW_PROJECT_ID", "WOW_PROJECT_CAMELOT", "C_NameUtil", "Constants",
     "issecretvalue", "DEFAULT_CHAT_FRAME",
     "StaticPopup_Show", "StaticPopup_Hide",
     -- v2: roster, professions, bank, prep, group placement
-    "GetNumGuildMembers", "GetGuildRosterInfo",
+    "GetNumGuildMembers", "GetGuildRosterInfo", "GetGuildRosterLastOnline",
     "C_TradeSkillUI", "GetProfessions", "GetProfessionInfo",
     "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo", "QueryGuildRecipes",
     "C_GuildBank", "GetCurrentGuildBankTab", "QueryGuildBankLog",
@@ -68,7 +70,7 @@ files["tests/wowstub.lua"] = {
         "GetInstanceInfo", "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
         "C_Item", "ConvertToRaid", "InviteUnit", "Enum", "C_ChatInfo",
         "C_Timer", "CreateFrame", "UIParent", "DEFAULT_CHAT_FRAME",
-        "GetNumGuildMembers", "GetGuildRosterInfo", "C_TradeSkillUI",
+        "GetNumGuildMembers", "GetGuildRosterInfo", "GetGuildRosterLastOnline", "C_TradeSkillUI",
         "GetProfessions", "GetProfessionInfo", "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo",
         "QueryGuildRecipes", "GetAverageItemLevel",
         "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog", "C_Reputation",
@@ -98,7 +100,7 @@ files["tests/preview/record.lua"] = {
 }
 
 files["tests/test_directory.lua"] = {
-    globals = { "WowStub" },
+    globals = { "WowStub", "GetProfessions" },
 }
 
 files["tests/test_ui_directory.lua"] = {
@@ -114,7 +116,7 @@ files["tests/test_calendar.lua"] = {
 }
 
 files["tests/test_roster.lua"] = {
-    globals = { "WowStub", "SideQuestDB" },
+    globals = { "WowStub", "SideQuestDB", "GetGuildRosterLastOnline" },
 }
 
 files["tests/test_recorder.lua"] = {

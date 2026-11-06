@@ -26,7 +26,9 @@ WowStub = {
     realm = "Whitemane",
     lootItems = {},
     invites = {},
+    whispers = {}, -- list of ChatFrame_SendTell targets
     convertToRaidCalls = 0,
+    mouseOverFrame = nil, -- set to a frame to make Frame:IsMouseOver() true for it and its ancestors
     -- v2
     guildRoster = {}, -- list of { name, rank, rankIndex, level, class, zone, online }
     professions = {}, -- array (up to 5) of { name, skillLine, skill, maxSkill }; see GetProfessions()
@@ -91,6 +93,45 @@ DEFAULT_CHAT_FRAME = {
         table.insert(WowStub.chatLog, msg)
     end,
 }
+
+--------------------------------------------------------------------------
+-- Client identity (Forever detection, addon-identity-fix)
+--------------------------------------------------------------------------
+
+-- Real clients: WOW_PROJECT_ID == WOW_PROJECT_CAMELOT (18) on Forever,
+-- some other value otherwise; RegionalUniqueNamesEnabled() true on
+-- Forever (no realms, first-name/surname identity). Default to a non-
+-- Forever client so every pre-existing test keeps its "Name-Realm"
+-- behavior; call WowStub.SetForever(true) to model Forever.
+WOW_PROJECT_CAMELOT = 18
+WOW_PROJECT_ID = 1
+WowStub.forever = false
+
+function WowStub.SetForever(enabled)
+    WowStub.forever = enabled and true or false
+    WOW_PROJECT_ID = WowStub.forever and WOW_PROJECT_CAMELOT or 1
+end
+
+function RegionalUniqueNamesEnabled()
+    return WowStub.forever
+end
+
+-- Ketho/BlizzardInterfaceResources forever branch, Resources/LuaEnum.lua.
+Constants = Constants or {}
+Constants.CharacterNameSeparatorConsts = {
+    CHARACTERNAME_SURNAME_SEPARATOR = " ",
+    CHARACTERNAME_LINK_SEPARATOR = "-",
+    CHARACTERNAME_REALMNAME_SEPARATOR = "-",
+}
+
+-- Gethe/wow-ui-source forever branch, Blizzard_APIDocumentationGenerated/NameUtilDocumentation.lua.
+C_NameUtil = C_NameUtil or {}
+function C_NameUtil.ReplaceSurnameSeparatorWithLinkSeparator(fullName)
+    if not fullName then
+        return fullName
+    end
+    return (fullName:gsub(" ", "-", 1))
+end
 
 --------------------------------------------------------------------------
 -- Units / roster
@@ -214,6 +255,15 @@ function GetGuildRosterInfo(index)
         return nil
     end
     return m.name, m.rank, m.rankIndex, m.level, m.class, m.zone, "", "", m.online, "", m.classFile or m.class
+end
+
+function GetGuildRosterLastOnline(index)
+    local m = WowStub.guildRoster[index]
+    if not m or not m.lastOnline then
+        return nil
+    end
+    local lo = m.lastOnline
+    return lo.years or 0, lo.months or 0, lo.days or 0, lo.hours or 0
 end
 
 --------------------------------------------------------------------------
@@ -574,6 +624,10 @@ function InviteUnit(name)
     table.insert(WowStub.invites, name)
 end
 
+function ChatFrame_SendTell(target)
+    table.insert(WowStub.whispers, target)
+end
+
 function SetRaidSubgroup(raidIndex, group)
     table.insert(WowStub.subgroupCalls, { index = raidIndex, group = group })
     WowStub.raidSubgroups["raid" .. raidIndex] = group
@@ -931,7 +985,32 @@ local function newMockRegion(kind, name, parent, template)
     self.IsEventRegistered = function(_, e) return events[e] or false end
     self.SetScript = function(_, handler, fn) scripts[handler] = fn end
     self.GetScript = function(_, handler) return scripts[handler] end
+    -- HookScript runs after whatever's already on that handler, same as the
+    -- real client, rather than replacing it (Skin.lua/LibDBIcon rely on this).
+    self.HookScript = function(_, handler, fn)
+        local existing = scripts[handler]
+        scripts[handler] = function(...)
+            if existing then
+                existing(...)
+            end
+            return fn(...)
+        end
+    end
     self.GetParent = function() return self.__parent end
+    -- True while the pointer is over this frame or any frame nested inside
+    -- it (child buttons sit within their parent row's hit rect in game, so
+    -- a hover there still counts as hovering the row). Tests point
+    -- WowStub.mouseOverFrame at whichever frame the pointer is "on".
+    self.IsMouseOver = function()
+        local f = WowStub.mouseOverFrame
+        while f do
+            if f == self then
+                return true
+            end
+            f = f.GetParent and f:GetParent()
+        end
+        return false
+    end
 
     -- Regions remember their draw layer (and sublevel) so the preview can
     -- stack them the way the client does; SetDrawLayer changes it later.

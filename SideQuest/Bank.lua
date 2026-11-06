@@ -74,7 +74,7 @@ local function itemIdFromLink(link)
 end
 
 local function normalized(name)
-    return name and SideQuest.NormalizeName(name, GetNormalizedRealmName and GetNormalizedRealmName() or "") or ""
+    return name and SideQuest.NormalizeName(name) or ""
 end
 
 -- year/month/day/hour from the API are elapsed time, not a date.

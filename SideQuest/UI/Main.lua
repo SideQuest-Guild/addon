@@ -101,6 +101,9 @@ local SHARE_SECTIONS = {
 -- CLASS_COLOR/CLASS_WORD lookup goes through this so case never hides the
 -- colour, in or out of game.
 local function classKey(className)
+    if type(issecretvalue) == "function" and issecretvalue(className) then
+        return nil
+    end
     return className and className:upper() or nil
 end
 
@@ -130,6 +133,9 @@ local EVENT_KIND_LABELS = {
     raid = "Raid", dungeon = "Dungeon", world_boss = "World Boss", leveling = "Leveling",
     pvp = "PvP", social = "Social", transmog = "Transmog", other = "Other",
 }
+-- Site ROLE_KINDS (events.py): only these events carry tank/healer/dps sign-ups and can be
+-- raid-invited or placed into groups; the rest take a bare going/maybe/can't RSVP.
+local ROLE_KINDS = { raid = true, dungeon = true, world_boss = true }
 
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
@@ -153,12 +159,32 @@ local function now()
     return GetServerTime and GetServerTime() or 0
 end
 
---- "Name-Realm" -> "Name" when the realm matches the player's own (DESIGN.md/
--- finding: realm only shown when it differs from yours); falls back to the
--- full string when there's no "-realm" suffix to strip.
+--- "First-Surname" -> "First Surname" on Forever (CHARACTERNAME_SURNAME_SEPARATOR
+-- is a space, not a realm separator -- Forever has no realms); elsewhere
+-- "Name-Realm" -> "Name" when the realm matches the player's own
+-- (DESIGN.md/finding: realm only shown when it differs from yours). Falls
+-- back to the full string when there's no "-" to split.
 local function displayName(character)
     if not character then
         return ""
+    end
+    -- Roster.lua already guards GetGuildRosterInfo's name through
+    -- SideQuest.Unsecret before it reaches SavedVariables, but this stays
+    -- defensive so an unreadable character never breaks the %- pattern
+    -- match below or blanks the row silently -- it says so instead
+    -- (PRODUCT.md principle 3).
+    if type(issecretvalue) == "function" and issecretvalue(character) then
+        return "Unknown"
+    end
+    if SideQuest.IsForever and SideQuest.IsForever() then
+        -- The canonical key IS the link form (CHARACTERNAME_LINK_SEPARATOR
+        -- = "-"); showing it as typed (CHARACTERNAME_SURNAME_SEPARATOR =
+        -- " ") matches how every other Forever UI displays character names.
+        local first, surname = character:match("^(.-)%-(.+)$")
+        if first then
+            return first .. " " .. surname
+        end
+        return character
     end
     local name, realm = character:match("^(.-)%-(.+)$")
     if not name then
@@ -1495,16 +1521,28 @@ local function buildGuildRow(content)
     ui.inviteBtn:SetPoint("RIGHT", 0, 0)
     ui.whisperBtn:Hide()
     ui.inviteBtn:Hide()
-    ui:SetScript("OnEnter", function()
-        ui.whisperBtn:Show()
-        ui.inviteBtn:Show()
-    end)
-    ui:SetScript("OnLeave", function()
-        if not ui.selected then
+    -- Whisper/Invite sit inside the row's own hit rect, so moving the
+    -- pointer onto either child button still fires the row's OnLeave (the
+    -- child takes mouse focus) even though the pointer never left the row;
+    -- that used to hide the buttons right back under the pointer, which
+    -- immediately re-triggered the row's OnEnter -- an endless flicker.
+    -- ui:IsMouseOver() is true for the whole time the pointer is anywhere
+    -- over the row OR either button, so only a real exit hides them. The
+    -- buttons' own OnLeave (createButton's hover-paint reset) is hooked,
+    -- not replaced, as a backstop for the same reason.
+    local function updateHoverButtons()
+        if ui.selected or ui:IsMouseOver() then
+            ui.whisperBtn:Show()
+            ui.inviteBtn:Show()
+        else
             ui.whisperBtn:Hide()
             ui.inviteBtn:Hide()
         end
-    end)
+    end
+    ui:SetScript("OnEnter", updateHoverButtons)
+    ui:SetScript("OnLeave", updateHoverButtons)
+    ui.whisperBtn:HookScript("OnLeave", updateHoverButtons)
+    ui.inviteBtn:HookScript("OnLeave", updateHoverButtons)
     return ui
 end
 
@@ -1618,10 +1656,10 @@ function UI.RefreshGuild()
         ui.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)
         ui.lastSeenText:SetText(r.online and "now" or (r.last_online_hours and (r.last_online_hours .. "h ago") or "--"))
         ui.whisperBtn:SetScript("OnClick", function()
-            if ChatFrame_SendTell then ChatFrame_SendTell(r.character) end
+            if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(r.character)) end
         end)
         ui.inviteBtn:SetScript("OnClick", function()
-            if InviteUnit then InviteUnit(r.character) end
+            if InviteUnit then InviteUnit(SideQuest.GameName(r.character)) end
         end)
         ui.inviteBtn:SetEnabled(SideQuest.IsOfficer())
         ui.selected = (chamber.selectedCharacter == r.character)
@@ -1935,7 +1973,7 @@ function UI.RefreshCraftersSearch()
             row.skillText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
             row.skillText:SetText((entry.skill and ("skill " .. entry.skill) or "") .. (entry.online and "  (online)" or "  (offline)"))
             row.whisperBtn:SetScript("OnClick", function()
-                if ChatFrame_SendTell then ChatFrame_SendTell(entry.character) end
+                if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(entry.character)) end
             end)
             row:Show()
             y = y + 20
@@ -2061,10 +2099,13 @@ function UI.RefreshCraftersProfessions()
         if not chamber.noResultText then
             chamber.noResultText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
             chamber.noResultText:SetPoint("TOPLEFT")
+            chamber.noResultText:SetWidth(500)
+            chamber.noResultText:SetWordWrap(true)
         end
         setStateText(chamber.noResultText, chamber.profession
             and ("No one in the directory has " .. chamber.profession .. " yet.")
-            or "No one has shared their professions yet.", false)
+            or "No one has shared their professions yet -- skill levels sync automatically once you're "
+                .. "out of combat; open a profession window to also share its recipes.", false)
         return
     elseif chamber.noResultText then
         chamber.noResultText:SetText("")
@@ -2107,7 +2148,7 @@ function UI.RefreshCraftersProfessions()
         row.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)
         row.lastSeenText:SetText(m.online and "Online" or ago(craftersLastSeen(m.character)))
         row.whisperBtn:SetScript("OnClick", function()
-            if ChatFrame_SendTell then ChatFrame_SendTell(m.character) end
+            if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(m.character)) end
         end)
         row:Show()
     end
@@ -2191,7 +2232,7 @@ function UI.RefreshCraftersCooldowns()
                 row.readyText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
                 row.readyText:SetText(readyWord(h.ready_at))
                 row.whisperBtn:SetScript("OnClick", function()
-                    if ChatFrame_SendTell then ChatFrame_SendTell(h.character) end
+                    if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(h.character)) end
                 end)
                 row:Show()
                 y = y + 20
@@ -2343,7 +2384,7 @@ local function paintMarketRow(row, character, detail, class)
     row.detailText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
     row.detailText:SetText(detail)
     row.whisperBtn:SetScript("OnClick", function()
-        if ChatFrame_SendTell then ChatFrame_SendTell(character) end
+        if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(character)) end
     end)
 end
 
@@ -2469,7 +2510,13 @@ local function buildMarketEditorRow(parent, placeholderItem, extraFields, button
     local itemBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
     skinEditBox(itemBox, placeholderItem)
     itemBox:SetSize(140, 20)
-    itemBox:SetPoint("LEFT", 0, 0)
+    itemBox:SetPoint("LEFT", 8, 0) -- InputBoxTemplate's Left texture is
+    -- anchored 5px outside the edit box's own frame (see
+    -- InputBoxVisualTemplate in Blizzard_SharedXML/Shared/InputBox); at
+    -- x=0 that bleed sits past the scroll content's left edge and the
+    -- ScrollFrame clips it off, cutting the box's left border/text. An
+    -- 8px gap (matching the gap used between the other fields below)
+    -- keeps the whole border on-screen.
     itemBox:SetAutoFocus(false)
     acceptItemLinks(itemBox)
     row.itemBox = itemBox
@@ -2714,7 +2761,6 @@ function UI.RefreshRaids()
         local row = chamber.rows[i]
         if not row then
             row = createQuestLogRow(chamber.content)
-            row:SetHeight(isOfficer and 86 or 64)
             row.roleCounts = makeFontString(row, FONT_BODY, 11, C.mist, "LEFT")
             row.roleCounts:SetPoint("TOPLEFT", row.meta, "BOTTOMLEFT", 0, -4)
             row.answers = {}
@@ -2731,22 +2777,36 @@ function UI.RefreshRaids()
             row.officerReason:SetPoint("TOPLEFT", row.inviteBtn, "BOTTOMLEFT", 0, -2)
             chamber.rows[i] = row
         end
+        local isRoleKind = ROLE_KINDS[evt.kind] == true
+        local showsOfficerActions = isOfficer and isRoleKind
+        row:SetHeight(showsOfficerActions and 128 or 64)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
-        y = y + (isOfficer and 92 or 70)
+        y = y + (showsOfficerActions and 150 or 70)
         local isOpen = (evt.starts_at or 0) > now()
         row.mark:SetAtlas(isOpen and "QuestNormal" or "QuestTurnin")
         row.title:SetText(evt.title or "Event")
         row.meta:SetText((EVENT_KIND_LABELS[evt.kind] or "Event") .. "  --  " .. date("%A %b %d, %H:%M", evt.starts_at or now()))
 
-        local roleCounts = { tank = 0, healer = 0, dps = 0 }
-        for _, s in ipairs(evt.signups or {}) do
-            if s.status == "signed" and roleCounts[s.role] ~= nil then
-                roleCounts[s.role] = roleCounts[s.role] + 1
+        if isRoleKind then
+            local roleCounts = { tank = 0, healer = 0, dps = 0 }
+            for _, s in ipairs(evt.signups or {}) do
+                if s.status == "signed" and roleCounts[s.role] ~= nil then
+                    roleCounts[s.role] = roleCounts[s.role] + 1
+                end
             end
+            row.roleCounts:SetText(string.format("Signed: Tank %d  --  Healer %d  --  DPS %d  (%d total)",
+                roleCounts.tank, roleCounts.healer, roleCounts.dps, #(evt.signups or {})))
+        else
+            local answerCounts = { signed = 0, tentative = 0, absent = 0 }
+            for _, s in ipairs(evt.signups or {}) do
+                if answerCounts[s.status] ~= nil then
+                    answerCounts[s.status] = answerCounts[s.status] + 1
+                end
+            end
+            row.roleCounts:SetText(string.format("Going %d  --  Maybe %d  --  Can't %d",
+                answerCounts.signed, answerCounts.tentative, answerCounts.absent))
         end
-        row.roleCounts:SetText(string.format("Signed: Tank %d  --  Healer %d  --  DPS %d  (%d total)",
-            roleCounts.tank, roleCounts.healer, roleCounts.dps, #(evt.signups or {})))
 
         local _, status = SideQuest.Signups.MyState(evt.id)
         local statusToAnswer = { signed = "going", tentative = "maybe", absent = "cant" }
@@ -2759,10 +2819,10 @@ function UI.RefreshRaids()
             btn:SetSelected(answer == currentAnswer)
         end
 
-        row.inviteBtn:SetShown(isOfficer)
-        row.placeBtn:SetShown(isOfficer)
-        row.officerReason:SetShown(isOfficer)
-        if isOfficer then
+        row.inviteBtn:SetShown(showsOfficerActions)
+        row.placeBtn:SetShown(showsOfficerActions)
+        row.officerReason:SetShown(showsOfficerActions)
+        if showsOfficerActions then
             local inCombat = SideQuest.InCombat()
             local isLeader = type(IsRaidLeader) == "function" and IsRaidLeader()
                 or type(IsPartyLeader) == "function" and IsPartyLeader()
@@ -3727,15 +3787,20 @@ function UI.BuildConsoleRoster(panel)
     local chamber = createChamber(sub, "SideQuestConsoleRosterChamber")
     chamber:SetAllPoints(sub)
 
-    local sweepBtn = createButton(chamber.inner, "primary", "Sweep roster", 140, 22)
+    local sweepBtn = createButton(chamber.inner, "primary", "Read roster now", 160, 22)
     sweepBtn:SetPoint("TOPLEFT", 14, -30)
     sweepBtn:SetScript("OnClick", function()
         SideQuest.Roster.Sweep()
         UI.RefreshConsoleRoster()
     end)
 
-    local scroll, content = buildScroll(chamber.inner, -58)
+    local sweepHint = makeFontString(chamber.inner, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+    sweepHint:SetPoint("TOPLEFT", sweepBtn, "BOTTOMLEFT", 0, -4)
+    sweepHint:SetText("Reads the guild roster now and sends it with the next sync. Removes no one.")
+
+    local scroll, content = buildScroll(chamber.inner, -78)
     chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
+    chamber.sweepBtn, chamber.sweepHint = sweepBtn, sweepHint
     panel.rosterChamber = chamber
 end
 
@@ -3746,6 +3811,7 @@ function UI.RefreshConsoleRoster()
     end
     local chamber = panel.rosterChamber
     local inactive = SideQuestDB.officerData.inactive or {}
+    local unseen = SideQuestDB.officerData.unseen or {}
     for _, r in ipairs(chamber.rows) do
         r:Hide()
     end
@@ -3774,7 +3840,7 @@ function UI.RefreshConsoleRoster()
         end
         chamber.inactiveEmpty:ClearAllPoints()
         chamber.inactiveEmpty:SetPoint("TOPLEFT", 0, -y)
-        setStateText(chamber.inactiveEmpty, "No inactivity flagged.", true)
+        setStateText(chamber.inactiveEmpty, "No one has been away more than 14 days.", true)
         y = y + 20
     elseif chamber.inactiveEmpty then
         chamber.inactiveEmpty:SetText("")
@@ -3792,14 +3858,31 @@ function UI.RefreshConsoleRoster()
         end
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
-        row.text:SetText(m.name
-            .. (m.last_seen_at and (" -- last seen " .. date("%Y-%m-%d", m.last_seen_at)) or " -- no login on record")
-            .. (m.last_raid_at and (", last raid " .. date("%Y-%m-%d", m.last_raid_at)) or ", never raided"))
+        local levelPart = m.level and (" -- level " .. tostring(m.level)) or ""
+        local lastSeenPart = m.last_seen_at
+            and (" -- last seen " .. date("%Y-%m-%d", m.last_seen_at))
+            or " -- no login on record"
+        local lastRaidPart = m.last_raid_at and (", last raid " .. date("%Y-%m-%d", m.last_raid_at)) or ""
+        row.text:SetText(m.name .. levelPart .. lastSeenPart .. lastRaidPart)
         row.rankBtn:SetScript("OnClick", function()
             SideQuest.Recruits.AddNote(m.name, "Rank suggestion: demote for inactivity")
         end)
         row:Show()
         y = y + 22
+    end
+    if not chamber.unseenText then
+        chamber.unseenText = makeFontString(chamber.content, FONT_BODY, 11, C.mist2, "LEFT")
+    end
+    chamber.unseenText:ClearAllPoints()
+    chamber.unseenText:SetPoint("TOPLEFT", 0, -y)
+    if #unseen == 1 then
+        chamber.unseenText:SetText("1 member has no login on record yet.")
+        y = y + 20
+    elseif #unseen > 1 then
+        chamber.unseenText:SetText(#unseen .. " members have no login on record yet.")
+        y = y + 20
+    else
+        chamber.unseenText:SetText("")
     end
     setScrollContentHeight(chamber.scroll, y)
 end

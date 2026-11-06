@@ -50,4 +50,43 @@ return function(h)
         h.assertEq(#payload.roster.members, 4, "every member swept")
         WowStub.isOfficer = false
     end)
+
+    h.test("roster: an offline member's last_online_hours comes from GetGuildRosterLastOnline", function()
+        h.resetAddon()
+        WowStub.guildRoster = {
+            { name = "Member1", rank = "Member", rankIndex = 3, level = 60, class = "MAGE", classFile = "MAGE",
+                zone = "Ironforge", online = true },
+            { name = "Member2", rank = "Member", rankIndex = 3, level = 55, class = "ROGUE", classFile = "ROGUE",
+                zone = "", online = false, lastOnline = { years = 0, months = 0, days = 2, hours = 5 } },
+        }
+        local snapshot = SideQuest.Roster.Sweep()
+        h.assertEq(snapshot.members[1].last_online_hours, 0, "an online member reads 0 hours")
+        h.assertEq(snapshot.members[2].last_online_hours, 53, "an offline member's days+hours convert to hours (2*24+5)")
+    end)
+
+    h.test("roster: an offline member gets no last_online_hours when GetGuildRosterLastOnline doesn't exist", function()
+        h.resetAddon()
+        WowStub.guildRoster = {
+            { name = "Member1", rank = "Member", rankIndex = 3, level = 40, class = "WARRIOR", classFile = "WARRIOR",
+                zone = "", online = false },
+        }
+        local saved = GetGuildRosterLastOnline
+        GetGuildRosterLastOnline = nil
+        local snapshot = SideQuest.Roster.Sweep()
+        GetGuildRosterLastOnline = saved
+        h.assertEq(snapshot.members[1].last_online_hours, nil, "no API, no guess")
+    end)
+    h.test("roster: a secret member name is skipped instead of landing in SavedVariables unreadable", function()
+        h.resetAddon()
+        WowStub.guildRoster = {
+            { name = WowStub.SECRET, rank = "Member", rankIndex = 3, level = 60, class = WowStub.SECRET,
+                classFile = WowStub.SECRET, zone = "Ironforge", online = true },
+            { name = "Bob-Whitemane", rank = "Member", rankIndex = 3, level = 55, class = "ROGUE",
+                classFile = "ROGUE", zone = "Stormwind", online = false },
+        }
+        local snapshot = SideQuest.Roster.Sweep()
+        h.assertTrue(snapshot ~= nil, "the sweep still completes")
+        h.assertEq(#snapshot.members, 1, "the unreadable member is skipped, not stored broken")
+        h.assertEq(snapshot.members[1].character, "Bob-Whitemane", "the readable member still comes through")
+    end)
 end

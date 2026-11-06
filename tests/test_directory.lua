@@ -419,6 +419,23 @@ return function(h)
         h.assertEq(row, nil, "a linked trade skill window is skipped")
     end)
 
+    h.test("professions: a GetProfessions() runtime error falls back to C_SkillInfo instead of stalling the scan", function()
+        h.resetAddon()
+        WowStub.realm = "Whitemane"
+        WowStub.SetUnit("player", { name = "Smith", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-SSSS0002" })
+        WowStub.skillLines = {
+            { name = "Mining", isHeader = false, skill = 75, maxSkill = 300 },
+        }
+        local realGetProfessions = GetProfessions
+        GetProfessions = function() error("Forever client quirk") end
+        local ok = pcall(SideQuest.Professions.ScanPassive)
+        GetProfessions = realGetProfessions
+        h.assertTrue(ok, "ScanPassive itself never throws even if GetProfessions does")
+        local prof = SideQuest.Directory.Section("Smith-Whitemane", "prof")
+        h.assertTrue(prof ~= nil, "the C_SkillInfo fallback still published a prof section")
+        h.assertEq(prof.professions[1].name, "Mining", "fallback-scanned profession stored")
+    end)
+
     h.test("professions: native guild profession seed for non-SideQuest members, officer-only, hourly, never overwrites the owner", function()
         h.resetAddon()
         WowStub.realm = "Whitemane"

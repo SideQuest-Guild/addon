@@ -11,6 +11,22 @@ local function now()
     return GetServerTime and GetServerTime() or 0
 end
 
+--- Hours since a guild roster entry was last online, from GetGuildRosterLastOnline's
+-- years/months/days/hours breakdown. nil when the API doesn't exist on this client or
+-- returns nothing for this index (member info not loaded yet).
+local function offlineHours(index)
+    if type(GetGuildRosterLastOnline) ~= "function" then
+        return nil
+    end
+    local years, months, days, hours = GetGuildRosterLastOnline(index)
+    years, months, days, hours = SideQuest.Unsecret(years), SideQuest.Unsecret(months),
+        SideQuest.Unsecret(days), SideQuest.Unsecret(hours)
+    if years == nil and months == nil and days == nil and hours == nil then
+        return nil
+    end
+    return (hours or 0) + (days or 0) * 24 + (months or 0) * 30 * 24 + (years or 0) * 365 * 24
+end
+
 --- True when the roster APIs this module needs exist on this client. Guild
 -- roster info is unverified on Forever per the researched addon facts, so
 -- every caller must check this and degrade (state the manual path) rather
@@ -41,11 +57,20 @@ function Roster.Sweep(auto)
     for i = 1, total do
         local name, rank, rankIndex, level, _, zone, _, _, online, _, classFileName =
             GetGuildRosterInfo(i)
+        -- Identity return (AGENTS.md: UnitName et al. are secret whenever their
+        -- restriction is on); Forever doesn't document GetGuildRosterInfo's
+        -- SecretReturns either way, so guard it like every other name read in
+        -- this addon rather than let an unreadable name blank the row or break
+        -- the %-pattern match in UI/Main.lua's displayName.
+        name = SideQuest.Unsecret(name)
+        classFileName = SideQuest.Unsecret(classFileName)
         if name then
-            local charName = name
-            if not charName:find("-") and GetNormalizedRealmName then
-                charName = SideQuest.NormalizeName(name, GetNormalizedRealmName())
-            end
+            -- GetGuildRosterInfo hands back one "First Surname"-shaped
+            -- string on Forever, not UnitName's separate name/surname
+            -- pair; SQ.CanonicalName splits and links it to the same
+            -- "First-Surname" key the player's own SQ.NormalizeUnit
+            -- produces (addon-identity-fix).
+            local charName = SideQuest.NormalizeName(name)
             table.insert(members, {
                 character = charName,
                 rank = rank,
@@ -54,7 +79,7 @@ function Roster.Sweep(auto)
                 class = classFileName,
                 zone = zone or "",
                 online = online and true or false,
-                last_online_hours = online and 0 or nil,
+                last_online_hours = online and 0 or offlineHours(i),
             })
         end
     end

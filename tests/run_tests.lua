@@ -74,6 +74,7 @@ local function resetAddon()
     SideQuest.Comm.ResetAnswers()
     SideQuest.Comm.ResetRateLimits()
     SideQuest.Directory.ResetState()
+    SideQuest.Professions.ResetState()
     SideQuest.Sync.ResetInboxState()
     WowStub.isOfficer = false
     WowStub.officerNoteCalls = 0
@@ -88,6 +89,12 @@ local function resetAddon()
     WowStub.instance = { inInstance = false, instanceType = "none", instanceID = 0, difficultyID = 1 }
     WowStub.inRaid = false
     WowStub.raidCount = 0
+    WowStub.professions = {}
+    WowStub.skillLines = {}
+    WowStub.openTradeSkill = nil
+    WowStub.SetForever(false)
+    WowStub.invites = {}
+    WowStub.whispers = {}
 end
 
 --------------------------------------------------------------------------

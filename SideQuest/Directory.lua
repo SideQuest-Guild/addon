@@ -239,20 +239,32 @@ end
 
 function Directory.Prune()
     local roster = SideQuestDB.roster and SideQuestDB.roster.members
-    local rosterKnown = roster ~= nil and #roster > 0
+    -- GetNumGuildMembers() returns (total, online); with "Show Offline"
+    -- off in the guild panel, a sweep can only see the online members even
+    -- though `total` still counts everyone -- a roster like that is a
+    -- non-representative subset, and pruning against it would delete
+    -- every offline member's directory record on every sweep. Only trust
+    -- the roster to say who's gone when it covers the whole guild; when
+    -- GetNumGuildMembers isn't available to check, don't prune by roster
+    -- at all rather than guess.
+    local total = GetNumGuildMembers and GetNumGuildMembers()
+    local rosterKnown = roster ~= nil and #roster > 0 and total ~= nil and #roster >= total
     local inRoster = {}
     if rosterKnown then
         for _, m in ipairs(roster) do
             inRoster[m.character] = true
         end
     end
+    local me = SideQuest.NormalizeUnit("player")
     local nowTs = now()
     local toRemove = {}
     for character, entry in pairs(SideQuestDB.directory) do
-        local tooOld = entry.seen_at and (nowTs - entry.seen_at) > PRUNE_AGE
-        local notInRoster = rosterKnown and not inRoster[character]
-        if tooOld or notInRoster then
-            table.insert(toRemove, character)
+        if character ~= me then
+            local tooOld = entry.seen_at and (nowTs - entry.seen_at) > PRUNE_AGE
+            local notInRoster = rosterKnown and not inRoster[character]
+            if tooOld or notInRoster then
+                table.insert(toRemove, character)
+            end
         end
     end
     for _, character in ipairs(toRemove) do
@@ -270,13 +282,7 @@ end)
 --------------------------------------------------------------------------
 
 local function normalizeSender(sender)
-    if not sender then
-        return nil
-    end
-    if sender:find("-", 1, true) then
-        return sender
-    end
-    return SideQuest.NormalizeName(sender, GetNormalizedRealmName and GetNormalizedRealmName() or "")
+    return SideQuest.NormalizeName(sender)
 end
 
 local function storeReceived(character, section, v, at, d, relayed)

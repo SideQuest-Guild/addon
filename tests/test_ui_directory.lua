@@ -90,6 +90,36 @@ return function(h)
         assertEq(shown(), "Mining", "choosing a profession narrows the list")
     end)
 
+    test("crafters: Professions view shows the player's own scanned professions, not just peers'", function()
+        resetAddon()
+        SideQuest.UI.main = nil
+        setupPlayer()
+        SideQuestDB.roster = { taken_at = 1000, members = {} }
+        SideQuestDB.directory = {}
+        -- A stubbed Forever GetProfessions()/GetProfessionInfo() pass -- no profession window opened,
+        -- the way skill levels are expected to show up automatically.
+        WowStub.professions = {
+            { name = "Tailoring", skillLine = 197, skill = 150, maxSkill = 300 },
+        }
+        SideQuest.Professions.ScanPassive()
+
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Crafters")
+        SideQuest.UI.ShowCraftersSub("Professions")
+        local chamber = SideQuest.UI.panels.Crafters.professionsChamber
+        assertTrue(chamber.noResultText == nil or chamber.noResultText:GetText() == "",
+            "the empty state is cleared once the player's own scan lands")
+        local shown = {}
+        for _, row in ipairs(chamber.rows) do
+            if row:IsShown() then
+                table.insert(shown, { name = row.nameRow.nameFS:GetText(), profession = row.professionText:GetText() })
+            end
+        end
+        assertEq(#shown, 1, "the player's own profession row is listed")
+        assertTrue(shown[1].name:find("Demo1") ~= nil, "the row names the player, not a peer")
+        assertEq(shown[1].profession, "Tailoring", "the scanned profession name is shown")
+    end)
+
     test("crafters: Cooldowns view groups holders by cooldown, ready-first", function()
         resetAddon()
         SideQuest.UI.main = nil
@@ -163,6 +193,52 @@ return function(h)
         SideQuest.UI.ShowMarketSub("Mine")
         local chamber = SideQuest.UI.panels.Market.mineChamber
         assertTrue(chamber.sellListRows[1]:IsShown(), "the player's own sell listing is shown")
+    end)
+
+    test("market: Mine's item fields are offset clear of the scroll content's left clip edge", function()
+        resetAddon()
+        SideQuest.UI.main = nil
+        setupPlayer()
+        SideQuestDB.directory = {}
+        -- Record every SetPoint call (same technique as
+        -- tests/preview/record.lua) so we can read back the x offset the
+        -- addon actually anchors the item edit boxes with.
+        local origIndex = WowStub.FrameMeta.__index
+        WowStub.FrameMeta.__index = function(t, k)
+            local fn = origIndex(t, k)
+            if not fn then return nil end
+            return function(self, ...)
+                self.__geo = self.__geo or {}
+                self.__geo[#self.__geo + 1] = { method = k, args = { ... } }
+                return fn(self, ...)
+            end
+        end
+        SideQuest.UI.Show()
+        WowStub.FrameMeta.__index = origIndex
+        local function leftOffset(editBox)
+            local x
+            for _, call in ipairs(editBox.__geo or {}) do
+                if call.method == "SetPoint" and call.args[1] == "LEFT" and type(call.args[2]) == "number" then
+                    x = call.args[2]
+                end
+            end
+            return x
+        end
+        local chamber = SideQuest.UI.panels.Market.mineChamber
+        for _, editor in ipairs({ chamber.sellEditor, chamber.buyEditor, chamber.requestEditor }) do
+            local x = leftOffset(editor.itemBox)
+            -- InputBoxTemplate's native Left texture (InputBoxVisualTemplate
+            -- in Blizzard_SharedXML/Shared/InputBox/InputBoxTemplates.xml) is
+            -- anchored 5px outside the edit box's own frame. The item box
+            -- sits flush against the Mine scroll content's left edge (x=0 in
+            -- content space), which is also the ScrollFrame's clip boundary,
+            -- so an x offset of 0 there lets the ScrollFrame clip the
+            -- border/text off in-game (this stub doesn't model the native
+            -- template's textures, so it alone can't catch that).
+            assertTrue(x ~= nil and x >= 5,
+                "item field must be anchored at least 5px clear of the scroll content's left clip edge, got x=" ..
+                    tostring(x))
+        end
     end)
 
     test("guild: clicking a member shows their directory detail inline", function()

@@ -24,6 +24,12 @@ local function professionLookup()
     return out
 end
 
+--- Test/reset helper: clear the module-level scan state between tests (production never resets it;
+-- the character's profession state only ever accumulates for the session).
+function Professions.ResetState()
+    profState = {}
+end
+
 function Professions.HasModernAPI()
     return C_TradeSkillUI ~= nil
         and type(C_TradeSkillUI.GetAllRecipeIDs) == "function"
@@ -57,14 +63,20 @@ local function scanPassiveModern()
     if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then
         return false
     end
-    local p1, p2, arch, fish, cook = GetProfessions()
+    -- Defensive like the rest of this file (C_SkillInfo fallback and the recipe scan both pcall their
+    -- calls): a runtime error here must not silently stop every future scan, which is exactly what
+    -- "never appears" looks like from the player's side.
+    local ok, p1, p2, arch, fish, cook = pcall(GetProfessions)
+    if not ok then
+        return false
+    end
     local slots = { p1, p2, arch, fish, cook }
     local any = false
     for i = 1, 5 do
         local index = slots[i]
         if index then
-            local name, _, skillLevel, maxSkillLevel, _, _, skillLine = GetProfessionInfo(index)
-            if name and name ~= "" then
+            local ok2, name, _, skillLevel, maxSkillLevel, _, skillLine = pcall(GetProfessionInfo, index)
+            if ok2 and name and name ~= "" then
                 any = true
                 mergeSkill(name, skillLine, skillLevel, maxSkillLevel)
             end
@@ -227,7 +239,9 @@ function Professions.ScanOpenWindow()
     local existing = profState[profName]
     profState[profName] = {
         name = profName,
-        skill_line = info.skillLineID or (existing and existing.skill_line),
+        -- ProfessionInfo (GetBaseProfessionInfo/GetChildProfessionInfo) has no skillLineID field on
+        -- Forever; skill_line only ever comes from the passive scan's GetProfessionInfo.
+        skill_line = existing and existing.skill_line,
         skill = info.skillLevel or (existing and existing.skill) or 0,
         max_skill = info.maxSkillLevel or (existing and existing.max_skill) or 0,
         recipes = recipes,
@@ -273,7 +287,7 @@ function Professions.SeedFromGuild()
     for i = 1, total do
         local name, playerName, curSkill, maxSkill = GetGuildTradeSkillInfo(i)
         if name and playerName then
-            local character = SideQuest.NormalizeName(playerName, GetNormalizedRealmName and GetNormalizedRealmName() or "")
+            local character = SideQuest.NormalizeName(playerName)
             if character then
                 local entry = SideQuestDB.directory[character]
                 if not (entry and entry.prof) then
