@@ -19,6 +19,8 @@ CurseForge and GitHub get the same zip, built by GitHub Actions and signed. [SEC
 check that a zip you downloaded came from this repo.
 
 In game, click the crest on the minimap or type `/sq` to open the window. Drag the crest round the minimap to move it.
+Settings such as the minimap button, window scale and directory sharing are also in the game menu, under
+**Options > AddOns > SideQuest Guild** (or type `/sq options`).
 
 ## Loot points
 
@@ -145,6 +147,7 @@ events.
 | `/sq standby` | everyone | Asks to be on standby tonight. Officers in the raid add themselves. |
 | `/sq help` | everyone | Lists every command. |
 | `/sq minimap` | everyone | Hides or shows the minimap button. |
+| `/sq options` | everyone | Opens the SideQuest settings panel (Options > AddOns > SideQuest Guild). |
 | `/sq scale <0.75-2>` | everyone | Makes the window bigger or smaller (1.25 by default); `/sq scale reset` goes back. |
 | `/sq export` | officers | Makes the text to paste into the website. |
 | `/sq export clear` | officers | Clears what was sent, once the website has accepted it. |

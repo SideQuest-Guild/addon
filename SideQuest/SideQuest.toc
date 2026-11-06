@@ -47,3 +47,4 @@ UI\Main.lua
 UI\Tooltip.lua
 UI\BidPopup.lua
 UI\MinimapButton.lua
+UI\Options.lua

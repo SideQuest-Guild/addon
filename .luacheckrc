@@ -39,6 +39,8 @@ read_globals = {
     "C_Container", "GetAverageItemLevel",
     -- minimap button (LibDBIcon-1.0 through LibStub)
     "LibStub",
+    -- options panel (Settings API)
+    "Settings", "SettingsPanel", "MinimalSliderWithSteppersMixin",
     -- optional third-party price hints (Market.SuggestPrice), never required
     "Auctionator", "TSM_API",
 }
@@ -77,7 +79,7 @@ files["tests/wowstub.lua"] = {
         "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
         "C_Texture", "NineSliceUtil", "CreateColor", "ColorMixin",
-        "strmatch", "securecallfunction",
+        "strmatch", "securecallfunction", "Settings", "SettingsPanel",
     },
 }
 
@@ -119,5 +121,9 @@ files["tests/test_ui_empty_states.lua"] = {
 }
 
 files["tests/test_bank.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_options.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }

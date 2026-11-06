@@ -754,6 +754,114 @@ C_Timer = {
     end,
 }
 
+--------------------------------------------------------------------------
+-- Settings: a trimmed mirror of Blizzard_Settings_Shared's addon-facing
+-- Settings table (confirmed against Gethe/wow-ui-source, branch forever,
+-- Interface/AddOns/Blizzard_Settings_Shared/Blizzard_Settings.lua):
+-- RegisterVerticalLayoutCategory, RegisterAddOnCategory, RegisterAddOnSetting,
+-- RegisterProxySetting, CreateCheckbox, CreateSlider, CreateSliderOptions,
+-- CreateElementInitializer, CreateSettingInitializer(Data), SetOnValueChangedCallback
+-- and OpenToCategory -- enough shape for UI/Options.lua's register/apply/save
+-- behaviour to run the same way it does in game.
+--------------------------------------------------------------------------
+
+Settings = {
+    VarType = { Boolean = "boolean", String = "string", Number = "number" },
+}
+
+local settingsCallbacks = {} -- variable -> list of callback(setting, value)
+local categoryLayouts = {} -- category -> layout
+local categoryIdCounter = 0
+
+local function newSetting(name, variable, variableType, getValue, setValue)
+    local setting = { name = name, variable = variable, variableType = variableType }
+    function setting:GetName() return name end
+    function setting:GetVariable() return variable end
+    function setting:GetValue() return getValue() end
+    function setting:SetValue(value)
+        setValue(value)
+        for _, callback in ipairs(settingsCallbacks[variable] or {}) do
+            callback(self, value)
+        end
+    end
+    return setting
+end
+
+function Settings.RegisterVerticalLayoutCategory(name)
+    categoryIdCounter = categoryIdCounter + 1
+    local id = categoryIdCounter
+    local category = { name = name }
+    function category:GetID() return id end
+    local layout = { initializers = {} }
+    function layout:AddInitializer(initializer)
+        table.insert(self.initializers, initializer)
+    end
+    categoryLayouts[category] = layout
+    return category, layout
+end
+
+function Settings.RegisterAddOnCategory(category)
+    WowStub.registeredAddOnCategories = WowStub.registeredAddOnCategories or {}
+    table.insert(WowStub.registeredAddOnCategories, category)
+end
+
+function Settings.RegisterAddOnSetting(category, variable, variableKey, variableTbl, variableType, name, defaultValue)
+    if variableTbl[variableKey] == nil then
+        variableTbl[variableKey] = defaultValue
+    end
+    return newSetting(name, variable, variableType,
+        function() return variableTbl[variableKey] end,
+        function(value) variableTbl[variableKey] = value end)
+end
+
+function Settings.RegisterProxySetting(category, variable, variableType, name, defaultValue, getValue, setValue)
+    return newSetting(name, variable, variableType, getValue, setValue)
+end
+
+function Settings.CreateSliderOptions(minValue, maxValue, rate)
+    return { minValue = minValue, maxValue = maxValue, steps = rate and (maxValue - minValue) / rate or 100 }
+end
+
+function Settings.CreateCheckbox(category, setting, tooltip)
+    local initializer = { setting = setting, tooltip = tooltip, kind = "checkbox" }
+    categoryLayouts[category]:AddInitializer(initializer)
+    return initializer
+end
+
+function Settings.CreateSlider(category, setting, options, tooltip)
+    local initializer = { setting = setting, options = options, tooltip = tooltip, kind = "slider" }
+    categoryLayouts[category]:AddInitializer(initializer)
+    return initializer
+end
+
+function Settings.CreateSettingInitializerData(setting, options, tooltip)
+    return { setting = setting, name = setting:GetName(), options = options or {}, tooltip = tooltip }
+end
+
+function Settings.CreateSettingInitializer(frameTemplate, data)
+    return { data = data, frameTemplate = frameTemplate, kind = "control" }
+end
+
+function Settings.CreateElementInitializer(frameTemplate, data)
+    return { data = data, frameTemplate = frameTemplate, kind = "element" }
+end
+
+function Settings.SetOnValueChangedCallback(variable, callback)
+    settingsCallbacks[variable] = settingsCallbacks[variable] or {}
+    table.insert(settingsCallbacks[variable], callback)
+end
+
+function Settings.OpenToCategory(categoryID, scrollToElementName)
+    WowStub.openedSettingsCategoryID = categoryID
+    WowStub.openedSettingsScrollTo = scrollToElementName
+end
+
+SettingsPanel = {
+    GetLayout = function(self, category)
+        return categoryLayouts[category]
+    end,
+}
+
 math.randomseed(1)
 
 --------------------------------------------------------------------------
@@ -843,6 +951,10 @@ local function newMockRegion(kind, name, parent, template)
     local text = ""
     self.SetText = function(_, t) text = t or "" end
     self.GetText = function() return text end
+
+    local scale = 1 -- real Frame/Texture/FontString default to parent-relative scale 1
+    self.SetScale = function(_, s) scale = s end
+    self.GetScale = function() return scale end
 
     setmetatable(self, FrameMeta)
     table.insert(WowStub.frames, { frame = self, events = events, scripts = scripts, name = name })
