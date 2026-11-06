@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.0 (2026-11-06)
+
+### New
+
+- Officers can put the site's upcoming events on the in-game guild calendar with Update calendar on the Console's Sync tab or /sq calendar, and moved or cancelled events come off again
+
 ## v0.6.0 (2026-11-06)
 
 ### New
