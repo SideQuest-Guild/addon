@@ -126,7 +126,16 @@ The other Console tabs:
 | Recruits | Applicants and trials, with yes/no votes from officers. |
 | Bank | Saves the open guild bank tab's log for the website. |
 | Announce | Posts a message to guild chat and every member's News tab, and to Discord if you tick the box. |
-| Sync | Shows what hasn't been sent to the website yet, with Export and Import buttons. |
+| Sync | Shows what hasn't been sent to the website yet, with Export and Import buttons. **Update calendar** puts the site's upcoming events on the in-game guild calendar. |
+
+### The guild calendar
+
+After an import, the Sync tab says how many of the site's upcoming events aren't on the in-game calendar yet. Click
+**Update calendar** (or type `/sq calendar`) once for each: the game only lets an addon add a calendar event when you
+click, so it's one event per click. Each goes on as a guild announcement at the realm's time, with a link to its
+sign-up page; sign-ups still happen on the site and in the addon, not in the calendar. When the site moves or cancels
+an event, the next clicks take the old one off and put the new one on. Your guild rank needs the right to add guild
+events.
 
 ### Commands
 
@@ -140,6 +149,7 @@ The other Console tabs:
 | `/sq export` | officers | Makes the text to paste into the website. |
 | `/sq export clear` | officers | Clears what was sent, once the website has accepted it. |
 | `/sq import` | officers | Loads points and events from the website. |
+| `/sq calendar` | officers | Makes the next change that puts the site's events on the in-game guild calendar. |
 | `/sq roster` | officers | Reads the guild roster now. |
 | `/sq share <prof\|char\|cd\|market\|stock> on\|off` | everyone | Turns a part of your shared directory record on or off. |
 | `/sq dir` | everyone | Shows directory sharing status and how many characters are known. |
@@ -190,6 +200,8 @@ fails:
 - Master loot, which arrives with the raids on December 9. You can always record who got an item from the Loot tab.
 - The guild bank log and recipe lists. If the game doesn't offer them, the Bank and Crafters tabs say so.
 - The save file was unreliable during the beta. Export a few times during a long night instead of only at the end.
+- Adding guild calendar events. If the game refuses, the addon prints its reason; add the event from the calendar by
+  hand.
 
 ## Development
 

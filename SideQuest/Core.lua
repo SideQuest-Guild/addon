@@ -42,6 +42,7 @@ local function defaultDB()
         },
         killed_encounters = {},
         events = {},
+        calendarLinks = {}, -- site event id -> where Calendar.lua last saw its guild announcement (title, at, realm date/time)
         -- directory.md: every member's shared record, keyed by normalized "Name-Realm".
         directory = {},
         -- directory.md: this character's own sell/buy/requests and bag/bank stock, independent of

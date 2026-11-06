@@ -3921,7 +3921,22 @@ function UI.BuildConsoleSync(panel)
             table.insert(chamber.pendingCells, { label = label, value = value })
         end
     end
+
+    -- Guild calendar: one change per click, since the game only adds calendar events inside a click.
+    local calendarHeading = createSubHeading(chamber.inner, "Guild calendar")
+    calendarHeading:SetPoint("TOPLEFT", pendingGrid, "BOTTOMLEFT", 0, -14)
+    calendarHeading:SetWidth(520)
+    local calendarBtn = createButton(chamber.inner, "quiet", "Update calendar", 140, 22)
+    calendarBtn:SetPoint("TOPLEFT", calendarHeading, "BOTTOMLEFT", 0, -8)
+    calendarBtn:SetScript("OnClick", function()
+        SideQuest.Calendar.Step()
+    end)
+    local calendarText = makeFontString(chamber.inner, FONT_BODY, 11, C.mist2, "LEFT")
+    calendarText:SetPoint("LEFT", calendarBtn, "RIGHT", 10, 0)
+    calendarText:SetWidth(370)
+
     chamber.pendingHeading, chamber.editBox = pendingHeading, editBox
+    chamber.calendarBtn, chamber.calendarText = calendarBtn, calendarText
     panel.syncChamber = chamber
 end
 
@@ -3944,6 +3959,44 @@ function UI.RefreshConsoleSync()
         cell.label:SetText(trackedCaps(def.label))
         cell.value:SetText(tostring(count))
     end
+    UI.RefreshConsoleCalendar()
+end
+
+--- The Sync tab's guild calendar row: how many changes the next clicks will make, or why it can't run.
+function UI.RefreshConsoleCalendar()
+    local panel = UI.panels[OFFICER_TAB]
+    local chamber = panel and panel.syncChamber
+    if not chamber then
+        return
+    end
+    local Calendar = SideQuest.Calendar
+    Calendar.Request()
+    local actions, reason = Calendar.Plan()
+    if not actions then
+        chamber.calendarBtn:SetEnabled(false, reason)
+        setStateText(chamber.calendarText, reason, Calendar.loaded)
+        return
+    end
+    local adds, removes = 0, 0
+    for _, a in ipairs(actions) do
+        if a.op == "add" then adds = adds + 1 else removes = removes + 1 end
+    end
+    if #actions == 0 then
+        chamber.calendarBtn:SetEnabled(false, "Nothing to change.")
+        setStateText(chamber.calendarText, "Matches the site's events.")
+        return
+    end
+    local parts = {}
+    if adds > 0 then parts[#parts + 1] = adds .. " to add" end
+    if removes > 0 then parts[#parts + 1] = removes .. " to take off" end
+    local summary = table.concat(parts, ", ")
+    if Calendar.IsBusy() then
+        chamber.calendarBtn:SetEnabled(false, "The calendar is saving the last change.")
+        setStateText(chamber.calendarText, summary .. ". Saving the last change...")
+        return
+    end
+    chamber.calendarBtn:SetEnabled(true)
+    setStateText(chamber.calendarText, summary .. ". One change per click.")
 end
 
 function UI.ShowExportBox(str)
@@ -4022,6 +4075,15 @@ end)
 SideQuest.On("SQ_RECRUIT_SAVED", function()
     if UI.activeTab == OFFICER_TAB then UI.RefreshConsoleRecruits() end
 end)
+
+local function refreshCalendarRow()
+    local panel = UI.panels and UI.panels[OFFICER_TAB]
+    if UI.activeTab == OFFICER_TAB and panel and panel.activeSub == "Sync" then
+        UI.RefreshConsoleCalendar()
+    end
+end
+SideQuest.On("SQ_CALENDAR_CHANGED", refreshCalendarRow)
+SideQuest.On("SQ_IMPORT_APPLIED", refreshCalendarRow)
 
 SideQuest.On("SQ_PREP_ANSWER", function() end) -- surfaced via the Raid Night step buttons' tooltips in-game
 

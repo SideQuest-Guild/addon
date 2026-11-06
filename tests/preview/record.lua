@@ -181,6 +181,7 @@ SideQuestDB.events = {
         { character = "Demo8", class = "WARLOCK", role = "dps", status = "tentative", group = nil },
     } },
 }
+SideQuest.Calendar.loaded = true -- as after the server's CALENDAR_UPDATE_EVENT_LIST; the demo event isn't on it yet
 SideQuestDB.mySignups["2b3c4d5e-6f70-4a1b-9c2d-3e4f5a6b7c8e"] = { status = "signed", sentAt = WowStub.time, acked = true }
 
 -- news feed (boss kill, loot, announcement, level, joined, badge -- spread

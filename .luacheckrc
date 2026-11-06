@@ -18,7 +18,7 @@ read_globals = {
     "GetNumGroupMembers", "IsInInstance", "GetInstanceInfo",
     "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
     "ConvertToRaid", "InviteUnit", "GetGuildInfo",
-    "C_GuildInfo", "C_ChatInfo", "C_Item", "C_Timer", "Enum",
+    "C_GuildInfo", "C_ChatInfo", "C_Item", "C_Timer", "Enum", "C_Calendar", "C_DateAndTime",
     "issecretvalue", "DEFAULT_CHAT_FRAME",
     "StaticPopup_Show", "StaticPopupDialogs",
     -- v2: roster, professions, bank, prep, group placement
@@ -58,7 +58,7 @@ files["tests/wowstub.lua"] = {
         "GetProfessions", "GetProfessionInfo", "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo",
         "QueryGuildRecipes", "GetAverageItemLevel",
         "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog", "C_Reputation",
-        "C_Container", "Minimap", "GetCursorPosition",
+        "C_Container", "Minimap", "GetCursorPosition", "C_Calendar", "C_DateAndTime",
         "C_GuildBank", "InCombatLockdown", "SendChatMessage",
         "C_PvP", "GetNumBattlefieldScores", "GetBattlefieldWinner", "RequestBattlefieldScoreData", "UnitFactionGroup",
         "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
@@ -85,5 +85,9 @@ files["tests/test_ui_directory.lua"] = {
 }
 
 files["tests/test_minimap.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_calendar.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }

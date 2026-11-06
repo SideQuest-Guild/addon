@@ -566,6 +566,132 @@ Enum = {
         ChannelThrottle = 3,
         Generic = 4,
     },
+    CalendarEventType = { Raid = 0, Dungeon = 1, PvP = 2, Meeting = 3, Other = 4, HeroicDeprecated = 5 },
+}
+
+--------------------------------------------------------------------------
+-- Calendar: an in-memory guild calendar in realm time (WowStub.time + realmOffset)
+--------------------------------------------------------------------------
+
+function WowStub.ResetCalendar()
+    WowStub.calendar = {
+        realmOffset = 0, -- seconds the realm clock runs ahead of UTC
+        events = {}, -- list of { calendarType, title, description, eventType, textureIndex, year, month, day, hour, minute }
+        textures = {}, -- eventType -> list of { title }
+        canAdd = true,
+        canRemove = true,
+        candidate = nil,
+        selected = nil,
+        addCalls = 0,
+        openCalendarCalls = 0,
+    }
+end
+WowStub.ResetCalendar()
+
+local function realmNow()
+    return hostOs.date("!*t", WowStub.time + WowStub.calendar.realmOffset)
+end
+
+-- The calendar's month offsets count from the realm's current month.
+local function monthAt(offset)
+    local t = realmNow()
+    local index = t.year * 12 + (t.month - 1) + offset
+    return math.floor(index / 12), index % 12 + 1
+end
+
+local function dayEvents(offset, day)
+    local year, month = monthAt(offset)
+    local list = {}
+    for _, e in ipairs(WowStub.calendar.events) do
+        if e.year == year and e.month == month and e.day == day then
+            list[#list + 1] = e
+        end
+    end
+    table.sort(list, function(a, b)
+        return a.hour * 60 + a.minute < b.hour * 60 + b.minute
+    end)
+    return list
+end
+
+C_DateAndTime = {
+    GetCurrentCalendarTime = function()
+        local t = realmNow()
+        return { year = t.year, month = t.month, monthDay = t.day, weekday = t.wday, hour = t.hour, minute = t.min }
+    end,
+}
+
+C_Calendar = {
+    OpenCalendar = function()
+        WowStub.calendar.openCalendarCalls = WowStub.calendar.openCalendarCalls + 1
+    end,
+    GetMonthInfo = function(offset)
+        local year, month = monthAt(offset or 0)
+        return { year = year, month = month }
+    end,
+    GetMaxCreateDate = function()
+        local t = hostOs.date("!*t", WowStub.time + WowStub.calendar.realmOffset + 365 * 86400)
+        return { year = t.year, month = t.month, monthDay = t.day, hour = 23, minute = 59 }
+    end,
+    GetNumDayEvents = function(offset, day)
+        return #dayEvents(offset, day)
+    end,
+    GetDayEvent = function(offset, day, index)
+        local e = dayEvents(offset, day)[index]
+        if not e then
+            return nil
+        end
+        return {
+            title = e.title, calendarType = e.calendarType, eventType = e.eventType,
+            startTime = { year = e.year, month = e.month, monthDay = e.day, hour = e.hour, minute = e.minute },
+        }
+    end,
+    CreateGuildAnnouncementEvent = function()
+        WowStub.calendar.candidate = { calendarType = "GUILD_ANNOUNCEMENT" }
+    end,
+    EventSetTitle = function(title) WowStub.calendar.candidate.title = title end,
+    EventSetDescription = function(text) WowStub.calendar.candidate.description = text end,
+    EventSetType = function(eventType) WowStub.calendar.candidate.eventType = eventType end,
+    EventSetTextureID = function(index) WowStub.calendar.candidate.textureIndex = index end,
+    EventSetDate = function(month, day, year)
+        local c = WowStub.calendar.candidate
+        c.year, c.month, c.day = year, month, day
+    end,
+    EventSetTime = function(hour, minute)
+        local c = WowStub.calendar.candidate
+        c.hour, c.minute = hour, minute
+    end,
+    EventGetTextures = function(eventType)
+        return WowStub.calendar.textures[eventType] or {}
+    end,
+    CanAddEvent = function()
+        return WowStub.calendar.canAdd
+    end,
+    AddEvent = function()
+        WowStub.calendar.addCalls = WowStub.calendar.addCalls + 1
+        table.insert(WowStub.calendar.events, WowStub.calendar.candidate)
+        WowStub.calendar.candidate = nil
+    end,
+    CloseEvent = function()
+        WowStub.calendar.candidate = nil
+    end,
+    IsActionPending = function()
+        return false
+    end,
+    ContextMenuSelectEvent = function(offset, day, index)
+        WowStub.calendar.selected = dayEvents(offset, day)[index]
+    end,
+    ContextMenuEventCanRemove = function()
+        return WowStub.calendar.canRemove
+    end,
+    ContextMenuEventRemove = function()
+        for i, e in ipairs(WowStub.calendar.events) do
+            if e == WowStub.calendar.selected then
+                table.remove(WowStub.calendar.events, i)
+                break
+            end
+        end
+        WowStub.calendar.selected = nil
+    end,
 }
 
 C_ChatInfo = {

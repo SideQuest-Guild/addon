@@ -22,6 +22,7 @@ Recorder.lua
 Loot.lua
 Standings.lua
 Events.lua
+Calendar.lua
 Roster.lua
 Professions.lua
 Character.lua
