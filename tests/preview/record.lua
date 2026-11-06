@@ -180,6 +180,14 @@ SideQuestDB.events = {
         { character = "Demo7", class = "HUNTER", role = "dps", status = "signed", group = 2 },
         { character = "Demo8", class = "WARLOCK", role = "dps", status = "tentative", group = nil },
     } },
+    -- a non-role event (social/other): going/maybe/can't RSVP, no class or role (for the Raids tab's
+    -- non-role rendering: no "Signed: Tank/Healer/DPS" line, no Invite/Place groups for officers)
+    { id = "3c4d5e6f-7081-4a1b-9c2d-3e4f5a6b7c8f", title = "The Adventure Begins - Discord hang out", kind = "other", starts_at = WowStub.time + 26 * 3600, signups = {
+        { character = "Demo2", status = "signed" },
+        { character = "Demo3", status = "signed" },
+        { character = "Demo4", status = "tentative" },
+        { character = "Demo5", status = "absent" },
+    } },
 }
 SideQuest.Calendar.loaded = true -- as after the server's CALENDAR_UPDATE_EVENT_LIST; the demo event isn't on it yet
 SideQuestDB.mySignups["2b3c4d5e-6f70-4a1b-9c2d-3e4f5a6b7c8e"] = { status = "signed", sentAt = WowStub.time, acked = true }
@@ -286,7 +294,12 @@ SideQuestDB.pending.announcements = {
     { id = "ann-demo-1", text = "Flasks for Friday please", officer = "Demo1-Whitemane", at = WowStub.time - 5400, discord = true },
 }
 SideQuestDB.officerData.inactive = {
-    { member_id = 18, name = "Demo Member 18", last_seen_at = WowStub.time - 20 * 24 * 3600, last_raid_at = WowStub.time - 30 * 24 * 3600 },
+    { member_id = 18, name = "Demo Member 18", level = 60,
+      last_seen_at = WowStub.time - 20 * 24 * 3600, last_raid_at = WowStub.time - 30 * 24 * 3600 },
+    { member_id = 19, name = "Demo Member 19", level = 34, last_seen_at = WowStub.time - 16 * 24 * 3600 },
+}
+SideQuestDB.officerData.unseen = {
+    { member_id = 20, name = "Demo Member 20" },
 }
 
 -- bid popup demo item: a chest piece, so main-spec GP should compute to
