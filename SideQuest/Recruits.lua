@@ -72,6 +72,41 @@ function Recruits.Save(recruit)
     return recruit
 end
 
+-- A character name must normalize to "Name-Realm" with no stray whitespace
+-- or URL-breaking characters, matching the site's CHARACTER_SLUG_PATTERN.
+local function validCharacter(character)
+    return character ~= nil and character:match("^[^%s/?#]+%-[^%s/?#]+$") ~= nil
+end
+
+--- Add a new applicant from the in-game "Add recruit" form: validates and
+-- normalizes the name, skips a duplicate (same character already
+-- recruited), and defaults to status "applicant". Returns the recruit, or
+-- nil plus a reason no row was added.
+function Recruits.AddCandidate(rawCharacter, class, note)
+    if not requireOfficer() then
+        return nil, "Only officers can use the Recruits console."
+    end
+    if not rawCharacter or rawCharacter:gsub("%s+", "") == "" then
+        return nil, "Enter a recruit's character name."
+    end
+    local trimmed = rawCharacter:gsub("^%s+", ""):gsub("%s+$", "")
+    local character = SideQuest.NormalizeName(trimmed)
+    if not validCharacter(character) then
+        return nil, "That doesn't look like a character name."
+    end
+    for _, r in ipairs(SideQuestDB.officerData.recruits) do
+        if r.character == character then
+            return nil, character .. " is already a recruit."
+        end
+    end
+    return Recruits.Save({
+        character = character,
+        class = class,
+        status = "applicant",
+        note = (note and note ~= "") and note or nil,
+    })
+end
+
 function Recruits.Vote(recruitId, vote)
     if not requireOfficer() then
         return
@@ -96,6 +131,21 @@ function Recruits.Vote(recruitId, vote)
     end
     SideQuest.Comm.SendVote({ recruit_id = recruitId, officer = officer, vote = vote, at = entry.at })
     Recruits.Save(recruit)
+end
+
+--- Move a recruit through the vetting pipeline (applicant/trial/accepted/
+-- declined); saves and shares like any other edit.
+function Recruits.SetStatus(recruitId, status)
+    if not requireOfficer() then
+        return nil
+    end
+    local recruit = findRecruit(recruitId)
+    if not recruit then
+        SideQuest.Print("Unknown recruit " .. tostring(recruitId))
+        return nil
+    end
+    recruit.status = status
+    return Recruits.Save(recruit)
 end
 
 --------------------------------------------------------------------------

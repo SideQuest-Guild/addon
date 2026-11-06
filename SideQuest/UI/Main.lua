@@ -3804,13 +3804,101 @@ function UI.RefreshConsoleRoster()
     setScrollContentHeight(chamber.scroll, y)
 end
 
--- Recruits sub-view: applicants/trials, checklist, votes
+-- Recruits sub-view: applicants/trials, checklist, votes, and an add-recruit
+-- form. Recruits are officer-only data, shared with other officers over
+-- OFFICER and with the site's Officers page via the next export.
+local RECRUIT_STATUSES = { "applicant", "trial", "accepted", "declined" }
+
+local function nextRecruitStatus(status)
+    for i, s in ipairs(RECRUIT_STATUSES) do
+        if s == status then
+            return RECRUIT_STATUSES[(i % #RECRUIT_STATUSES) + 1]
+        end
+    end
+    return RECRUIT_STATUSES[1]
+end
+
+-- Prefill the add-recruit name/class from the current target, if it's a
+-- player not already on the guild roster. UnitExists/UnitIsPlayer/UnitName/
+-- UnitClass can all read as secret on Forever, so every value runs through
+-- SQ.Unsecret before use.
+local function targetRecruitPrefill()
+    if not (UnitExists and SideQuest.Unsecret(UnitExists("target"))) then
+        return nil
+    end
+    if not (UnitIsPlayer and SideQuest.Unsecret(UnitIsPlayer("target"))) then
+        return nil
+    end
+    local character = SideQuest.NormalizeUnit("target")
+    if not character then
+        return nil
+    end
+    for _, m in ipairs((SideQuestDB.roster and SideQuestDB.roster.members) or {}) do
+        if m.character == character then
+            return nil -- already in the guild
+        end
+    end
+    local class = UnitClass and SideQuest.Unsecret(select(2, UnitClass("target")))
+    return character, class
+end
+
 function UI.BuildConsoleRecruits(panel)
     local sub = makeConsoleSub(panel, "Recruits")
     local chamber = createChamber(sub, "SideQuestConsoleRecruitsChamber")
     chamber:SetAllPoints(sub)
 
-    local scroll, content = buildScroll(chamber.inner, -34)
+    local introLine1 = makeFontString(chamber.inner, FONT_BODY, 11, C.mist, "LEFT")
+    introLine1:SetPoint("TOPLEFT", 14, -10)
+    introLine1:SetText("Track applicants and trials: tick the checklist and vote on each.")
+    local introLine2 = makeFontString(chamber.inner, FONT_BODY, 11, C.mist, "LEFT")
+    introLine2:SetPoint("TOPLEFT", introLine1, "BOTTOMLEFT", 0, -2)
+    introLine2:SetText("Shared with every officer, and with the site's Officers page.")
+
+    local addHeading = createSubHeading(chamber.inner, "Add recruit")
+    addHeading:SetPoint("TOPLEFT", introLine2, "BOTTOMLEFT", 0, -10)
+    addHeading:SetWidth(540)
+
+    local nameBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
+    nameBox:SetSize(150, 20)
+    nameBox:SetPoint("TOPLEFT", addHeading, "BOTTOMLEFT", 0, -8)
+    nameBox:SetAutoFocus(false)
+    nameBox:SetMaxLetters(64)
+    skinEditBox(nameBox, "Character name")
+    nameBox:SetScript("OnTextChanged", function(_, userInput)
+        if userInput then
+            chamber.nameEdited = true
+        end
+    end)
+
+    local noteBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
+    noteBox:SetSize(250, 20)
+    noteBox:SetPoint("LEFT", nameBox, "RIGHT", 8, 0)
+    noteBox:SetAutoFocus(false)
+    noteBox:SetMaxLetters(500)
+    skinEditBox(noteBox, "Note (optional)")
+
+    local addBtn = createButton(chamber.inner, "primary", "Add", 76, 20)
+    addBtn:SetPoint("LEFT", noteBox, "RIGHT", 8, 0)
+    addBtn:SetScript("OnClick", function()
+        local raw = nameBox:GetText()
+        local class = nil
+        if chamber.prefillCharacter and raw and SideQuest.NormalizeName(raw) == chamber.prefillCharacter then
+            class = chamber.prefillClass
+        end
+        local recruit, err = SideQuest.Recruits.AddCandidate(raw, class, noteBox:GetText())
+        if recruit then
+            nameBox:SetText("")
+            noteBox:SetText("")
+            chamber.nameEdited = false
+            UI.RefreshConsoleRecruits()
+        elseif err then
+            SideQuest.Print(err)
+        end
+    end)
+
+    chamber.nameBox, chamber.noteBox, chamber.addBtn = nameBox, noteBox, addBtn
+
+    local scroll, content = buildScroll(chamber.inner, -96)
     chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
     panel.recruitsChamber = chamber
 end
@@ -3821,6 +3909,17 @@ function UI.RefreshConsoleRecruits()
         return
     end
     local chamber = panel.recruitsChamber
+    local isOfficer = SideQuest.IsOfficer()
+    chamber.addBtn:SetEnabled(isOfficer, "Only officers can add recruits.")
+
+    if not chamber.nameEdited and chamber.nameBox:GetText() == "" then
+        local character, class = targetRecruitPrefill()
+        chamber.prefillCharacter, chamber.prefillClass = character, class
+        if character then
+            chamber.nameBox:SetText(character)
+        end
+    end
+
     local recruits = SideQuest.Recruits.List()
     for _, r in ipairs(chamber.rows) do
         r:Hide()
@@ -3830,7 +3929,7 @@ function UI.RefreshConsoleRecruits()
             chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
             chamber.emptyText:SetPoint("TOPLEFT")
         end
-        setStateText(chamber.emptyText, "No recruits yet.", true)
+        setStateText(chamber.emptyText, "No recruits yet. Add one above, or on the site's Officers page.", true)
         return
     elseif chamber.emptyText then
         chamber.emptyText:SetText("")
@@ -3846,7 +3945,7 @@ function UI.RefreshConsoleRecruits()
             row:SetSize(560, 54)
             row.nameRow = createNameRow(row, 13)
             row.nameRow:SetPoint("TOPLEFT")
-            row.statusText = makeFontString(row, FONT_BODY, 11, C.mist, "LEFT")
+            row.statusBtn = createButton(row, "quiet", "", 84, 18)
             -- votes sit in the recruit's own row, next to their status --
             -- never pinned to the row's far edge, well clear of the name.
             row.yesBtn = createButton(row, "quiet", "Yes", 44, 18)
@@ -3874,11 +3973,16 @@ function UI.RefreshConsoleRecruits()
         end
         row:SetPoint("TOPLEFT", 0, -58 * (i - 1))
         setNameRow(row.nameRow, r.character, r.class)
-        row.statusText:ClearAllPoints()
-        row.statusText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
-        row.statusText:SetText("(" .. (r.status or "applicant") .. ")")
+        row.statusBtn:ClearAllPoints()
+        row.statusBtn:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
+        row.statusBtn:SetText("(" .. (r.status or "applicant") .. ")")
+        row.statusBtn:SetEnabled(isOfficer, "Only officers can change a recruit's status.")
+        row.statusBtn:SetScript("OnClick", function()
+            SideQuest.Recruits.SetStatus(r.id, nextRecruitStatus(r.status or "applicant"))
+            UI.RefreshConsoleRecruits()
+        end)
         row.yesBtn:ClearAllPoints()
-        row.yesBtn:SetPoint("LEFT", row.statusText, "RIGHT", 14, 0)
+        row.yesBtn:SetPoint("LEFT", row.statusBtn, "RIGHT", 14, 0)
         row.noBtn:ClearAllPoints()
         row.noBtn:SetPoint("LEFT", row.yesBtn, "RIGHT", 6, 0)
         for key, ui in pairs(row.checks) do
@@ -4118,6 +4222,7 @@ function UI.BuildConsoleSync(panel)
     local calendarBtn = createButton(chamber.inner, "quiet", "Update calendar", 140, 22)
     calendarBtn:SetPoint("TOPLEFT", calendarHeading, "BOTTOMLEFT", 0, -8)
     calendarBtn:SetScript("OnClick", function()
+        StaticPopup_Hide("SIDEQUEST_CALENDAR_PENDING")
         SideQuest.Calendar.Step()
     end)
     local calendarText = makeFontString(chamber.inner, FONT_BODY, 11, C.mist2, "LEFT")
@@ -4171,8 +4276,13 @@ function UI.RefreshConsoleCalendar()
         if a.op == "add" then adds = adds + 1 else removes = removes + 1 end
     end
     if #actions == 0 then
-        chamber.calendarBtn:SetEnabled(false, "Nothing to change.")
-        setStateText(chamber.calendarText, "Matches the site's events.")
+        if #SideQuest.Events.Get() == 0 then
+            chamber.calendarBtn:SetEnabled(false, "No site events yet.")
+            setStateText(chamber.calendarText, "The calendar fills from the site's events once an import arrives.")
+        else
+            chamber.calendarBtn:SetEnabled(false, "Nothing to change.")
+            setStateText(chamber.calendarText, "Matches the site's events.")
+        end
         return
     end
     local parts = {}

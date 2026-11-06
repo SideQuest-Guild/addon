@@ -16,8 +16,7 @@ local BUSY_TIMEOUT = 10 -- seconds to wait for the server to confirm a change be
 local REQUEST_THROTTLE = 60 -- seconds between C_Calendar.OpenCalendar requests
 local EVENT_URL = "https://sidequest-guild.com/events/detail/?id="
 
--- Site EventKind -> label and calendar event type. The import only carries raid, dungeon and world_boss; the rest
--- are here so a wider import doesn't need a change.
+-- Site EventKind -> label and calendar event type, for every kind the import can carry.
 local KINDS = {
     raid = { label = "Raid", type = "Raid" },
     dungeon = { label = "Dungeon", type = "Dungeon" },
@@ -381,5 +380,66 @@ SideQuest.On("CALENDAR_UPDATE_ERROR", function(reason)
     SideQuest.Fire("SQ_CALENDAR_CHANGED")
 end)
 SideQuest.RegisterGameEvent("CALENDAR_UPDATE_ERROR")
+
+--------------------------------------------------------------------------
+-- Prompting officers (nearly automatic, not fully: AddEvent still needs a click)
+--------------------------------------------------------------------------
+
+-- Whether this login/import's prompt has already been offered or turned down. A fresh import resets both, so a
+-- newly-arrived change gets its own chance even if the officer said Later to the last one.
+Calendar.prompted = false
+Calendar.promptSilenced = false
+
+-- C_Calendar.CanAddEvent() only answers for the event currently being built (Blizzard's own calendar UI calls it
+-- alongside C_Calendar.EventGetCalendarType() while a candidate is open -- Blizzard_Calendar/Mainline/Blizzard_
+-- Calendar.lua), so there's no way to ask "can this rank add guild events" without opening one. The prompt uses
+-- the same SideQuest.IsOfficer() rank gate Step() already uses instead.
+StaticPopupDialogs["SIDEQUEST_CALENDAR_PENDING"] = {
+    text = "%s",
+    button1 = "Add next",
+    button2 = "Later",
+    OnAccept = function()
+        Calendar.Step()
+        local actions = Calendar.Plan()
+        if actions and #actions > 0 then
+            Calendar.ShowPrompt(#actions)
+        end
+    end,
+    OnCancel = function()
+        Calendar.promptSilenced = true
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+function Calendar.ShowPrompt(count)
+    local text = count == 1 and "1 site event isn't on the guild calendar yet."
+        or (count .. " site events aren't on the guild calendar yet.")
+    StaticPopup_Show("SIDEQUEST_CALENDAR_PENDING", text)
+end
+
+--- Offer an officer who can edit the calendar a one-click way to catch it up, at most once per login or import.
+-- "Later" (or Esc) silences it until the next import arrives. Members never see it.
+function Calendar.CheckPrompt()
+    if Calendar.prompted or Calendar.promptSilenced or not SideQuest.IsOfficer() then
+        return
+    end
+    local actions = Calendar.Plan()
+    if not actions or #actions == 0 then
+        return
+    end
+    Calendar.prompted = true
+    Calendar.ShowPrompt(#actions)
+end
+
+SideQuest.On("SQ_CALENDAR_CHANGED", Calendar.CheckPrompt) -- covers login, once the calendar list has loaded
+
+SideQuest.On("SQ_IMPORT_APPLIED", function()
+    Calendar.prompted = false
+    Calendar.promptSilenced = false
+    Calendar.CheckPrompt()
+end)
 
 return Calendar

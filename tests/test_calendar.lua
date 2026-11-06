@@ -11,6 +11,9 @@ return function(h)
         WowStub.ResetCalendar()
         Calendar.busyUntil = 0
         Calendar.lastRequestAt = nil
+        Calendar.prompted = false
+        Calendar.promptSilenced = false
+        WowStub.activePopup = nil
         WowStub.isOfficer = true
         SideQuest.Fire("CALENDAR_UPDATE_EVENT_LIST") -- the server has sent the calendar
     end
@@ -208,5 +211,53 @@ return function(h)
         -- 30 ASCII bytes then a 2-byte character: byte 31 is its lead byte, so the whole character goes
         local cut = Calendar.Title(string.rep("a", 30) .. "\195\169" .. "zz")
         h.assertEq(cut, string.rep("a", 30), "the split character is dropped whole")
+    end)
+
+    h.test("calendar: a pending plan prompts the officer once per login or import", function()
+        reset()
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        h.assertTrue(WowStub.activePopup ~= nil, "shows a popup")
+        h.assertTrue(WowStub.activePopup.text:find("1 site event") ~= nil, "says how many")
+        h.assertTrue(Calendar.prompted, "marked as shown")
+        local shown = WowStub.activePopup
+        SideQuest.Fire("SQ_CALENDAR_CHANGED")
+        h.assertEq(WowStub.activePopup, shown, "does not prompt twice for the same login or import")
+    end)
+
+    h.test("calendar: Later silences the prompt until the next import", function()
+        reset()
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        h.assertTrue(WowStub.activePopup ~= nil, "shows a popup")
+        WowStub.ClickPopupButton(2) -- Later
+        h.assertTrue(Calendar.promptSilenced, "silenced")
+        h.assertEq(WowStub.activePopup, nil, "popup closed")
+        SideQuest.Fire("CALENDAR_UPDATE_EVENT_LIST")
+        h.assertEq(WowStub.activePopup, nil, "stays quiet without a new import")
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        h.assertTrue(WowStub.activePopup ~= nil, "a new import gets its own chance")
+    end)
+
+    h.test("calendar: members never see the calendar prompt", function()
+        reset()
+        WowStub.isOfficer = false
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        h.assertEq(WowStub.activePopup, nil, "no popup for members")
+    end)
+
+    h.test("calendar: the prompt's Add next steps one change, then offers the next", function()
+        reset()
+        SideQuestDB.events = {
+            { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) },
+            { id = "evt-2", title = "Onyxia's Lair", kind = "raid", starts_at = utcAt(3, 20) },
+        }
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        h.assertTrue(WowStub.activePopup ~= nil, "shows a popup")
+        WowStub.ClickPopupButton(1) -- Add next
+        h.assertEq(#WowStub.calendar.events, 1, "one change made")
+        h.assertTrue(WowStub.activePopup ~= nil, "re-shows while changes remain")
+        h.assertTrue(WowStub.activePopup.text:find("1 site event") ~= nil, "one change left")
     end)
 end

@@ -9,18 +9,19 @@ unused_args = false -- WoW event handler signatures are fixed; many args are unu
 globals = {
     "SideQuestDB", "SideQuest", "SideQuestJSON", "SideQuestBase64",
     "SLASH_SIDEQUEST1", "SlashCmdList", "SideQuest_OnAddonCompartmentClick",
+    "StaticPopupDialogs",
 }
 
 read_globals = {
     -- WoW client API used by the addon
     "CreateFrame", "UIParent", "GetServerTime", "GetTime", "GetNormalizedRealmName", "date",
-    "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace", "IsInRaid", "IsInGroup",
+    "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace", "UnitExists", "UnitIsPlayer", "IsInRaid", "IsInGroup",
     "GetNumGroupMembers", "IsInInstance", "GetInstanceInfo",
     "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
     "ConvertToRaid", "InviteUnit", "GetGuildInfo",
     "C_GuildInfo", "C_ChatInfo", "C_Item", "C_Timer", "Enum", "C_Calendar", "C_DateAndTime",
     "issecretvalue", "DEFAULT_CHAT_FRAME",
-    "StaticPopup_Show", "StaticPopupDialogs",
+    "StaticPopup_Show", "StaticPopup_Hide",
     -- v2: roster, professions, bank, prep, group placement
     "GetNumGuildMembers", "GetGuildRosterInfo",
     "C_TradeSkillUI", "GetProfessions", "GetProfessionInfo",
@@ -60,6 +61,7 @@ exclude_files = {
 files["tests/wowstub.lua"] = {
     globals = {
         "WowStub", "GetServerTime", "GetTime", "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace",
+        "UnitExists", "UnitIsPlayer",
         "os", "date", "time",
         "IsInRaid", "IsInGroup", "GetNumGroupMembers", "GetNormalizedRealmName",
         "issecretvalue", "C_GuildInfo", "GetGuildInfo", "IsInInstance",
@@ -80,6 +82,9 @@ files["tests/wowstub.lua"] = {
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
         "C_Texture", "NineSliceUtil", "CreateColor", "ColorMixin",
         "strmatch", "securecallfunction", "Settings", "SettingsPanel",
+        "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide",
+        "ChatFrame_SendTell", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_ID", "RegionalUniqueNamesEnabled",
+        "Constants", "C_NameUtil",
     },
 }
 
@@ -130,4 +135,20 @@ files["tests/test_bank.lua"] = {
 
 files["tests/test_options.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_ui_events.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_recruits.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_ui_guild_rows.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_identity.lua"] = {
+    globals = { "WowStub", "SideQuestDB", "GetNumGuildMembers" },
 }

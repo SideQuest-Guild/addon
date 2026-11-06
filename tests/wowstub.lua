@@ -125,6 +125,15 @@ function UnitGUID(unit)
     return u and u.guid or nil
 end
 
+function UnitExists(unit)
+    return WowStub.units[unit] ~= nil
+end
+
+function UnitIsPlayer(unit)
+    local u = WowStub.units[unit]
+    return u ~= nil and u.isPlayer ~= false
+end
+
 function UnitClass(unit)
     local u = WowStub.units[unit]
     if not u then
@@ -753,6 +762,46 @@ C_Timer = {
         fn()
     end,
 }
+
+--------------------------------------------------------------------------
+-- StaticPopup: enough of Blizzard_StaticPopup (DefaultState: enabled, so it's always loaded) for addon code that
+-- shows a one-button-per-action confirmation. WowStub.activePopup holds the one dialog currently shown;
+-- WowStub.ClickPopupButton(n) fires its OnAccept (n == 1, the default) or OnCancel (n == 2), as a player click
+-- would.
+--------------------------------------------------------------------------
+
+StaticPopupDialogs = {}
+
+function StaticPopup_Show(which, text_arg1, text_arg2, data)
+    local info = StaticPopupDialogs[which]
+    if not info then
+        return nil
+    end
+    local text = info.text
+    if text_arg1 then
+        text = (text:gsub("%%s", tostring(text_arg1), 1))
+    end
+    WowStub.activePopup = { which = which, info = info, text = text, data = data }
+    return WowStub.activePopup
+end
+
+function StaticPopup_Hide(which)
+    if WowStub.activePopup and (not which or WowStub.activePopup.which == which) then
+        WowStub.activePopup = nil
+    end
+end
+
+function WowStub.ClickPopupButton(buttonNum)
+    local popup = WowStub.activePopup
+    if not popup then
+        return
+    end
+    WowStub.activePopup = nil
+    local callback = (buttonNum == 2) and popup.info.OnCancel or popup.info.OnAccept
+    if callback then
+        callback(popup.data)
+    end
+end
 
 --------------------------------------------------------------------------
 -- Settings: a trimmed mirror of Blizzard_Settings_Shared's addon-facing
