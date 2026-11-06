@@ -1167,15 +1167,39 @@ end
 for _, view in ipairs(VIEWS) do
     view.setup()
     if view.name == "console-raid-night" then
-        local chamber = UI.panels.Console.raidNightChamber
-        chamber.steps[1].doneAt = WowStub.time - 1800
-        chamber.steps[2].doneAt = WowStub.time - 1500
-        chamber.steps[3].doneAt = WowStub.time - 1200
+        WowStub.instance = { inInstance = true, instanceType = "raid", instanceID = 409, difficultyID = 3, name = "Demo Molten Core" }
+        WowStub.SetRaid({
+            { name = "Demo2", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-PREV0002" },
+            { name = "Demo3", realm = "Whitemane", class = "PRIEST", guid = "Player-1-PREV0003" },
+            { name = "Demo4", realm = "Whitemane", class = "MAGE", guid = "Player-1-PREV0004" },
+        })
+        local session = {
+            id = "demo-session-1", instance_name = "Demo Molten Core", instance_id = 409,
+            difficulty_id = 3, size = 20, started_at = WowStub.time - 2000, ended_at = nil, members = {},
+        }
+        SideQuestDB.pending.sessions = { session }
+        SideQuestDB.pending.encounters = {
+            { id = "enc1", session_id = "demo-session-1", encounter_id = 1, name = "Demo Lucifron", success = true,
+              started_at = WowStub.time - 1000, ended_at = WowStub.time - 900, characters = {}, standby = {}, voided = false },
+        }
+        SideQuest.Recorder.current = session
+        SideQuest.Recorder.prepDoneAt = WowStub.time - 1800
+        SideQuest.Recorder.inviteDoneAt = WowStub.time - 1500
+        SideQuest.Recorder.started = true
+        SideQuest.Recorder.startedAt = WowStub.time - 1200
+        SideQuest.Recorder.ended = false
+        SideQuest.Recorder.endedAt = nil
         SideQuest.Recorder.present = {
             ["Demo2-Whitemane"] = "raid", ["Demo3-Whitemane"] = "raid", ["Demo4-Whitemane"] = "raid",
             ["Demo6-Whitemane"] = "standby",
         }
         SideQuestDB.standby = { "Demo6-Whitemane" }
+        SideQuestDB.addonVersions = {
+            ["Demo5-Whitemane"] = { version = "0.4.0", seenAt = WowStub.time - 120, officer = true, recording = nil },
+            ["Demo7-Whitemane"] = { version = "0.3.1", seenAt = WowStub.time - 300, officer = true,
+                recording = { instance = "Demo Blackwing Lair", instance_id = 469, since = WowStub.time - 600 } },
+            ["Demo8-Whitemane"] = { version = "0.2.0", seenAt = WowStub.time - 500 }, -- old-format HELLO: officer status unknown
+        }
         SideQuestDB.pending.awards = {
             { id = "aw1", kind = "ep", character = "Demo2-Whitemane", amount = 10, reason = "boss_kill", note = "Demo Boss", at = WowStub.time - 1200, voided = false },
             { id = "aw2", kind = "ep", character = "Demo3-Whitemane", amount = 5, reason = "on_time", at = WowStub.time - 1700, voided = false },
