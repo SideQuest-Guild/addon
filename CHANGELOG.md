@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.0 (2026-11-06)
+
+### New
+
+- SideQuest has its own page under Options > AddOns for the minimap button, window scale, reduced motion and what you share with the guild directory, and /sq options opens it
+
+### Fixed
+
+- Officers can start and stop recording from the Console's Raid Night tab or /sq record, see which officers with SideQuest are online and who is already recording, and the course shows what really happened
+
 ## v0.7.1 (2026-11-06)
 
 ### Fixed
