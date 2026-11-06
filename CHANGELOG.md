@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.1 (2026-11-06)
+
+### Fixed
+
+- The Console's Bank tab records the guild bank's item and money log on WoW: Forever when an officer opens the bank, with each entry's real time and no repeats when the bank is opened again
+- The minimap button is a standard LibDBIcon button named SideQuest, so minimap button collectors and broker bars list it, and it keeps its place on the rim
+- The addon reads the guild roster by itself at login and on changes, so the Guild tab and the website's inactive list fill in without pressing Sweep, and a member with no login on record no longer shows as last seen 1969-12-31
+- With no site data yet, the Guild and Events tabs say how to get it instead of 'No members match these filters', the header says how old the site data is, and the Sync tab and /sq export explain that SideQuest Companion uploads the export and loads the site's data by itself
+
 ## v0.7.0 (2026-11-06)
 
 ### New
