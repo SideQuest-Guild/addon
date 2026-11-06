@@ -11,7 +11,11 @@ local EVENT_LINK_WINDOW = 3 * 60 * 60 -- ±3h
 Recorder.current = nil -- pointer into SideQuestDB.pending.sessions, the in-progress session
 Recorder.killedThisSession = {} -- encounter_id -> true, reset per session
 Recorder.started = false
+Recorder.startedAt = nil -- when Start raid was clicked this session
 Recorder.ended = false
+Recorder.endedAt = nil -- when End raid was clicked this session
+Recorder.prepDoneAt = nil -- when Prep was marked done this session
+Recorder.inviteDoneAt = nil -- when Invite was marked done this session
 Recorder.present = {} -- charName -> "raid" | "standby": who is here right now (EP goes only to them)
 
 local RESUME_WINDOW = 8 * 60 * 60
@@ -25,8 +29,12 @@ local function saveRecordingState()
     SideQuestDB.recording = {
         session_id = Recorder.current.id,
         started = Recorder.started,
+        started_at = Recorder.startedAt,
         ended = Recorder.ended,
+        ended_at = Recorder.endedAt,
         killed = Recorder.killedThisSession,
+        prep_done_at = Recorder.prepDoneAt,
+        invite_done_at = Recorder.inviteDoneAt,
     }
 end
 
@@ -55,9 +63,41 @@ function Recorder.FindLinkedEvent(startedAt)
     return best and best.id or nil
 end
 
+--- Another officer currently recording `instanceID` (or any instance, if
+-- `instanceID` is nil), per the latest HELLO heard from them; nil if none.
+-- Never matches ourselves.
+function Recorder.OtherRecorder(instanceID)
+    local me = SideQuest.NormalizeUnit("player")
+    for char, info in pairs(SideQuestDB.addonVersions or {}) do
+        if char ~= me and info.recording and (not instanceID or info.recording.instance_id == instanceID) then
+            return { character = char, recording = info.recording }
+        end
+    end
+    return nil
+end
+
+--- Whether the current player may start recording right now, and why not
+-- if not. Matches the Raid Night recording control's disabled-reason text.
+function Recorder.CanRecord()
+    if not SideQuest.IsOfficer() then
+        return false, "Only officers record raids"
+    end
+    if not (IsInInstance and IsInInstance()) then
+        return false, "Zone into the raid to record"
+    end
+    local _, instanceType = IsInInstance()
+    if instanceType ~= "raid" then
+        return false, "Zone into the raid to record"
+    end
+    return true, nil
+end
+
 --- Explicit "Record this raid". Must be called by an officer while inside a
--- raid instance. Creates and opens a new pending session.
-function Recorder.StartRecording(instanceName, instanceID, difficultyID, size)
+-- raid instance. Creates and opens a new pending session. If another
+-- officer is already recording this instance (per their last HELLO) and
+-- `force` is not set, prints a warning and returns nil plus that officer's
+-- info instead of starting, so the caller can ask to click again to confirm.
+function Recorder.StartRecording(instanceName, instanceID, difficultyID, size, force)
     if not SideQuest.IsOfficer() then
         SideQuest.Print("Only officers can record a raid.")
         return nil
@@ -65,6 +105,14 @@ function Recorder.StartRecording(instanceName, instanceID, difficultyID, size)
     if Recorder.current then
         SideQuest.Print("Already recording this raid (" .. (Recorder.current.instance_name or "?") .. ").")
         return Recorder.current
+    end
+    if not force then
+        local other = Recorder.OtherRecorder(instanceID)
+        if other then
+            SideQuest.Print((other.character or "another officer")
+                .. " is already recording this raid. Click Start recording again to record anyway.")
+            return nil, other
+        end
     end
 
     local startedAt = now()
@@ -83,11 +131,16 @@ function Recorder.StartRecording(instanceName, instanceID, difficultyID, size)
     Recorder.current = session
     Recorder.killedThisSession = {}
     Recorder.started = false
+    Recorder.startedAt = nil
     Recorder.ended = false
+    Recorder.endedAt = nil
+    Recorder.prepDoneAt = nil
+    Recorder.inviteDoneAt = nil
     SideQuestDB.standby = {} -- a new night starts with an empty standby list
     saveRecordingState()
 
     SideQuest.Comm.AnnounceRecorder(SideQuest.NormalizeUnit("player"))
+    SideQuest.Prep.SayHello() -- tells other officers' "who can record" lists we're recording now
     SideQuest.Print("Recording started for " .. tostring(instanceName) .. ". Other officers should not also record.")
     Recorder.UpdateRoster()
 
@@ -104,6 +157,7 @@ function Recorder.StopRecording()
     Recorder.current = nil
     Recorder.present = {}
     saveRecordingState()
+    SideQuest.Prep.SayHello() -- clears us from other officers' "who can record" lists
 end
 
 --- After a /reload or relog inside the same raid, pick the unfinished session back up instead of dropping it.
@@ -120,8 +174,12 @@ function Recorder.TryResume(instanceID)
             end
             Recorder.current = session
             Recorder.started = state.started and true or false
+            Recorder.startedAt = state.started_at
             Recorder.ended = state.ended and true or false
+            Recorder.endedAt = state.ended_at
             Recorder.killedThisSession = state.killed or {}
+            Recorder.prepDoneAt = state.prep_done_at
+            Recorder.inviteDoneAt = state.invite_done_at
             Recorder.UpdateRoster()
             SideQuest.Print("Resumed recording " .. tostring(session.instance_name) .. ".")
             return true
@@ -270,9 +328,42 @@ function Recorder.OnEncounterEnd(encounterID, encounterName, difficultyID, group
     saveRecordingState()
 end
 
+--- How many encounter rows (wipes and kills) this session has recorded,
+-- for the course's Boss step.
+function Recorder.EncounterCountThisSession()
+    local session = Recorder.current
+    if not session then
+        return 0
+    end
+    local count = 0
+    for _, row in ipairs(pending().encounters) do
+        if row.session_id == session.id then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 --------------------------------------------------------------------------
--- Start / End raid buttons
+-- Course steps: Prep, Invite, Start raid, End raid
 --------------------------------------------------------------------------
+
+--- Mark the Prep course step done; persisted with the recording state if a
+-- session is open so it survives a /reload, transient otherwise.
+function Recorder.MarkPrepDone()
+    Recorder.prepDoneAt = Recorder.prepDoneAt or now()
+    if Recorder.current then
+        saveRecordingState()
+    end
+end
+
+--- Mark the Invite course step done; same persistence rule as MarkPrepDone.
+function Recorder.MarkInviteDone()
+    Recorder.inviteDoneAt = Recorder.inviteDoneAt or now()
+    if Recorder.current then
+        saveRecordingState()
+    end
+end
 
 function Recorder.StartRaid()
     local session = Recorder.current
@@ -281,6 +372,7 @@ function Recorder.StartRaid()
     end
     Recorder.UpdateRoster()
     Recorder.started = true
+    Recorder.startedAt = now()
     awardToSessionMembers(session, SideQuest.Rules.Get().ep.on_time, "on_time", "Start raid")
     saveRecordingState()
 end
@@ -292,6 +384,7 @@ function Recorder.EndRaid()
     end
     Recorder.UpdateRoster()
     Recorder.ended = true
+    Recorder.endedAt = now()
     session.ended_at = now()
     awardToSessionMembers(session, SideQuest.Rules.Get().ep.full_night, "full_night", "End raid")
     saveRecordingState()
@@ -395,7 +488,15 @@ SideQuest.On("ENCOUNTER_END", function(encounterID, name, difficultyID, groupSiz
 end)
 
 SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, sender)
-    if msgType == "STANDBY_REQ" then
+    if msgType == "RECORDER" then
+        -- legacy/compat: an older client announcing it's recording, no instance or HELLO detail.
+        local char = payload
+        local info = SideQuestDB.addonVersions[char] or {}
+        info.seenAt = now()
+        info.officer = true
+        info.recording = info.recording or { instance = nil, instance_id = nil, since = now() }
+        SideQuestDB.addonVersions[char] = info
+    elseif msgType == "STANDBY_REQ" then
         if SideQuest.IsOfficer() then
             -- officer UI surfaces the request; auto-add is left to the UI to confirm
             SideQuest.Fire("SQ_STANDBY_REQUESTED", payload, sender)
@@ -417,5 +518,20 @@ SideQuest.RegisterSlash("standby", function(rest)
         end
     end
 end, "mark yourself as standby for tonight's raid")
+
+SideQuest.RegisterSlash("record", function(rest)
+    if Recorder.current then
+        Recorder.StopRecording()
+        SideQuest.Print("Recording stopped.")
+        return
+    end
+    local ok, reason = Recorder.CanRecord()
+    if not ok then
+        SideQuest.Print(reason)
+        return
+    end
+    local name, _, difficultyID, _, _, _, _, instanceID, groupSize = GetInstanceInfo()
+    Recorder.StartRecording(name, instanceID, difficultyID, groupSize)
+end, "start or stop recording the current raid")
 
 return Recorder

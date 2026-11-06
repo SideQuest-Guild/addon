@@ -3176,20 +3176,58 @@ local function makeConsoleSub(panel, key)
     return sub
 end
 
--- Raid Night: the numbered course (Prep, Invite, Start, each boss, Loot,
--- End); each step punches as it's done and shows its time, plus roster
--- presence, the standby list and the auto-award log with Undo.
+-- Raid Night: a recording control (Start/Stop, status, who else can
+-- record), the numbered course (Prep, Invite, Start, each boss, Loot, End)
+-- tied to the real recording state, roster presence, the standby list and
+-- the auto-award log with Undo.
+
+-- "who can record" row text: recording/ready state, or "unknown" if the
+-- sender's HELLO predates the officer/recording fields.
+local function knownOfficerLine(entry)
+    if entry.officer == nil then
+        return displayName(entry.character) .. " -- version " .. tostring(entry.version or "?") .. ", unknown"
+    elseif entry.recording then
+        return displayName(entry.character) .. " -- recording " .. tostring(entry.recording.instance or "a raid")
+            .. " since " .. date("%H:%M", entry.recording.since or now())
+    else
+        return displayName(entry.character) .. " -- ready"
+    end
+end
 
 function UI.BuildConsoleRaidNight(panel)
     local sub = makeConsoleSub(panel, "Raid Night")
     local chamber = createChamber(sub, "SideQuestRaidNightChamber")
     chamber:SetAllPoints(sub)
 
-    local scroll, content = buildScroll(chamber.inner, -30)
+    -- Recording control lives above the scroll, like the Roster tab's
+    -- Sweep button: the one action that matters most on this view, always
+    -- visible. It's the only place that actually starts or stops a
+    -- session; the course's Start raid/End raid steps below still award
+    -- their EP but never toggle recording.
+    local recordBtn = createButton(chamber.inner, "primary", "Start recording", 170, 24)
+    recordBtn:SetPoint("TOPLEFT", 14, -30)
+    recordBtn:SetScript("OnClick", function()
+        UI.OnClickRecordButton()
+    end)
+    local recordStatusText = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
+    recordStatusText:SetPoint("LEFT", recordBtn, "RIGHT", 10, 0)
+    recordStatusText:SetWidth(380)
+    if recordStatusText.SetWordWrap then recordStatusText:SetWordWrap(true) end
+    chamber.recordBtn, chamber.recordStatusText, chamber.recordConfirmArmed = recordBtn, recordStatusText, false
+
+    local scroll, content = buildScroll(chamber.inner, -62)
     chamber.scroll, chamber.content = scroll, content
 
+    local whoHeading = createSubHeading(content, "Who can record")
+    whoHeading:SetPoint("TOPLEFT", 0, 0)
+    whoHeading:SetWidth(520)
+    local whoList = CreateFrame("Frame", nil, content)
+    whoList:SetPoint("TOPLEFT", whoHeading, "BOTTOMLEFT", 0, -6)
+    whoList:SetPoint("TOPRIGHT", whoHeading, "BOTTOMRIGHT", 0, -6)
+    chamber.whoHeading, chamber.whoList, chamber.whoRows = whoHeading, whoList, {}
+
     local courseHeading = createSubHeading(content, "Tonight's course")
-    courseHeading:SetPoint("TOPLEFT", 0, 0)
+    courseHeading:SetPoint("TOPLEFT", whoList, "BOTTOMLEFT", 0, -10)
     courseHeading:SetWidth(520)
     local list = CreateFrame("Frame", nil, content)
     list:SetPoint("TOPLEFT", courseHeading, "BOTTOMLEFT", 0, -6)
@@ -3199,19 +3237,21 @@ function UI.BuildConsoleRaidNight(panel)
     local steps = {
         { key = "prep", label = "Prep -- ask the raid to report readiness", action = function()
             SideQuest.Prep.RequestCheck({})
+            SideQuest.Recorder.MarkPrepDone()
         end },
         { key = "invite", label = "Invite -- bring in everyone signed", action = function()
             local evt = SideQuest.Events.Get()[1]
             if evt then SideQuest.Events.InviteSigned(evt.id) end
+            SideQuest.Recorder.MarkInviteDone()
         end },
-        { key = "start", label = "Start raid -- on-time EP, begin recording", action = function()
+        { key = "start", label = "Start raid -- on-time EP", action = function()
             SideQuest.Recorder.StartRaid()
         end },
         { key = "boss", label = "Boss -- encounters record automatically", action = nil },
         { key = "loot", label = "Loot -- open bidding from the Loot sub-view", action = function()
             UI.ShowConsoleSub("Loot")
         end },
-        { key = "end", label = "End raid -- full-night EP, stop recording", action = function()
+        { key = "end", label = "End raid -- full-night EP", action = function()
             SideQuest.Recorder.EndRaid()
         end },
     }
@@ -3246,7 +3286,9 @@ function UI.BuildConsoleRaidNight(panel)
             btn:SetPoint("RIGHT", timeText, "LEFT", -8, 0)
             btn:SetScript("OnClick", function()
                 if step.action then step.action() end
-                step.doneAt = now()
+                if step.key == "loot" then
+                    step.doneAt = now()
+                end
                 UI.RefreshConsoleRaidNight()
             end)
         end
@@ -3283,12 +3325,117 @@ function UI.BuildConsoleRaidNight(panel)
     panel.raidNightChamber = chamber
 end
 
+--- Start/Stop recording click handler: delegates all the conflict/officer/
+-- instance logic to Recorder.CanRecord and Recorder.StartRecording, and
+-- only tracks the local "has the user clicked once already" latch for the
+-- double-record confirm.
+function UI.OnClickRecordButton()
+    local Recorder = SideQuest.Recorder
+    local panel = UI.panels[OFFICER_TAB]
+    local chamber = panel and panel.raidNightChamber
+    if not chamber then
+        return
+    end
+    if Recorder.current then
+        Recorder.StopRecording()
+        chamber.recordConfirmArmed = false
+        UI.RefreshConsoleRaidNight()
+        return
+    end
+    local ok = Recorder.CanRecord()
+    if not ok then
+        return
+    end
+    local name, _, difficultyID, _, _, _, _, instanceID, groupSize = GetInstanceInfo()
+    local session, other = Recorder.StartRecording(name, instanceID, difficultyID, groupSize, chamber.recordConfirmArmed)
+    chamber.recordConfirmArmed = (session == nil and other ~= nil)
+    UI.RefreshConsoleRaidNight()
+end
+
 function UI.RefreshConsoleRaidNight()
     local panel = UI.panels[OFFICER_TAB]
     if not panel or not panel.raidNightChamber then
         return
     end
     local chamber = panel.raidNightChamber
+    local Recorder = SideQuest.Recorder
+
+    -- Recording control: status line + Start/Stop button, the only place
+    -- that actually starts or stops a session.
+    local canRecord, cantReason = Recorder.CanRecord()
+    local instanceID = nil
+    if IsInInstance and IsInInstance() then
+        local _, instanceType = IsInInstance()
+        if instanceType == "raid" then
+            instanceID = select(8, GetInstanceInfo())
+        end
+    end
+    if Recorder.current then
+        chamber.recordConfirmArmed = false
+        local raidCount = 0
+        for _, status in pairs(Recorder.present) do
+            if status == "raid" then raidCount = raidCount + 1 end
+        end
+        chamber.recordBtn:SetText("Stop recording")
+        chamber.recordBtn:SetEnabled(true)
+        local bosses = Recorder.EncounterCountThisSession()
+        setStateText(chamber.recordStatusText, string.format("Recording %s since %s -- %d %s, %d %s",
+            tostring(Recorder.current.instance_name or "raid"), date("%H:%M", Recorder.current.started_at or now()),
+            bosses, bosses == 1 and "boss" or "bosses", raidCount, raidCount == 1 and "player" or "players"))
+    else
+        local other = Recorder.OtherRecorder(instanceID)
+        if other then
+            chamber.recordBtn:SetText(chamber.recordConfirmArmed and "Start anyway?"
+                or (displayName(other.character) .. " is already recording"))
+            chamber.recordBtn:SetEnabled(canRecord, cantReason)
+            setStateText(chamber.recordStatusText, displayName(other.character) .. " is recording this raid.")
+        else
+            chamber.recordConfirmArmed = false
+            chamber.recordBtn:SetText("Start recording")
+            chamber.recordBtn:SetEnabled(canRecord, cantReason)
+            setStateText(chamber.recordStatusText, canRecord and "Not recording." or cantReason, not canRecord)
+        end
+    end
+
+    -- Who can record: self, plus officers heard from recently who can.
+    local whoLines = {}
+    if Recorder.current then
+        table.insert(whoLines, "You -- recording " .. tostring(Recorder.current.instance_name or "a raid")
+            .. " since " .. date("%H:%M", Recorder.current.started_at or now()))
+    elseif canRecord then
+        table.insert(whoLines, "You -- ready")
+    else
+        table.insert(whoLines, "You -- " .. cantReason)
+    end
+    for _, entry in ipairs(SideQuest.Prep.KnownOfficers(600)) do
+        table.insert(whoLines, knownOfficerLine(entry))
+    end
+    for _, r in ipairs(chamber.whoRows) do r:Hide() end
+    for i, line in ipairs(whoLines) do
+        local row = chamber.whoRows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, chamber.whoList)
+            row:SetSize(500, 18)
+            row.text = makeFontString(row, FONT_BODY, 11, C.ink, "LEFT")
+            row.text:SetPoint("LEFT")
+            chamber.whoRows[i] = row
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -18 * (i - 1))
+        row.text:SetText(line)
+        row:Show()
+    end
+    chamber.whoList:SetHeight(18 * #whoLines)
+
+    -- course steps: Prep/Invite/Start raid/End raid read from the real
+    -- recording state, not from a click alone; Boss and Loot are handled
+    -- below the generic loop.
+    local recording = Recorder.current ~= nil
+    chamber.steps[1].doneAt = Recorder.prepDoneAt
+    chamber.steps[2].doneAt = Recorder.inviteDoneAt
+    chamber.steps[3].doneAt = Recorder.started and Recorder.startedAt or nil
+    chamber.steps[6].doneAt = Recorder.ended and Recorder.endedAt or nil
+
     -- the first not-yet-done step after at least one done step is "current" (mid-course)
     local sawDone, current = false, nil
     for i, step in ipairs(chamber.steps) do
@@ -3326,6 +3473,12 @@ function UI.RefreshConsoleRaidNight()
             row.label:SetTextColor(C.ink[1], C.ink[2], C.ink[3], 1)
             row.numPlate:SetVertexColor(C.goldDeep[1], C.goldDeep[2], C.goldDeep[3], 1)
             row.num:Show()
+        end
+        if row.btn and not step.doneAt and (step.key == "start" or step.key == "end") then
+            row.btn:SetEnabled(recording, "Start recording first")
+        end
+        if step.key == "boss" then
+            row.timeText:SetText(Recorder.EncounterCountThisSession() .. " recorded")
         end
     end
 
@@ -3400,8 +3553,8 @@ function UI.RefreshConsoleRaidNight()
         row:Show()
     end
     chamber.awardHeading.label:SetText(trackedCaps("Auto-award log (" .. #awards .. ")"))
-    -- course, presence and standby above the award log, then one line per award
-    setScrollContentHeight(chamber.scroll, 300 + 18 * shown)
+    -- who-can-record, course, presence and standby above the award log, then one line per award
+    setScrollContentHeight(chamber.scroll, 330 + 18 * #whoLines + 18 * shown)
 end
 
 -- Loot sub-view: the item up for bid (icon, quality-colour name, slot, GP
@@ -4057,7 +4210,7 @@ end
 --------------------------------------------------------------------------
 
 SideQuest.On("SQ_PROMPT_RECORD", function()
-    SideQuest.Print("You're in a raid instance. Use /sq or the Console's Raid Night step to start recording if you're officer of the night.")
+    SideQuest.Print("You're in a raid instance. Click Start recording on the Console's Raid Night tab, or type /sq record, to start recording tonight.")
 end)
 
 SideQuest.On("SQ_SHOW_EXPORT", function(str)

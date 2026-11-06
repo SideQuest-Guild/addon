@@ -104,18 +104,23 @@ and run this once:
 
 ### Running a raid night
 
-Follow the steps on the Console's **Raid Night** tab:
+Zone into the raid and click **Start recording** at the top of the Console's **Raid Night** tab (only officers in a
+raid instance can; the button says why if you can't). The **Who can record** list below it shows every officer
+SideQuest has heard from recently and whether they're already recording, so two officers don't record the same
+night by accident -- clicking Start again when someone else is already recording asks you to confirm first.
+
+Then follow the steps:
 
 1. **Prep** asks the raid to report food, flasks and repairs.
 2. **Invite** invites everyone who signed up on the website.
-3. **Start raid** begins recording and gives everyone present 5 EP for being on time. The addon tells the raid you are
-   recording, so a second officer doesn't record the same night.
+3. **Start raid** gives everyone present 5 EP for being on time. It only unlocks once you're recording.
 4. Boss kills and wipes are recorded on their own. A kill gives 10 EP. The first wipe of the night on a boss the guild
    hasn't killed gives 10 EP, once per boss per night.
 5. **Loot** opens bidding on each item in the loot window. Raiders get a popup with the item, its GP price, their PR and
    Main, Off and Pass buttons. The Loot tab lists the answers in the order the rules give: main spec by PR, then off
    spec, alts and disenchant. Chase items, legendaries and crafted tier are left for the loot council to decide.
-6. **End raid** gives 5 EP to everyone still there and stops recording.
+6. **End raid** gives 5 EP to everyone still there. It unlocks once you're recording, and doesn't stop recording by
+   itself -- click **Stop recording** (or type `/sq record`) when the night is over.
 
 Every award prints a chat line with an undo command, and the Raid Night tab has an **Undo** button next to each one.
 
@@ -145,6 +150,7 @@ events.
 |---|---|---|
 | `/sq` | everyone | Opens or closes the window. |
 | `/sq standby` | everyone | Asks to be on standby tonight. Officers in the raid add themselves. |
+| `/sq record` | officers | Starts or stops recording the raid you're in, same as the Raid Night tab's button. |
 | `/sq help` | everyone | Lists every command. |
 | `/sq minimap` | everyone | Hides or shows the minimap button. |
 | `/sq options` | everyone | Opens the SideQuest settings panel (Options > AddOns > SideQuest Guild). |

@@ -90,8 +90,24 @@ end
 -- HELLO: addon version broadcast, for the "missing addon" check
 --------------------------------------------------------------------------
 
+--- Broadcasts this character's version, officer status and recording state
+-- (if any). Rate-limited since the recording control calls it on every
+-- start/stop in addition to the once-per-login SQ_READY call.
 function Prep.SayHello()
-    SideQuest.Comm.SendHello({ character = SideQuest.NormalizeUnit("player"), version = SideQuest.ADDON_VERSION, at = now() })
+    if not SideQuest.Comm.RateLimit("HELLO", 2) then
+        return
+    end
+    local payload = {
+        character = SideQuest.NormalizeUnit("player"),
+        version = SideQuest.ADDON_VERSION,
+        at = now(),
+        officer = SideQuest.IsOfficer(),
+    }
+    local session = SideQuest.Recorder.current
+    if session then
+        payload.recording = { instance = session.instance_name, instance_id = session.instance_id, since = session.started_at }
+    end
+    SideQuest.Comm.SendHello(payload)
 end
 
 SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, _sender)
@@ -100,7 +116,12 @@ SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, _sender)
     end
     local ok, hello = pcall(SideQuestJSON.decode, payload)
     if ok then
-        SideQuestDB.addonVersions[hello.character] = { version = hello.version, seenAt = now() }
+        SideQuestDB.addonVersions[hello.character] = {
+            version = hello.version,
+            seenAt = now(),
+            officer = hello.officer, -- nil for an old-format HELLO: unknown, not "not an officer"
+            recording = hello.recording, -- { instance, instance_id, since } or nil
+        }
     end
 end)
 
@@ -120,6 +141,26 @@ function Prep.MissingAddon(raidCharacters, maxAgeSeconds)
         end
     end
     return missing
+end
+
+--- Officers (or unknown-officer-status senders, since an old-format HELLO
+-- can't say) heard from within `maxAgeSeconds`, for the "who can record"
+-- list. Excludes the current character and anyone a new-format HELLO
+-- explicitly said is not an officer.
+function Prep.KnownOfficers(maxAgeSeconds)
+    maxAgeSeconds = maxAgeSeconds or 600
+    local me = SideQuest.NormalizeUnit("player")
+    local list = {}
+    for char, info in pairs(SideQuestDB.addonVersions or {}) do
+        if char ~= me and info.officer ~= false and (now() - (info.seenAt or 0)) <= maxAgeSeconds then
+            table.insert(list, {
+                character = char, version = info.version, officer = info.officer,
+                recording = info.recording, seenAt = info.seenAt,
+            })
+        end
+    end
+    table.sort(list, function(a, b) return a.character < b.character end)
+    return list
 end
 
 --------------------------------------------------------------------------

@@ -65,7 +65,11 @@ local function resetAddon()
     SideQuest.Recorder.current = nil
     SideQuest.Recorder.killedThisSession = {}
     SideQuest.Recorder.started = false
+    SideQuest.Recorder.startedAt = nil
     SideQuest.Recorder.ended = false
+    SideQuest.Recorder.endedAt = nil
+    SideQuest.Recorder.prepDoneAt = nil
+    SideQuest.Recorder.inviteDoneAt = nil
     SideQuest.Loot.activeBid = nil
     SideQuest.Comm.ResetAnswers()
     SideQuest.Comm.ResetRateLimits()
@@ -81,6 +85,9 @@ local function resetAddon()
     WowStub.bankMoneyTransactions = {}
     WowStub.bankLogQueries = {}
     WowStub.currentGuildBankTab = 1
+    WowStub.instance = { inInstance = false, instanceType = "none", instanceID = 0, difficultyID = 1 }
+    WowStub.inRaid = false
+    WowStub.raidCount = 0
 end
 
 --------------------------------------------------------------------------
