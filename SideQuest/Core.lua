@@ -49,6 +49,11 @@ local function defaultDB()
         -- `settings.share` (which only governs what gets published to the guild directory).
         market = { sell = {}, buy = {}, requests = {} },
         stock = { bags = {}, bank = {}, bank_at = nil },
+        -- Bank.lua: content-key -> list of { at, id } already-recorded guild bank
+        -- log rows, keyed by everything but time so a repeat capture can match a
+        -- row whose reported elapsed time has grown. Survives `/sq export clear`
+        -- (pending.bank doesn't); pruned at 120 days.
+        bankSeen = {},
         standby = {}, -- list of normalized "Name-Realm"
         settings = {
             officerRankIndex = nil, -- lowest guild rank that counts as officer; 0 is the Guild Master, like GetGuildInfo

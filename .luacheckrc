@@ -25,7 +25,9 @@ read_globals = {
     "GetNumGuildMembers", "GetGuildRosterInfo",
     "C_TradeSkillUI", "GetProfessions", "GetProfessionInfo",
     "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo", "QueryGuildRecipes",
-    "C_GuildBank",
+    "C_GuildBank", "GetCurrentGuildBankTab", "QueryGuildBankLog",
+    "GetNumGuildBankTransactions", "GetGuildBankTransaction",
+    "GetNumGuildBankMoneyTransactions", "GetGuildBankMoneyTransaction", "MAX_GUILDBANK_TABS",
     "C_PvP", "GetNumBattlefieldScores", "GetBattlefieldWinner", "RequestBattlefieldScoreData", "UnitFactionGroup",
     "InCombatLockdown", "SendChatMessage", "ChatFrame_SendTell",
     "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
@@ -59,7 +61,10 @@ files["tests/wowstub.lua"] = {
         "QueryGuildRecipes", "GetAverageItemLevel",
         "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog", "C_Reputation",
         "C_Container", "Minimap", "GetCursorPosition", "C_Calendar", "C_DateAndTime",
-        "C_GuildBank", "InCombatLockdown", "SendChatMessage",
+        "C_GuildBank", "GetCurrentGuildBankTab", "QueryGuildBankLog",
+        "GetNumGuildBankTransactions", "GetGuildBankTransaction",
+        "GetNumGuildBankMoneyTransactions", "GetGuildBankMoneyTransaction",
+        "InCombatLockdown", "SendChatMessage",
         "C_PvP", "GetNumBattlefieldScores", "GetBattlefieldWinner", "RequestBattlefieldScoreData", "UnitFactionGroup",
         "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
@@ -89,5 +94,9 @@ files["tests/test_minimap.lua"] = {
 }
 
 files["tests/test_calendar.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_bank.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }

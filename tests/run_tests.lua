@@ -77,6 +77,10 @@ local function resetAddon()
     WowStub.chatLog = {}
     WowStub.addonMessages = {}
     WowStub.pvp = { scores = {}, winner = nil, myFaction = "Horde", duration = 0, scoreRequests = 0 }
+    WowStub.bankTransactions = {}
+    WowStub.bankMoneyTransactions = {}
+    WowStub.bankLogQueries = {}
+    WowStub.currentGuildBankTab = 1
 end
 
 --------------------------------------------------------------------------

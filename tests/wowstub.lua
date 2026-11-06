@@ -43,7 +43,10 @@ WowStub = {
     itemCooldowns = {}, -- itemId -> { startTime, duration }
     containers = {}, -- bagId -> array of { itemID, stackCount } (1-indexed slots)
     avgItemLevel = nil, avgItemLevelEquipped = nil, avgItemLevelPvp = nil,
-    bankTransactions = {}, -- tabIndex -> list of { type, name, itemID, itemLink, count, money, year, month, day }
+    bankTransactions = {}, -- tabIndex -> list of { kind, name, itemLink, count, tab1, tab2, years, months, days, hours } (elapsed, not a date)
+    bankMoneyTransactions = {}, -- list of { kind, name, amount, years, months, days, hours } (elapsed, not a date)
+    bankLogQueries = {}, -- list of tabIndex args passed to QueryGuildBankLog, newest last
+    currentGuildBankTab = 1,
     inCombat = false,
     buffs = {}, -- list of buff names on "player"
     durability = nil, -- 0-100 or nil (unknown)
@@ -444,15 +447,45 @@ function QueryGuildRecipes() end
 -- Guild bank (v2)
 --------------------------------------------------------------------------
 
+-- Forever's real guild bank log API: old globals, not C_GuildBank (which
+-- only has IsGuildBankEnabled). See addon/SideQuest/Bank.lua for sources.
 C_GuildBank = {
-    GetNumTransactions = function(tabIndex)
-        return #(WowStub.bankTransactions[tabIndex] or {})
-    end,
-    GetTransaction = function(tabIndex, i)
-        local list = WowStub.bankTransactions[tabIndex] or {}
-        return list[i]
+    IsGuildBankEnabled = function()
+        return true
     end,
 }
+
+function GetCurrentGuildBankTab()
+    return WowStub.currentGuildBankTab or 1
+end
+
+function QueryGuildBankLog(tabIndex)
+    table.insert(WowStub.bankLogQueries, tabIndex)
+end
+
+function GetNumGuildBankTransactions(tabIndex)
+    return #(WowStub.bankTransactions[tabIndex] or {})
+end
+
+function GetGuildBankTransaction(tabIndex, i)
+    local r = (WowStub.bankTransactions[tabIndex] or {})[i]
+    if not r then
+        return nil
+    end
+    return r.kind, r.name, r.itemLink, r.count, r.tab1, r.tab2, r.year, r.month, r.day, r.hour
+end
+
+function GetNumGuildBankMoneyTransactions()
+    return #WowStub.bankMoneyTransactions
+end
+
+function GetGuildBankMoneyTransaction(i)
+    local r = WowStub.bankMoneyTransactions[i]
+    if not r then
+        return nil
+    end
+    return r.kind, r.name, r.amount, r.year, r.month, r.day, r.hour
+end
 
 --------------------------------------------------------------------------
 -- Battlegrounds (v2)

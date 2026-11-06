@@ -3737,11 +3737,10 @@ function UI.BuildConsoleBank(panel)
     local chamber = createChamber(sub, "SideQuestConsoleBankChamber")
     chamber:SetAllPoints(sub)
 
-    local captureBtn = createButton(chamber.inner, "primary", "Capture open tab", 150, 22)
+    local captureBtn = createButton(chamber.inner, "primary", "Capture bank log", 150, 22)
     captureBtn:SetPoint("TOPLEFT", 14, -30)
     captureBtn:SetScript("OnClick", function()
-        SideQuest.Bank.CaptureOpenTab(1)
-        UI.RefreshConsoleBank()
+        SideQuest.Bank.RequestCapture()
     end)
 
     local scroll, content = buildScroll(chamber.inner, -58)
@@ -3765,6 +3764,13 @@ function UI.RefreshConsoleBank()
             chamber.emptyText:SetPoint("TOPLEFT")
         end
         setStateText(chamber.emptyText, "Guild bank log API unavailable here; record deposits/withdrawals on the site.", true)
+        return
+    elseif #rows == 0 then
+        if not chamber.emptyText then
+            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.emptyText:SetPoint("TOPLEFT")
+        end
+        setStateText(chamber.emptyText, "Open the guild bank to read its log; rows appear here automatically.", true)
         return
     elseif chamber.emptyText then
         chamber.emptyText:SetText("")
@@ -4074,6 +4080,10 @@ end)
 
 SideQuest.On("SQ_RECRUIT_SAVED", function()
     if UI.activeTab == OFFICER_TAB then UI.RefreshConsoleRecruits() end
+end)
+
+SideQuest.On("SQ_BANK_CAPTURED", function()
+    if UI.activeTab == OFFICER_TAB then UI.RefreshConsoleBank() end
 end)
 
 local function refreshCalendarRow()
