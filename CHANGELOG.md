@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.0 (2026-11-06)
+
+### New
+
+- SideQuest records each battleground's final scoreboard and sends it to the website with your next sync
+
 ## v0.5.2 (2026-11-05)
 
 ### Fixed
