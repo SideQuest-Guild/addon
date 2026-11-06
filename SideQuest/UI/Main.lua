@@ -3619,7 +3619,8 @@ function UI.RefreshConsoleRoster()
         end
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
-        row.text:SetText(m.name .. " -- last seen " .. date("%Y-%m-%d", m.last_seen_at or 0)
+        row.text:SetText(m.name
+            .. (m.last_seen_at and (" -- last seen " .. date("%Y-%m-%d", m.last_seen_at)) or " -- no login on record")
             .. (m.last_raid_at and (", last raid " .. date("%Y-%m-%d", m.last_raid_at)) or ", never raided"))
         row.rankBtn:SetScript("OnClick", function()
             SideQuest.Recruits.AddNote(m.name, "Rank suggestion: demote for inactivity")

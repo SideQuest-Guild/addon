@@ -21,12 +21,18 @@ end
 
 --- Sweep the guild roster into SideQuestDB.roster (this character's local
 -- snapshot) and SideQuestDB.pending.roster (queued for the next export).
--- Returns the snapshot, or nil if the roster API isn't available.
-function Roster.Sweep()
+-- Returns the snapshot, or nil if the roster API isn't available. `auto`
+-- reads what the client already has without asking the server again
+-- (asking fires GUILD_ROSTER_UPDATE, which would sweep again), and skips an
+-- empty roster, which only means the client hasn't loaded it yet.
+function Roster.Sweep(auto)
     if not Roster.IsAvailable() then
         return nil
     end
-    if C_GuildInfo and C_GuildInfo.GuildRoster then
+    if auto and GetNumGuildMembers() == 0 then
+        return nil
+    end
+    if not auto and C_GuildInfo and C_GuildInfo.GuildRoster then
         C_GuildInfo.GuildRoster() -- request a fresh roster from the server; info below may be stale until it returns
     end
 
@@ -125,5 +131,18 @@ SideQuest.RegisterSlash("roster", function()
         SideQuest.Print("Guild roster API unavailable here; roster stays as last imported.")
     end
 end, "sweep the guild roster for export (officers)")
+
+-- The game sends GUILD_ROSTER_UPDATE at login and whenever the roster changes. Sweep then, at most every
+-- AUTO_SWEEP_SECONDS, so the Guild tab and the next export carry the roster without anyone pressing Sweep.
+local AUTO_SWEEP_SECONDS = 600
+local lastAutoSweep = 0
+SideQuest.On("GUILD_ROSTER_UPDATE", function()
+    if now() - lastAutoSweep < AUTO_SWEEP_SECONDS then
+        return
+    end
+    if Roster.Sweep(true) then
+        lastAutoSweep = now()
+    end
+end)
 
 return Roster
