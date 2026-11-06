@@ -37,14 +37,22 @@ read_globals = {
     -- directory: professions/character/cooldowns/stock
     "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog",
     "C_Container", "GetAverageItemLevel",
-    -- minimap button
-    "Minimap", "GetCursorPosition",
+    -- minimap button (LibDBIcon-1.0 through LibStub)
+    "LibStub",
     -- optional third-party price hints (Market.SuggestPrice), never required
     "Auctionator", "TSM_API",
 }
 
 -- The WoW client has no `os` or `io` library (only the `date`/`time` globals): using them errors in game.
 files["SideQuest/"] = { not_globals = { "os", "io" } }
+
+-- Third-party libraries, kept exactly as their authors ship them.
+exclude_files = {
+    "SideQuest/Libs/LibStub/",
+    "SideQuest/Libs/CallbackHandler-1.0/",
+    "SideQuest/Libs/LibDataBroker-1.1/",
+    "SideQuest/Libs/LibDBIcon-1.0/",
+}
 
 -- Test files additionally define/read the WoW API stub and its control table.
 files["tests/wowstub.lua"] = {
@@ -69,6 +77,7 @@ files["tests/wowstub.lua"] = {
         "C_UnitAuras", "UnitBuff", "GetInventoryItemDurability", "C_DurabilityInfo",
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
         "C_Texture", "NineSliceUtil", "CreateColor", "ColorMixin",
+        "strmatch", "securecallfunction",
     },
 }
 

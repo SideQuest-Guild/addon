@@ -8,7 +8,7 @@ local SQ = SideQuest
 
 SQ.ADDON_NAME = "SideQuest"
 SQ.ADDON_VERSION = "1.0.0" -- stamped literally; packager replaces @project-version@ in the .toc, not here
-SQ.CURRENT_DB_VERSION = 1
+SQ.CURRENT_DB_VERSION = 2
 
 --------------------------------------------------------------------------
 -- SavedVariables defaults + migrations
@@ -84,7 +84,8 @@ local function defaultDB()
         prepAnswers = {}, -- character -> prep report, cleared each time an officer opens a new PREP_Q
         ui = {
             pos = nil, width = nil, height = nil, scale = nil, tab = nil,
-            minimap = { hide = false, angle = 190 }, -- angle in degrees round the rim, 0 = right
+            -- LibDBIcon-1.0 reads and writes this table: degrees round the rim (0 = right), and hidden or not
+            minimap = { hide = false, minimapPos = 190 },
         },
     }
 end
@@ -94,7 +95,14 @@ SQ.defaultDB = defaultDB
 -- Each migration function receives the db at version N and mutates it to N+1.
 -- Keyed by the version it upgrades *from*.
 local MIGRATIONS = {
-    -- [0] = function(db) ... end,  -- example for a future bump
+    -- 1 -> 2: the minimap button moved to LibDBIcon-1.0, which keeps its position as `minimapPos`
+    [1] = function(db)
+        local minimap = db.ui.minimap
+        if minimap.angle then
+            minimap.minimapPos = minimap.angle
+            minimap.angle = nil
+        end
+    end,
 }
 
 local function ensureDefaults(db, defaults)

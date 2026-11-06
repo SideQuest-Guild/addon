@@ -72,6 +72,12 @@ function GetTime()
     return WowStub.time - 1700000000
 end
 
+-- Lua helpers the game client defines globally; the bundled libraries (LibStub, CallbackHandler) call them.
+strmatch = string.match
+function securecallfunction(fn, ...)
+    return fn(...)
+end
+
 function WowStub.Advance(seconds)
     WowStub.time = WowStub.time + seconds
 end
@@ -768,6 +774,7 @@ local function newMockRegion(kind, name, parent, template)
     self.IsEventRegistered = function(_, e) return events[e] or false end
     self.SetScript = function(_, handler, fn) scripts[handler] = fn end
     self.GetScript = function(_, handler) return scripts[handler] end
+    self.GetParent = function() return self.__parent end
 
     -- Regions remember their draw layer (and sublevel) so the preview can
     -- stack them the way the client does; SetDrawLayer changes it later.

@@ -43,4 +43,22 @@ return function(h)
         button():GetScript("OnClick")(button(), "LeftButton")
         h.assertTrue(not SideQuest.UI.main:IsShown(), "second click closes it")
     end)
+
+    h.test("minimap button: LibDBIcon draws it as 'SideQuest', so button collectors list it by name", function()
+        h.resetAddon()
+        WowStub.FireEvent("ADDON_LOADED", "SideQuest")
+        local DBIcon = LibStub("LibDBIcon-1.0")
+        h.assertTrue(DBIcon:IsRegistered("SideQuest"), "registered with LibDBIcon")
+        h.assertEq(button(), DBIcon:GetMinimapButton("SideQuest"), "the button is LibDBIcon's")
+        h.assertEq(LibStub("LibDataBroker-1.1"):GetDataObjectByName("SideQuest").type, "launcher", "a broker launcher")
+    end)
+
+    h.test("minimap button: a save that kept its position as `angle` keeps it as LibDBIcon's `minimapPos`", function()
+        SideQuestDB = SideQuest.defaultDB()
+        SideQuestDB.version = 1
+        SideQuestDB.ui.minimap = { hide = false, angle = 45 }
+        WowStub.FireEvent("ADDON_LOADED", "SideQuest")
+        h.assertEq(SideQuestDB.ui.minimap.minimapPos, 45, "position carried over")
+        h.assertEq(SideQuestDB.ui.minimap.angle, nil, "old key removed")
+    end)
 end

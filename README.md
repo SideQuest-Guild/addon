@@ -217,6 +217,10 @@ uv run --directory uploader pytest   # uploader tests
 The tests also write `tests/fixtures/export_v1.txt`, `export_v2.txt` and `export_v2_directory.txt`, sample raid and
 directory records that the website's tests import. Copy them to the website repo when they change.
 
+The minimap button is drawn by LibDBIcon-1.0 (Ace3-style BSD licence), which needs LibStub (public domain),
+CallbackHandler-1.0 (BSD) and LibDataBroker-1.1 (public domain). They're copied unchanged into `SideQuest/Libs/` from
+LibDBIcon's trunk on CurseForge, and luacheck skips them. To update them, copy the new files over.
+
 `tests/preview/` draws every tab and popup as an image so you can check the layout without the game. See
 [tests/preview/README.md](tests/preview/README.md).
 
