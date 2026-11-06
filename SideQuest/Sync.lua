@@ -29,7 +29,7 @@ function Sync.ClearPending()
     SideQuestDB.pending = {
         sessions = {}, encounters = {}, loot = {}, awards = {},
         roster = nil, professions = {}, signups = {}, bank = {},
-        announcements = {}, recruits = {}, member_notes = {},
+        announcements = {}, recruits = {}, member_notes = {}, battlegrounds = {},
     }
     SideQuestDB.lastExport = ""
 end

@@ -33,6 +33,7 @@ local function defaultDB()
             announcements = {}, -- officer-composed announcements awaiting export
             recruits = {}, -- officer recruit records
             member_notes = {}, -- officer member notes
+            battlegrounds = {}, -- recorded battleground scoreboards awaiting export
         },
         standings = {
             generated_at = 0,

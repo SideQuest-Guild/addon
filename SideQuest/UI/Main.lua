@@ -3903,7 +3903,7 @@ function UI.BuildConsoleSync(panel)
         { key = "professions", label = "Professions" }, { key = "signups", label = "Signups" },
         { key = "bank", label = "Bank" }, { key = "announcements", label = "Announcements" },
         { key = "recruits", label = "Recruits" }, { key = "member_notes", label = "Member notes" },
-        { key = "roster", label = "Roster" },
+        { key = "battlegrounds", label = "Battlegrounds" }, { key = "roster", label = "Roster" },
     }
     chamber.pendingKeys = PENDING_KEYS
     local pendingGrid = CreateFrame("Frame", nil, chamber.inner)

@@ -82,6 +82,12 @@ quotes.
 Prices are gold, silver and copper (`1g20s`, `35s`, `80c`) or a plain number of gold (`1.5`). Leave the price off and
 buyers whisper you instead. With Auctionator or TradeSkillMaster installed, the Mine view suggests a price.
 
+## Battleground scoreboards
+
+When you finish a battleground, SideQuest records the final scoreboard: the map, who won, and every player's kills,
+deaths, honor, damage and healing. An officer's next sync carries it to the website, where signed-in guild members
+can see match history and guild PvP leaderboards.
+
 ## For officers
 
 <img src="docs/screenshots/console-raid-night.jpg" alt="The Raid Night tab: tonight's steps, who's present and standby" width="49%"> <img src="docs/screenshots/console-loot.jpg" alt="The Loot tab: bids ranked by PR with Award buttons" width="49%">

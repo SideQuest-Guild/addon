@@ -76,6 +76,7 @@ local function resetAddon()
     WowStub.officerKnownAfterCalls = nil
     WowStub.chatLog = {}
     WowStub.addonMessages = {}
+    WowStub.pvp = { scores = {}, winner = nil, myFaction = "Horde", duration = 0, scoreRequests = 0 }
 end
 
 --------------------------------------------------------------------------
@@ -808,6 +809,146 @@ test("inbox: officer status unknown at first, then known on retry", function()
     assertEq(SideQuestDB.inbox, nil, "inbox cleared once officer status resolves")
     assertEq(SideQuestDB.standings.generated_at, 200, "staged import applied once officer status was known")
     assertTrue(WowStub.officerNoteCalls >= 3, "retried until officer status was known")
+end)
+
+--------------------------------------------------------------------------
+-- 10. Battleground scoreboards
+--------------------------------------------------------------------------
+
+local function simScoreRow(name, overrides)
+    local row = {
+        name = name, guid = "Player-1-" .. name, faction = 1, raceName = "Dwarf",
+        gender = 2, className = "Warrior", classToken = "WARRIOR",
+        killingBlows = 3, honorableKills = 12, deaths = 2, honorGained = 140,
+        damageDone = 45000, healingDone = 1200, rating = 0, ratingChange = 0,
+        prematchMMR = 0, mmrChange = 0, postmatchMMR = 0, talentSpec = "", honorLevel = 1,
+        roleAssigned = 0, stats = {},
+    }
+    for k, v in pairs(overrides or {}) do
+        row[k] = v
+    end
+    return row
+end
+
+test("battlegrounds: records one match after PVP_MATCH_COMPLETE + the next score update", function()
+    resetAddon()
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Zach", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-AAAA0001" })
+    WowStub.instance = { inInstance = true, instanceType = "pvp", instanceID = 489, difficultyID = 1, name = "Warsong Gulch" }
+    WowStub.pvp.myFaction = "Alliance"
+    WowStub.pvp.winner = 1
+    WowStub.pvp.duration = 1234
+    WowStub.pvp.scores = {
+        simScoreRow("Zach"),
+        simScoreRow("Enemy1", { faction = 0, classToken = "MAGE", raceName = "Troll" }),
+    }
+
+    SideQuest.Fire("PVP_MATCH_COMPLETE", 1, 1234)
+    assertEq(WowStub.pvp.scoreRequests, 1, "score data was requested on completion")
+    assertEq(#SideQuestDB.pending.battlegrounds, 0, "nothing recorded until the score update arrives")
+
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    assertEq(#SideQuestDB.pending.battlegrounds, 1, "one match recorded")
+    local match = SideQuestDB.pending.battlegrounds[1]
+    assertEq(match.id, "Zach-" .. tostring(WowStub.time), "id is recorder name + ended_at")
+    assertEq(match.map, "Warsong Gulch", "map from GetInstanceInfo")
+    assertEq(match.instance_id, 489, "instance_id from GetInstanceInfo")
+    assertEq(match.winner, "alliance", "winner 1 maps to alliance")
+    assertEq(match.my_faction, "alliance", "my_faction from UnitFactionGroup")
+    assertEq(match.duration, 1234, "duration from C_PvP.GetActiveMatchDuration")
+    assertEq(#match.players, 2, "both score rows kept")
+    assertEq(match.players[1].name, "Zach", "first player name")
+    assertEq(match.players[1].faction, "alliance", "faction 1 maps to alliance")
+    assertEq(match.players[1].class, "WARRIOR", "classToken kept")
+    assertEq(match.players[1].killing_blows, 3, "killing_blows kept")
+    assertEq(match.players[2].faction, "horde", "faction 0 maps to horde")
+end)
+
+test("battlegrounds: nothing recorded while the match is still active (secret scores, no complete yet)", function()
+    resetAddon()
+    WowStub.SetUnit("player", { name = "Zach", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-AAAA0001" })
+    WowStub.pvp.scores = {
+        simScoreRow("Zach", {
+            killingBlows = WowStub.SECRET, honorableKills = WowStub.SECRET, deaths = WowStub.SECRET,
+            honorGained = WowStub.SECRET, damageDone = WowStub.SECRET, healingDone = WowStub.SECRET,
+        }),
+    }
+
+    -- UPDATE_BATTLEFIELD_SCORE fires repeatedly while the match is live; without a prior
+    -- PVP_MATCH_COMPLETE, the addon never reads the (secret) scoreboard at all.
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    assertEq(#SideQuestDB.pending.battlegrounds, 0, "nothing recorded while active")
+end)
+
+test("battlegrounds: an unreadable scoreboard skips the match entirely", function()
+    resetAddon()
+    WowStub.SetUnit("player", { name = "Zach", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-AAAA0001" })
+    WowStub.pvp.scores = {
+        simScoreRow("Zach", { name = WowStub.SECRET }),
+        simScoreRow("Enemy1", { name = WowStub.SECRET }),
+    }
+
+    SideQuest.Fire("PVP_MATCH_COMPLETE", nil, 0)
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    assertEq(#SideQuestDB.pending.battlegrounds, 0, "match skipped: every row's name was secret")
+end)
+
+test("battlegrounds: repeated score updates for the same match never duplicate", function()
+    resetAddon()
+    WowStub.SetUnit("player", { name = "Zach", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-AAAA0001" })
+    WowStub.pvp.scores = { simScoreRow("Zach") }
+
+    SideQuest.Fire("PVP_MATCH_COMPLETE", 1, 60)
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    assertEq(#SideQuestDB.pending.battlegrounds, 1, "only recorded once despite repeated score events")
+end)
+
+test("battlegrounds: pending caps at 50, dropping the oldest", function()
+    resetAddon()
+    WowStub.SetUnit("player", { name = "Zach", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-AAAA0001" })
+    local baseTime = WowStub.time
+    for _ = 1, 55 do
+        WowStub.Advance(10)
+        WowStub.pvp.scores = { simScoreRow("Zach") }
+        SideQuest.Fire("PVP_MATCH_COMPLETE", 1, 60)
+        SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+    end
+    local list = SideQuestDB.pending.battlegrounds
+    assertEq(#list, 50, "capped at 50")
+    assertEq(list[1].id, "Zach-" .. tostring(baseTime + 6 * 10), "oldest 5 matches dropped")
+    assertEq(list[50].id, "Zach-" .. tostring(baseTime + 55 * 10), "newest match kept")
+end)
+
+test("battlegrounds: export shape matches the contract", function()
+    resetAddon()
+    WowStub.realm = "Whitemane"
+    WowStub.SetUnit("player", { name = "Zach", realm = "Whitemane", class = "WARRIOR", guid = "Player-1-AAAA0001" })
+    WowStub.instance = { inInstance = true, instanceType = "pvp", instanceID = 489, difficultyID = 1, name = "Warsong Gulch" }
+    WowStub.pvp.myFaction = "Alliance"
+    WowStub.pvp.winner = 1
+    WowStub.pvp.duration = 1234
+    WowStub.pvp.scores = { simScoreRow("Zach") }
+
+    SideQuest.Fire("PVP_MATCH_COMPLETE", 1, 1234)
+    SideQuest.Fire("UPDATE_BATTLEFIELD_SCORE")
+
+    local str = SideQuest.Sync.BuildExport()
+    local decoded = SideQuest.Codec.DecodeExport(str)
+    assertEq(#decoded.battlegrounds, 1, "battlegrounds present in export")
+    local match = decoded.battlegrounds[1]
+    assertEq(match.map, "Warsong Gulch", "map in export")
+    assertEq(match.winner, "alliance", "winner in export")
+    assertEq(match.my_faction, "alliance", "my_faction in export")
+    assertEq(#match.players, 1, "players present in export")
+    assertEq(match.players[1].name, "Zach", "player name in export")
+
+    local fixturePath = ROOT .. "tests/fixtures/export_v2_battlegrounds.txt"
+    local fh = io.open(fixturePath, "w")
+    fh:write(str)
+    fh:close()
 end)
 
 --------------------------------------------------------------------------

@@ -83,6 +83,19 @@ local function exportRecruits(recruits)
     return out
 end
 
+-- Battlegrounds keep their player rows as a sub-array; ensure it stays `[]`
+-- when empty (shouldn't happen in practice, since Battlegrounds.lua skips a
+-- match with no readable rows, but stay defensive).
+local function exportBattlegrounds(battlegrounds)
+    local out = {}
+    for _, row in ipairs(battlegrounds) do
+        local copied = copy(row)
+        copied.players = arr(row.players or {})
+        table.insert(out, copied)
+    end
+    return out
+end
+
 -- directory.md: every stored record this client holds, newest `at` wins on the site. `d` stays nil
 -- (the key is simply absent, like every other optional field this codec already omits) for a section
 -- the owner stopped sharing; the site treats an absent `d` the same as the contract's literal `null`.
@@ -201,6 +214,7 @@ function Codec.BuildExportPayload(recorderName, guildName, realmName)
         announcements = arr(pending.announcements or {}),
         recruits = arr(exportRecruits(pending.recruits or {})),
         member_notes = arr(pending.member_notes or {}),
+        battlegrounds = arr(exportBattlegrounds(pending.battlegrounds or {})),
         directory = arr(exportDirectory(db.directory or {})),
     }
     if pending.roster then

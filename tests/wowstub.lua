@@ -50,6 +50,9 @@ WowStub = {
     itemCounts = {}, -- itemId -> count
     raidSubgroups = {}, -- unit ("raid1"...) -> current subgroup
     subgroupCalls = {}, -- recorded SetRaidSubgroup(index, group) calls
+    pvp = { scores = {}, winner = nil, myFaction = "Horde", duration = 0, scoreRequests = 0 },
+        -- scores: list of PVPScoreInfo-shaped rows for GetScoreInfo; a field set to WowStub.SECRET reads as
+        -- secret. winner: 0 Horde, 1 Alliance, nil unknown/draw, for GetBattlefieldWinner.
 }
 WowStub.os = hostOs
 
@@ -154,8 +157,13 @@ function GetNormalizedRealmName()
     return WowStub.realm
 end
 
+-- Tests mark a value secret by using the WowStub.SECRET sentinel in place of
+-- the real value (e.g. a score row's killingBlows); issecretvalue flags it,
+-- same as the real client would flag a secret-wrapped return.
+WowStub.SECRET = setmetatable({}, { __tostring = function() return "<secret>" end })
+
 function issecretvalue(v)
-    return false
+    return v == WowStub.SECRET
 end
 
 --------------------------------------------------------------------------
@@ -445,6 +453,35 @@ C_GuildBank = {
         return list[i]
     end,
 }
+
+--------------------------------------------------------------------------
+-- Battlegrounds (v2)
+--------------------------------------------------------------------------
+
+C_PvP = {
+    GetScoreInfo = function(i)
+        return WowStub.pvp.scores[i]
+    end,
+    GetActiveMatchDuration = function()
+        return WowStub.pvp.duration
+    end,
+}
+
+function GetNumBattlefieldScores()
+    return #WowStub.pvp.scores
+end
+
+function GetBattlefieldWinner()
+    return WowStub.pvp.winner
+end
+
+function RequestBattlefieldScoreData()
+    WowStub.pvp.scoreRequests = (WowStub.pvp.scoreRequests or 0) + 1
+end
+
+function UnitFactionGroup(unit)
+    return WowStub.pvp.myFaction, WowStub.pvp.myFaction
+end
 
 --------------------------------------------------------------------------
 -- Combat lockdown + chat (v2)
