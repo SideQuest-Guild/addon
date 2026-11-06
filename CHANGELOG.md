@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.0 (2026-11-06)
+
+### New
+
+- Officers can add recruits from the Console's Recruits tab (it fills in your target) and move them through applicant, trial, accepted and declined, and the game offers to put the site's new events on the guild calendar one click at a time
+
+### Fixed
+
+- On WoW: Forever, SideQuest knows each guildmate by first name and surname everywhere, so your professions stay shared, roster rows match the site and whispers reach the right player; plus every guild event shows in the Events tab, Whisper and Invite stop flickering, Market's first fields aren't cut off, and the Roster tab explains Read roster now and stops calling everyone inactive
+
 ## v0.8.0 (2026-11-06)
 
 ### New
