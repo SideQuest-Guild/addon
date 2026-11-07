@@ -15,17 +15,19 @@ return function(h)
         h.assertEq(log[1].kind, "blocked", "entry is kind=blocked")
         h.assertEq(log[1].func, "SomeForbiddenFunc", "function name captured")
         h.assertEq(log[1].event, "ADDON_ACTION_BLOCKED", "event name captured")
-        h.assertTrue(log[1].stack ~= nil, "a stack is captured when debugstack() is available")
+        h.assertEq(log[1].stack, nil, "no stack: the game reports it after the fact, a stack would only show our handler")
     end)
 
-    h.test("debug log: a missing debugstack() sends stack=nil instead of erroring", function()
+    h.test("debug view: a blocked entry reads 'SetRaidTarget()' once, not 'SetRaidTarget()()'", function()
         h.resetAddon()
-        local saved = debugstack
-        debugstack = nil
-        WowStub.FireEvent("ADDON_ACTION_FORBIDDEN", "SideQuest", "AnotherFunc")
-        debugstack = saved
-        local log = SideQuestDB.debug.log
-        h.assertEq(log[1].stack, nil, "no debugstack -> stack is nil, not an error")
+        WowStub.FireEvent("ADDON_ACTION_FORBIDDEN", "SideQuest", "SetRaidTarget()")
+        SideQuest.UI.main = nil
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Console")
+        SideQuest.UI.ShowConsoleSub("Debug")
+        SideQuest.UI.RefreshConsoleDebug()
+        local text = SideQuest.UI.panels.Console.debugChamber.rows[1].text:GetText()
+        h.assertTrue(text:find("SetRaidTarget() (ADDON_ACTION_FORBIDDEN)", 1, true) ~= nil, "row text: " .. text)
     end)
 
     h.test("debug log: a swallowed SQ.Fire handler error is recorded", function()

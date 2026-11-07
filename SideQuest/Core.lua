@@ -691,7 +691,6 @@ end
 --------------------------------------------------------------------------
 
 local DEBUG_LOG_MAX = 50
-local DEBUG_STACK_LINES = 6
 
 function SQ.LogDebug(entry)
     if not SideQuestDB then
@@ -705,33 +704,14 @@ function SQ.LogDebug(entry)
     end
 end
 
---- A short, trimmed debugstack() (first DEBUG_STACK_LINES frames only --
--- the full stack is noisy and not worth keeping in SavedVariables), or
--- nil when debugstack isn't available or errors.
-function SQ.ShortStack()
-    if type(debugstack) ~= "function" then
-        return nil
-    end
-    local ok, stack = pcall(debugstack, 2)
-    if not ok or type(stack) ~= "string" then
-        return nil
-    end
-    local lines = {}
-    for line in stack:gmatch("[^\n]+") do
-        table.insert(lines, line)
-        if #lines >= DEBUG_STACK_LINES then
-            break
-        end
-    end
-    return table.concat(lines, "\n")
-end
-
 local function onActionBlocked(eventName)
     return function(addonName, functionName)
         if addonName ~= SQ.ADDON_NAME then
             return
         end
-        SQ.LogDebug({ kind = "blocked", event = eventName, func = functionName, stack = SQ.ShortStack() })
+        -- no stack: the game reports this after the fact, so debugstack()
+        -- here would only show this handler, never the blocked caller
+        SQ.LogDebug({ kind = "blocked", event = eventName, func = functionName })
     end
 end
 SQ.On("ADDON_ACTION_BLOCKED", onActionBlocked("ADDON_ACTION_BLOCKED"))
