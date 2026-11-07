@@ -42,6 +42,8 @@ local function defaultDB()
         },
         killed_encounters = {},
         events = {},
+        pastEvents = {}, -- the site's recent past events, newest first, as answer counts (Events.Load)
+        eventsAt = 0, -- generated_at of the import/broadcast the events came from; 0 = never received any
         calendarLinks = {}, -- site event id -> where Calendar.lua last saw its guild announcement (title, at, realm date/time)
         -- directory.md: every member's shared record, keyed by normalized "Name-Realm".
         directory = {},

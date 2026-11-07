@@ -30,13 +30,14 @@ return function(h)
         h.assertEq(chamber.noResultText:GetText(), "No one matches 'nobody'.", "filtered-out message")
     end)
 
-    h.test("events tab: before any import it says how to get events; after one, that none are scheduled", function()
+    h.test("events tab: before any events arrive it says how to get them; after, that none are scheduled", function()
+        WowStub.isOfficer = true
         local chamber = open("Raids")
         SideQuest.UI.RefreshRaids()
-        h.assertTrue(chamber.emptyText:GetText():find("No event data yet", 1, true) ~= nil, "no import yet")
+        h.assertTrue(chamber.emptyText:GetText():find("No event data yet", 1, true) ~= nil, "nothing received yet")
 
-        SideQuestDB.standings.generated_at = 1793500000
+        SideQuestDB.eventsAt = 1793500000
         SideQuest.UI.RefreshRaids()
-        h.assertEq(chamber.emptyText:GetText(), "No events scheduled right now.", "imported, nothing scheduled")
+        h.assertEq(chamber.emptyText:GetText(), "No events scheduled right now.", "received, nothing scheduled")
     end)
 end

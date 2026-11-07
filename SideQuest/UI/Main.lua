@@ -1374,8 +1374,7 @@ function UI.RefreshYou()
     end
 
     -- next event + sign-up state, with the current answer highlighted
-    local events = SideQuest.Events.Get()
-    local nextEvt = events[1]
+    local nextEvt = SideQuest.Events.Upcoming()[1]
     if nextEvt then
         you.nextEventTitle:SetText(nextEvt.title or "Event")
         local secs = (nextEvt.starts_at or 0) - now()
@@ -2970,34 +2969,48 @@ function UI.RefreshRaids()
         return
     end
     local chamber = panel.chamber
-    local events = SideQuest.Events.Get()
+    local events = SideQuest.Events.Upcoming()
+    local past = SideQuest.Events.Past()
     for _, r in ipairs(chamber.rows) do
         r:Hide()
     end
-    if #events == 0 then
-        if not chamber.emptyText then
-            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
-            chamber.emptyText:SetPoint("TOPLEFT")
-            chamber.emptyText:SetWidth(500)
-            chamber.emptyText:SetWordWrap(true)
-        end
-        -- generated_at stays 0 until the first import ever lands; distinguish that
-        -- from an import that simply has no upcoming events right now.
-        local everImported = SideQuestDB.standings and (SideQuestDB.standings.generated_at or 0) > 0
-        setStateText(chamber.emptyText, everImported and "No events scheduled right now."
-            or "No event data yet -- SideQuest Companion brings it in when you close WoW, for your next login, "
-                .. "or ask an officer to paste the site's import with /sq import.", true)
-        return
-    elseif chamber.emptyText then
-        chamber.emptyText:SetText("")
+    chamber.pastRows = chamber.pastRows or {}
+    for _, r in ipairs(chamber.pastRows) do
+        r:Hide()
+    end
+    if not chamber.emptyText then
+        chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+        chamber.emptyText:SetPoint("TOPLEFT")
+        chamber.emptyText:SetWidth(500)
+        chamber.emptyText:SetWordWrap(true)
     end
 
     local isOfficer = SideQuest.DisplayIsOfficer()
     local y = 0
+    if #events == 0 then
+        -- tell "nothing ever arrived" apart from a site with nothing coming up
+        local text
+        if SideQuest.Events.EverReceived() then
+            text = "No events scheduled right now."
+        elseif isOfficer then
+            text = "No event data yet -- SideQuest Companion brings it in when you close WoW, for your next login, "
+                .. "or paste the site's import with /sq import."
+        else
+            text = "No event data yet -- it comes from an officer's SideQuest while one is online."
+        end
+        setStateText(chamber.emptyText, text, true)
+        y = 44
+    else
+        chamber.emptyText:SetText("")
+    end
     for i, evt in ipairs(events) do
         local row = chamber.rows[i]
         if not row then
             row = createQuestLogRow(chamber.content)
+            -- these rows grow downward (counts, answers, officer actions):
+            -- pin the mark to the top instead of the row's middle
+            row.mark:ClearAllPoints()
+            row.mark:SetPoint("TOPLEFT", 2, -10)
             row.roleCounts = makeFontString(row, FONT_BODY, 11, C.mist, "LEFT")
             row.roleCounts:SetPoint("TOPLEFT", row.meta, "BOTTOMLEFT", 0, -4)
             row.answers = {}
@@ -3016,10 +3029,12 @@ function UI.RefreshRaids()
         end
         local isRoleKind = ROLE_KINDS[evt.kind] == true
         local showsOfficerActions = isOfficer and isRoleKind
-        row:SetHeight(showsOfficerActions and 128 or 64)
+        -- title..answer buttons end at 73, the officer reason line at 111
+        local rowHeight = showsOfficerActions and 112 or 76
+        row:SetHeight(rowHeight)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
-        y = y + (showsOfficerActions and 150 or 70)
+        y = y + rowHeight + 10
         local isOpen = (evt.starts_at or 0) > now()
         row.mark:SetAtlas(isOpen and "QuestNormal" or "QuestTurnin")
         row.title:SetText(evt.title or "Event")
@@ -3074,6 +3089,35 @@ function UI.RefreshRaids()
             end)
         end
         row:Show()
+    end
+
+    if #past > 0 then
+        if not chamber.pastHeading then
+            chamber.pastHeading = createSubHeading(chamber.content, "Past events")
+            chamber.pastHeading:SetWidth(520)
+        end
+        chamber.pastHeading:ClearAllPoints()
+        chamber.pastHeading:SetPoint("TOPLEFT", 0, -y)
+        chamber.pastHeading:Show()
+        y = y + 24
+        for i, evt in ipairs(past) do
+            local row = chamber.pastRows[i]
+            if not row then
+                row = createQuestLogRow(chamber.content)
+                row.mark:SetAtlas("QuestTurnin")
+                chamber.pastRows[i] = row
+            end
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -y)
+            y = y + 40
+            row.title:SetText(evt.title or "Event")
+            row.meta:SetText(string.format("%s  --  %s  --  Going %d, Maybe %d, Can't %d",
+                EVENT_KIND_LABELS[evt.kind] or "Event", date("%a %b %d, %H:%M", evt.starts_at or now()),
+                evt.going or 0, evt.maybe or 0, evt.cant or 0))
+            row:Show()
+        end
+    elseif chamber.pastHeading then
+        chamber.pastHeading:Hide()
     end
     setScrollContentHeight(chamber.scroll, y)
 end
@@ -3541,7 +3585,7 @@ function UI.BuildConsoleRaidNight(panel)
             SideQuest.Recorder.MarkPrepDone()
         end },
         { key = "invite", label = "Invite -- bring in everyone signed", action = function()
-            local evt = SideQuest.Events.Get()[1]
+            local evt = SideQuest.Events.Upcoming()[1]
             if evt then SideQuest.Events.InviteSigned(evt.id) end
             SideQuest.Recorder.MarkInviteDone()
         end },
@@ -4602,10 +4646,9 @@ function UI.RefreshConsoleCalendar()
         if a.op == "add" then adds = adds + 1 else removes = removes + 1 end
     end
     if #actions == 0 then
-        if #SideQuest.Events.Get() == 0 then
-            local everImported = SideQuestDB.standings and (SideQuestDB.standings.generated_at or 0) > 0
+        if #SideQuest.Events.Upcoming() == 0 then
             chamber.calendarBtn:SetEnabled(false, "No upcoming site events.")
-            setStateText(chamber.calendarText, everImported
+            setStateText(chamber.calendarText, SideQuest.Events.EverReceived()
                 and "The site has no events in the next 14 days. Schedule one there and SideQuest Companion "
                     .. "brings it in after you next close WoW."
                 or "No site data yet. SideQuest Companion brings it in when you close WoW, for your next login.",
@@ -4777,6 +4820,11 @@ end)
 SideQuest.On("SQ_STANDINGS_UPDATED", function()
     if UI.activeTab == "You" then UI.RefreshYou() end
     if UI.activeTab == "Ledger" then UI.RefreshLedger() end
+end)
+
+SideQuest.On("SQ_EVENTS_UPDATED", function()
+    if UI.activeTab == "You" then UI.RefreshYou() end
+    if UI.activeTab == "Raids" then UI.RefreshRaids() end
 end)
 
 SideQuest.On("SQ_IMPORT_APPLIED", function()
