@@ -59,7 +59,20 @@ WowStub = {
     pvp = { scores = {}, winner = nil, myFaction = "Horde", duration = 0, scoreRequests = 0 },
         -- scores: list of PVPScoreInfo-shaped rows for GetScoreInfo; a field set to WowStub.SECRET reads as
         -- secret. winner: 0 Horde, 1 Alliance, nil unknown/draw, for GetBattlefieldWinner.
+    files = {}, -- path -> true/false: whether a font file is on disk for FontString:SetFont (unlisted paths load)
+    addonMetadata = { Version = "@project-version@" }, -- SideQuest.toc fields; this Version is a development checkout's
+    reloads = 0, -- ReloadUI() calls
 }
+
+C_AddOns = {
+    GetAddOnMetadata = function(name, field)
+        return name == "SideQuest" and WowStub.addonMetadata[field] or nil
+    end,
+}
+
+function ReloadUI()
+    WowStub.reloads = WowStub.reloads + 1
+end
 WowStub.os = hostOs
 
 --------------------------------------------------------------------------
@@ -1040,6 +1053,14 @@ local function newMockRegion(kind, name, parent, template)
             f = f.GetParent and f:GetParent()
         end
         return false
+    end
+    -- SetFont answers whether the font file loaded, as the real client does. Every path loads unless a test lists
+    -- it in WowStub.files (path -> true/false) to say whether it's on disk. The call is still logged for the preview.
+    self.SetFont = function(_, path, ...)
+        self.__geo = self.__geo or {}
+        self.__geo[#self.__geo + 1] = { method = "SetFont", args = { path, ... } }
+        local present = WowStub.files[path]
+        return present == nil or present
     end
 
     -- Regions remember their draw layer (and sublevel) so the preview can
