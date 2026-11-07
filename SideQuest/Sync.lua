@@ -47,6 +47,17 @@ function Sync.ApplyImport(payload)
     SideQuest.Standings.LoadFromImport(payload)
     SideQuest.Print("Imported standings generated " .. formatStagedTime(payload.generated_at) .. ".")
 
+    -- Game import "prices" (contract "Game import"): replaced wholesale when the
+    -- field is present (even an empty list, which clears it); a payload from
+    -- before this field existed omits it, and existing prices are left alone.
+    if payload.prices ~= nil then
+        local prices = {}
+        for _, entry in ipairs(payload.prices) do
+            prices[entry.item_id] = { p = entry.unit_price, q = entry.quantity, at = entry.at }
+        end
+        SideQuestDB.prices = prices
+    end
+
     local publicPart = nil
     if payload.v == 2 then
         publicPart = { members = payload.members or {}, news = payload.news or {} }

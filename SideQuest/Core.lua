@@ -61,6 +61,10 @@ local function defaultDB()
             reduceMotion = false, -- skip window-open/tab-crossfade/wax-seal/toast animation
             share = { prof = true, char = true, cd = true, market = true, stock = true }, -- directory.md
         },
+        -- Game import "prices" (contract "Game import"): item_id (number key) ->
+        -- { p = unit_price, q = quantity, at = unix timestamp }, replaced wholesale
+        -- by each import that includes the field.
+        prices = {},
         -- v2: cached imported state (SQI1: "v":2), see addon-contract-v2.md.
         guild = {
             generated_at = 0,

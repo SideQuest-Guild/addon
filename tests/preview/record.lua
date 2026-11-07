@@ -281,6 +281,13 @@ SideQuestDB.directory = {
     },
 }
 
+-- Game import "prices" (contract "Game import"): guild AH prices, shown
+-- next to a member's own price on the Market tab's Browse and Mine rows.
+SideQuestDB.prices = {
+    [14048] = { p = 18500, q = 42, at = WowStub.time - 7200 },
+    [12360] = { p = 25000, q = 6, at = WowStub.time - 3600 },
+}
+
 -- a recruit, with checklist + a vote
 SideQuestDB.officerData.recruits = {
     { id = "r1", character = "DemoRecruit-Whitemane", class = "MAGE", status = "trial", note = "Found in LFG",
