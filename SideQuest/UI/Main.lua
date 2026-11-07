@@ -461,6 +461,16 @@ local function money(copper)
     return formatMoney(copper)
 end
 
+--- " (AH 1g 20s)" for an item's guild auction-house price (Market
+-- .AuctionPrice, from the last game import), or "" when none is known.
+local function ahSuffix(itemId)
+    local price = SideQuest.Market and SideQuest.Market.AuctionPrice and SideQuest.Market.AuctionPrice(itemId)
+    if not price then
+        return ""
+    end
+    return " (AH " .. money(price.p) .. ")"
+end
+
 --- Free-text price ("1g20s", "50s", "3g") to copper, or nil: SideQuest
 -- .Market.ParsePrice once Market.lua has it, else a plain gold-number
 -- fallback so the editor still works in the meantime.
@@ -2465,12 +2475,12 @@ function UI.RefreshMarketBrowse()
 
         local sellers = Directory.WhoSells(itemId)
         section("sell", "Sellers", sellers, chamber.sellRows, function(e)
-            return money(e.price) .. (e.qty and (" (" .. e.qty .. ")") or "")
+            return money(e.price) .. (e.qty and (" (" .. e.qty .. ")") or "") .. ahSuffix(itemId)
         end)
 
         local buyers = Directory.WhoBuys(itemId)
         section("buy", "Standing buy offers", buyers, chamber.buyRows, function(e)
-            return money(e.price)
+            return money(e.price) .. ahSuffix(itemId)
         end)
 
         local holders = Directory.WhoHas(itemId)
@@ -2674,7 +2684,7 @@ function UI.RefreshMarketMine()
 
     section(chamber.sellHeading, chamber.sellEditor, marketData.sell, chamber.sellListRows, function(e)
         local name = SideQuest.ItemName(e.item_id)
-        return name .. " -- " .. money(e.price) .. " x" .. (e.qty or 1)
+        return name .. " -- " .. money(e.price) .. ahSuffix(e.item_id) .. " x" .. (e.qty or 1)
     end, function(itemId)
         if SideQuest.Market and SideQuest.Market.RemoveSell then
             SideQuest.Market.RemoveSell(itemId)
@@ -2684,7 +2694,7 @@ function UI.RefreshMarketMine()
 
     section(chamber.buyHeading, chamber.buyEditor, marketData.buy, chamber.buyListRows, function(e)
         local name = SideQuest.ItemName(e.item_id)
-        return name .. " -- " .. money(e.price)
+        return name .. " -- " .. money(e.price) .. ahSuffix(e.item_id)
     end, function(itemId)
         if SideQuest.Market and SideQuest.Market.RemoveBuy then
             SideQuest.Market.RemoveBuy(itemId)

@@ -89,6 +89,7 @@ files["tests/wowstub.lua"] = {
         "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide",
         "ChatFrame_SendTell", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_ID", "RegionalUniqueNamesEnabled",
         "Constants", "C_NameUtil", "C_PartyInfo", "ChatFrameUtil", "UnitIsGroupLeader",
+        "TooltipDataProcessor",
     },
 }
 
@@ -107,6 +108,10 @@ files["tests/test_directory.lua"] = {
 
 files["tests/test_ui_directory.lua"] = {
     globals = { "WowStub" },
+}
+
+files["tests/test_auctions.lua"] = {
+    globals = { "WowStub", "SideQuestDB", "TooltipDataProcessor", "Enum", "UIParent" },
 }
 
 files["tests/test_minimap.lua"] = {

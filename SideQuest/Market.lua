@@ -58,6 +58,13 @@ function Market.FormatPrice(copper)
     return table.concat(parts, " ")
 end
 
+--- The guild's lowest auction-house price for itemId from the last game
+-- import ("Game import" contract: SideQuestDB.prices), or nil when none is
+-- known. { p = unit_price copper, q = quantity, at = unix timestamp }.
+function Market.AuctionPrice(itemId)
+    return SideQuestDB and SideQuestDB.prices and SideQuestDB.prices[itemId]
+end
+
 --- A price hint from an installed addon, in copper, or nil. Never required.
 function Market.SuggestPrice(itemId)
     if Auctionator and Auctionator.API and Auctionator.API.v1 and Auctionator.API.v1.GetAuctionPriceByItemID then

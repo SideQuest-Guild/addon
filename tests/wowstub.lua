@@ -680,7 +680,20 @@ Enum = {
         Generic = 4,
     },
     CalendarEventType = { Raid = 0, Dungeon = 1, PvP = 2, Meeting = 3, Other = 4, HeroicDeprecated = 5 },
+    TooltipDataType = { Item = 1 },
 }
+
+-- TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, fn): the
+-- game calls `fn(tooltip, data)` after building an item tooltip. Tests fire
+-- the registered callback directly with a fake tooltip and `{ id = itemId }`.
+TooltipDataProcessor = {
+    callbacks = {},
+}
+
+function TooltipDataProcessor.AddTooltipPostCall(dataType, fn)
+    TooltipDataProcessor.callbacks[dataType] = TooltipDataProcessor.callbacks[dataType] or {}
+    table.insert(TooltipDataProcessor.callbacks[dataType], fn)
+end
 
 --------------------------------------------------------------------------
 -- Calendar: an in-memory guild calendar in realm time (WowStub.time + realmOffset)
@@ -1199,6 +1212,15 @@ function CreateFrame(kind, name, parent, template)
         thumb:SetPoint("TOP", bar, "TOP", 0, 0)
         bar.ThumbTexture = thumb
         self.ScrollBar = bar
+    end
+    if kind == "GameTooltip" then
+        -- Real GameTooltip:AddLine(text, r, g, b, wrap) appends a line; tests
+        -- read them back off self.lines.
+        self.lines = {}
+        self.AddLine = function(_, text, r, g, b, wrap)
+            table.insert(self.lines, text)
+            return self
+        end
     end
     return self
 end

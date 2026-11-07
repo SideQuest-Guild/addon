@@ -41,6 +41,25 @@ local function moneyText(copper)
     return tostring(copper or 0) .. "c"
 end
 
+local function now()
+    return GetServerTime and GetServerTime() or 0
+end
+
+--- "Xh ago" / "Xd ago" / "just now", for a server-time timestamp.
+local function ago(ts)
+    ts = tonumber(ts)
+    if not ts or ts <= 0 then
+        return "unknown"
+    end
+    local hours = math.floor(math.max(0, now() - ts) / 3600)
+    if hours < 1 then
+        return "just now"
+    elseif hours < 48 then
+        return hours .. "h ago"
+    end
+    return math.floor(hours / 24) .. "d ago"
+end
+
 local function tipColor()
     local C = SideQuest.UI.Colors
     if C and C.mist then
@@ -56,12 +75,20 @@ local function onItemTooltip(tooltip, data)
         return
     end
     local Directory = SideQuest.Directory
-    local itemId = data and data.id
+    local itemId = data and SideQuest.Unsecret(data.id)
     if not Directory or not itemId then
         return
     end
 
     local lines = {}
+
+    -- Game import "prices" (contract "Game import"): the guild's lowest AH
+    -- price for this item, if a sync has priced it.
+    local priceEntry = SideQuest.Market and SideQuest.Market.AuctionPrice and SideQuest.Market.AuctionPrice(itemId)
+    if priceEntry then
+        table.insert(lines, "Auction house: " .. moneyText(priceEntry.p)
+            .. " (" .. (priceEntry.q or 0) .. " listed, " .. ago(priceEntry.at) .. ")")
+    end
 
     -- Crafters: WhoCrafts matches by recipe name substring, so this only
     -- works once the item's name is known, and only keeps hits whose
