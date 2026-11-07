@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.11.0 (2026-11-07)
+
+### New
+
+- When SideQuest Companion updates the addon while you play, SideQuest says so in game with a Reload now button
+
+### Fixed
+
+- The guild calendar sync stops waiting forever on "Loading the calendar from the server"
+
 ## v0.10.1 (2026-11-07)
 
 ### Fixed
