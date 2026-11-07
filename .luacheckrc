@@ -28,6 +28,7 @@ read_globals = {
     "StaticPopup_Show", "StaticPopup_Hide",
     -- v2: roster, professions, bank, prep, group placement
     "GetNumGuildMembers", "GetGuildRosterInfo", "GetGuildRosterLastOnline",
+    "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName",
     "C_TradeSkillUI", "GetProfessions", "GetProfessionInfo",
     "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo", "QueryGuildRecipes",
     "C_GuildBank", "GetCurrentGuildBankTab", "QueryGuildBankLog",
@@ -50,6 +51,8 @@ read_globals = {
     "Auctionator", "TSM_API",
     -- update notice (Updates.lua)
     "C_AddOns", "GetAddOnMetadata", "ReloadUI",
+    -- debug log (ADDON_ACTION_BLOCKED/FORBIDDEN, Debug console view)
+    "debugstack",
 }
 
 -- The WoW client has no `os` or `io` library (only the `date`/`time` globals): using them errors in game.
@@ -75,6 +78,7 @@ files["tests/wowstub.lua"] = {
         "C_Item", "ConvertToRaid", "InviteUnit", "Enum", "C_ChatInfo",
         "C_Timer", "CreateFrame", "UIParent", "DEFAULT_CHAT_FRAME",
         "GetNumGuildMembers", "GetGuildRosterInfo", "GetGuildRosterLastOnline", "C_TradeSkillUI",
+        "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName",
         "GetProfessions", "GetProfessionInfo", "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo",
         "QueryGuildRecipes", "GetAverageItemLevel",
         "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog", "C_Reputation",
@@ -91,7 +95,7 @@ files["tests/wowstub.lua"] = {
         "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide",
         "ChatFrame_SendTell", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_ID", "RegionalUniqueNamesEnabled",
         "Constants", "C_NameUtil", "C_PartyInfo", "ChatFrameUtil", "UnitIsGroupLeader",
-        "TooltipDataProcessor", "C_AddOns", "ReloadUI",
+        "TooltipDataProcessor", "C_AddOns", "ReloadUI", "debugstack",
     },
 }
 
@@ -126,6 +130,14 @@ files["tests/test_calendar.lua"] = {
 
 files["tests/test_roster.lua"] = {
     globals = { "WowStub", "SideQuestDB", "GetGuildRosterLastOnline" },
+}
+
+files["tests/test_ui_join.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_debug.lua"] = {
+    globals = { "WowStub", "SideQuestDB", "debugstack" },
 }
 
 files["tests/test_recorder.lua"] = {

@@ -1152,6 +1152,18 @@ SideQuest.Loot.activeBid = {
     responses = { ["Demo2-Whitemane"] = "ms", ["Demo4-Whitemane"] = "ms", ["Demo6-Whitemane"] = "os", ["Demo9-Whitemane"] = "alt" },
 }
 
+-- Debug sub-view demo data (GM-only; WowStub.rankIndex defaults to 0).
+SideQuestDB.debug = {
+    log = {
+        { at = WowStub.time - 30, kind = "blocked", event = "ADDON_ACTION_FORBIDDEN", func = "SetCVar",
+          stack = "[string \"SideQuest/Demo.lua\"]:12: in function 'DemoForbidden'\n"
+              .. "[string \"SideQuest/Demo.lua\"]:4: in function 'DemoCaller'" },
+        { at = WowStub.time - 600, kind = "error", event = "SQ_DEMO_EVENT",
+          message = "attempt to index a nil value (demo swallowed error)" },
+        { at = WowStub.time - 3600, kind = "blocked", event = "ADDON_ACTION_BLOCKED", func = "PlaceAction" },
+    },
+}
+
 local VIEWS = {
     { name = "you", setup = function() UI.ShowTab("You") end },
     { name = "guild", setup = function() UI.ShowTab("Guild"); UI.panels.Guild.chamber.selectedCharacter = nil end },
@@ -1208,6 +1220,7 @@ local VIEWS = {
     { name = "console-bank", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Bank") end },
     { name = "console-announce", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Announce") end },
     { name = "console-sync", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Sync") end },
+    { name = "console-debug", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Debug") end },
 }
 
 local ALL_NAMES = {}
@@ -1273,6 +1286,23 @@ emit("bidpopup-064", UI.bidPopup, 320, 220, 0.64)
 SideQuest.Fire("SQ_ANNOUNCEMENT_RECEIVED", { officer = "Demo1-Whitemane", text = "Demo announcement: flasks for Friday please" })
 emit("toast", UI.toast, 360, 56, 1)
 emit("toast-064", UI.toast, 360, 56, 0.64)
+
+-- non-member join window (separate top-level frame, not a main-window tab)
+WowStub.inGuild = false
+WowStub.FireEvent("PLAYER_GUILD_UPDATE")
+UI.Show()
+emit("join", UI.joinFrame, 420, 330, 1)
+emit("join-064", UI.joinFrame, 420, 330, 0.64)
+WowStub.inGuild = true
+WowStub.FireEvent("PLAYER_GUILD_UPDATE")
+
+-- "viewing as" banner, floating above whichever window is open
+UI.main = nil
+UI.Show()
+SideQuest.SetViewAs("member")
+emit("viewas-banner", UI.main, 860, 560, 1)
+emit("viewas-banner-064", UI.main, 860, 560, 0.64)
+SideQuest.SetViewAs(nil)
 
 local galleryItems = {}
 for _, n in ipairs(ALL_NAMES) do

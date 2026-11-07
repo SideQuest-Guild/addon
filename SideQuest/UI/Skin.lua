@@ -467,6 +467,51 @@ local function skinEditBox(editBox, placeholderText)
 end
 
 --------------------------------------------------------------------------
+-- Link boxes: a read-only field well for a URL/invite the player can only
+-- copy (WoW can't open links from an addon) -- selects all text on focus
+-- or click so Ctrl+C always grabs the whole thing, and refuses edits.
+--------------------------------------------------------------------------
+
+local function createLinkBox(parent, text)
+    local editBox = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    editBox:SetAutoFocus(false)
+    skinEditBox(editBox, "")
+    editBox.placeholder:Hide()
+    local locked = text or ""
+    local function apply()
+        editBox:SetText(locked)
+        if editBox.SetCursorPosition then
+            editBox:SetCursorPosition(0)
+        end
+    end
+    apply()
+    --- Changes the locked text (e.g. a Copy box whose content is refreshed).
+    function editBox:SetLinkText(t)
+        locked = t or ""
+        apply()
+    end
+    if editBox.HookScript then
+        editBox:HookScript("OnTextChanged", function(self)
+            if self:GetText() ~= locked then
+                apply()
+            end
+        end)
+        editBox:HookScript("OnEditFocusGained", function(self)
+            self:HighlightText()
+        end)
+        editBox:HookScript("OnMouseDown", function(self)
+            self:SetFocus()
+            self:HighlightText()
+        end)
+        editBox:HookScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+        end)
+    end
+    editBox:EnableMouse(true)
+    return editBox
+end
+
+--------------------------------------------------------------------------
 -- Checkboxes: Forever's own checkbox-minimal / checkmark-minimal atlases.
 --------------------------------------------------------------------------
 
@@ -850,6 +895,7 @@ UI.CreateRibbon = createRibbon
 UI.CreateSubHeading = createSubHeading
 UI.CreateButton = createButton
 UI.SkinEditBox = skinEditBox
+UI.CreateLinkBox = createLinkBox
 UI.CreateCheckbox = createCheckbox
 UI.CreateExpandButton = createExpandButton
 UI.BuildScroll = buildScroll

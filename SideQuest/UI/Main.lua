@@ -34,6 +34,7 @@ local MEDIA_TEX = UI.MediaTex
 local FONT_DISPLAY, FONT_BODY, FONT_BODY_ITALIC = UI.FontDisplay, UI.FontBody, UI.FontBodyItalic
 local createButton = UI.CreateButton
 local skinEditBox = UI.SkinEditBox
+local createLinkBox = UI.CreateLinkBox
 local createCheckbox = UI.CreateCheckbox
 local createChamber = UI.CreateChamber
 local createRibbon = UI.CreateRibbon
@@ -146,12 +147,24 @@ local WINDOW_DEFAULT_SCALE, WINDOW_SCALE_MIN, WINDOW_SCALE_MAX = 1.25, 0.75, 2
 -- room for the tab row hanging below the frame and the crest above it
 local WINDOW_OVERHANG_H = 50
 
+-- Non-member join window (contract: website/Discord links, how to join).
+local JOIN_W, JOIN_H = 480, 420
+local WEBSITE_URL = "https://sidequest-guild.com/"
+local DISCORD_URL = "https://discord.gg/nwncP7H9Hh"
+
+-- View as (GM-only UI preview, Core.lua SQ.SetViewAs/ViewAs): display label
+-- per role, and the role the "View as" buttons cycle through.
+local VIEW_AS_LABEL = { nonmember = "Non-member", member = "Member", officer = "Officer" }
+local VIEW_AS_ROLES = { "nonmember", "member", "officer" }
+
 local TABS = { "You", "Guild", "Crafters", "Market", "Raids", "Ledger", "News" }
 -- Internal tab keys (and SideQuestDB.ui.tab's saved value) stay as-is;
 -- TAB_LABELS only changes what's drawn on the tab button.
 local TAB_LABELS = { Raids = "Events" }
 local OFFICER_TAB = "Console"
-local CONSOLE_SUBTABS = { "Raid Night", "Loot", "Roster", "Recruits", "Bank", "Announce", "Sync" }
+-- "Debug" is appended to every sub-tab list/button but shown only for the
+-- Guild Master (UI.RefreshOfficerVisibility); see UI.BuildConsoleDebug.
+local CONSOLE_SUBTABS = { "Raid Night", "Loot", "Roster", "Recruits", "Bank", "Announce", "Sync", "Debug" }
 local CRAFTERS_SUBTABS = { "Search", "Professions", "Cooldowns" }
 local MARKET_SUBTABS = { "Browse", "Mine" }
 
@@ -625,6 +638,30 @@ local function saveGeometry()
     SideQuestDB.ui.height = main:GetHeight()
 end
 
+--- A banner bar floating just above `ownerFrame`'s top edge, shown only
+-- while SideQuest.ViewAs() is set ("Viewing as <role> -- Exit"); clicking
+-- it turns the override off. Attached to both the main and join windows
+-- so the GM can never lose their way back (the join pane itself needs an
+-- exit, since viewing as non-member makes the Console unreachable).
+local function createViewAsBanner(ownerFrame)
+    local banner = CreateFrame("Button", nil, ownerFrame)
+    banner:SetHeight(22)
+    banner:SetPoint("BOTTOMLEFT", ownerFrame, "TOPLEFT", 0, 4)
+    banner:SetPoint("BOTTOMRIGHT", ownerFrame, "TOPRIGHT", 0, 4)
+    local bg = banner:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints(banner)
+    bg:SetColorTexture(0.55, 0.36, 0.08, 0.92)
+    local label = makeFontString(banner, FONT_BODY, 12, C.ink, "CENTER")
+    label:SetPoint("CENTER")
+    shade(label)
+    banner.label = label
+    banner:SetScript("OnClick", function()
+        SideQuest.SetViewAs(nil)
+    end)
+    banner:Hide()
+    return banner
+end
+
 function UI.BuildMainFrame()
     if UI.main then
         return UI.main
@@ -773,10 +810,132 @@ function UI.BuildMainFrame()
     UI.BuildNewsPanel(body)
     UI.BuildConsolePanel(body)
 
+    main.viewAsBanner = createViewAsBanner(main)
+
     UI.RefreshOfficerVisibility()
     UI.RefreshFreshness()
 
     return main
+end
+
+--------------------------------------------------------------------------
+-- Non-member join window: what SideQuest is + how to join, shown instead
+-- of the tabbed window for a player who installed the addon but isn't
+-- (yet) in the guild. Same chrome/chamber/ribbon vocabulary as the main
+-- window, just a single pane -- see SideQuest.IsGuildMember (Core.lua).
+--------------------------------------------------------------------------
+
+function UI.BuildJoinFrame()
+    if UI.joinFrame then
+        return UI.joinFrame
+    end
+
+    local frame = CreateFrame("Frame", "SideQuestJoinFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(JOIN_W, JOIN_H)
+    frame:SetFrameStrata("HIGH")
+    frame:SetToplevel(true)
+    frame:SetClampedToScreen(true)
+    frame:SetPoint("CENTER")
+    UI.ApplyWindowScale(frame)
+
+    local fill = frame:CreateTexture(nil, "BACKGROUND")
+    fill:SetPoint("TOPLEFT", 2, -UI.WINDOW_TITLE_H)
+    fill:SetPoint("BOTTOMRIGHT", -2, 2)
+    setColor(fill, C.night)
+
+    local closeBtn = UI.ApplyWindowChrome(frame, "SideQuest")
+    closeBtn:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+    end)
+    frame:Hide()
+
+    _G.UISpecialFrames = _G.UISpecialFrames or {}
+    table.insert(_G.UISpecialFrames, "SideQuestJoinFrame")
+
+    local chamber = createChamber(frame, "SideQuestJoinChamber")
+    chamber:SetPoint("TOPLEFT", 14, -(UI.WINDOW_TITLE_H + 14))
+    chamber:SetPoint("BOTTOMRIGHT", -14, 14)
+    createRibbon(chamber, "Join SideQuest")
+
+    local contentW = JOIN_W - 2 * 14 - 2 * 8
+
+    -- Two short lines rather than one long wrapped paragraph: the preview
+    -- renderer (tests/preview/record.lua) doesn't simulate word-wrap, so a
+    -- long single-line FontString would read fine in game but overflow the
+    -- chamber on screen there.
+    local intro1 = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
+    intro1:SetPoint("TOPLEFT", 0, -30)
+    intro1:SetText("SideQuest is a guild on WoW: Forever (Alliance, Normal).")
+
+    local intro2 = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
+    intro2:SetPoint("TOPLEFT", intro1, "BOTTOMLEFT", 0, -3)
+    intro2:SetText("This addon runs our loot points, events and directory,")
+
+    local intro3 = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
+    intro3:SetPoint("TOPLEFT", intro2, "BOTTOMLEFT", 0, -3)
+    intro3:SetText("and opens up once you're a member.")
+
+    local howHeading = createSubHeading(chamber.inner, "How to join")
+    howHeading:SetPoint("TOPLEFT", intro3, "BOTTOMLEFT", 0, -20)
+    howHeading:SetWidth(contentW)
+
+    local howText1 = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
+    howText1:SetPoint("TOPLEFT", howHeading, "BOTTOMLEFT", 0, -10)
+    howText1:SetText("Join the Discord and ask for an invite, or whisper")
+
+    local howText2 = makeFontString(chamber.inner, FONT_BODY, 12, C.mist, "LEFT")
+    howText2:SetPoint("TOPLEFT", howText1, "BOTTOMLEFT", 0, -3)
+    howText2:SetText("an officer in game -- officers are listed on the site.")
+
+    local websiteLabel = makeFontString(chamber.inner, FONT_DISPLAY, 11, C.gold, "LEFT")
+    websiteLabel:SetPoint("TOPLEFT", howText2, "BOTTOMLEFT", 0, -20)
+    websiteLabel:SetText(trackedCaps("Website"))
+
+    local websiteBox = createLinkBox(chamber.inner, WEBSITE_URL)
+    websiteBox:SetSize(contentW, 20)
+    websiteBox:SetPoint("TOPLEFT", websiteLabel, "BOTTOMLEFT", 0, -4)
+
+    local websiteHint = makeFontString(chamber.inner, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+    websiteHint:SetPoint("TOPLEFT", websiteBox, "BOTTOMLEFT", 0, -3)
+    websiteHint:SetText("Click to select, Ctrl+C to copy")
+
+    local discordLabel = makeFontString(chamber.inner, FONT_DISPLAY, 11, C.gold, "LEFT")
+    discordLabel:SetPoint("TOPLEFT", websiteHint, "BOTTOMLEFT", 0, -16)
+    discordLabel:SetText(trackedCaps("Discord"))
+
+    local discordBox = createLinkBox(chamber.inner, DISCORD_URL)
+    discordBox:SetSize(contentW, 20)
+    discordBox:SetPoint("TOPLEFT", discordLabel, "BOTTOMLEFT", 0, -4)
+
+    local discordHint = makeFontString(chamber.inner, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+    discordHint:SetPoint("TOPLEFT", discordBox, "BOTTOMLEFT", 0, -3)
+    discordHint:SetText("Click to select, Ctrl+C to copy")
+
+    frame.intro, frame.howText = intro1, howText1
+    frame.websiteBox, frame.discordBox = websiteBox, discordBox
+    frame.websiteHint, frame.discordHint = websiteHint, discordHint
+    frame.viewAsBanner = createViewAsBanner(frame)
+
+    UI.joinFrame = frame
+    return frame
+end
+
+--- Opens the non-member join window in place of the tabbed one. Never
+-- opens or flashes in combat, same as UI.Show.
+function UI.ShowJoin()
+    SideQuest.WhenOutOfCombat(function()
+        local frame = UI.BuildJoinFrame()
+        frame:Show()
+        UI.PlayOpenAnim(frame)
+    end)
 end
 
 function UI.RefreshOfficerVisibility()
@@ -784,13 +943,56 @@ function UI.RefreshOfficerVisibility()
     if not btn then
         return
     end
-    if SideQuest.IsOfficer() then
+    if SideQuest.DisplayIsOfficer() then
         btn:Show()
     else
         btn:Hide()
         if UI.activeTab == OFFICER_TAB then
             UI.ShowTab("You")
         end
+    end
+
+    local consolePanel = UI.panels and UI.panels[OFFICER_TAB]
+    local debugBtn = consolePanel and consolePanel.subButtons and consolePanel.subButtons["Debug"]
+    if debugBtn then
+        if SideQuest.DisplayIsGuildMaster() then
+            debugBtn:Show()
+        else
+            debugBtn:Hide()
+            if consolePanel.activeSub == "Debug" then
+                UI.ShowConsoleSub("Raid Night")
+            end
+        end
+    end
+end
+
+--- Shows/hides and labels the view-as banner on whichever windows exist.
+function UI.UpdateViewAsBanner()
+    local role = SideQuest.ViewAs and SideQuest.ViewAs()
+    for _, frame in ipairs({ UI.main, UI.joinFrame }) do
+        if frame and frame.viewAsBanner then
+            if role then
+                frame.viewAsBanner.label:SetText("Viewing as " .. (VIEW_AS_LABEL[role] or role) .. " -- Exit")
+                frame.viewAsBanner:Show()
+            else
+                frame.viewAsBanner:Hide()
+            end
+        end
+    end
+end
+
+--- SQ_VIEW_AS_CHANGED: rebuild whichever window is open so it reflects the
+-- new role (a non-member preview needs the join pane instead of the
+-- tabbed window and vice versa), then restore the banner.
+function UI.RefreshViewAs()
+    local wasOpen = (UI.main and UI.main:IsShown()) or (UI.joinFrame and UI.joinFrame:IsShown())
+    if UI.main then UI.main:Hide() end
+    if UI.joinFrame then UI.joinFrame:Hide() end
+    UI.RefreshOfficerVisibility()
+    UI.UpdateViewAsBanner()
+    if wasOpen then
+        UI.Show()
+        UI.UpdateViewAsBanner()
     end
 end
 
@@ -851,8 +1053,15 @@ function UI.ShowTab(tabName)
 end
 
 --- Open the window. Never opens, flashes or animates in combat (queued
--- until PLAYER_REGEN_ENABLED).
+-- until PLAYER_REGEN_ENABLED). A player who isn't in the SideQuest guild
+-- gets the single-pane join window instead of the tabbed one; `nil`
+-- (membership not known yet) is treated as "assume member" so a real
+-- member never flashes the join pane while login is still settling.
 function UI.Show()
+    if SideQuest.DisplayIsGuildMember() == false then
+        UI.ShowJoin()
+        return
+    end
     SideQuest.WhenOutOfCombat(function()
         local main = UI.BuildMainFrame()
         main:Show()
@@ -894,6 +1103,10 @@ SideQuest.RegisterSlash("scale", function(rest)
 end, "scale <0.75-2>|reset - make the SideQuest window bigger or smaller")
 
 function UI.Toggle()
+    if UI.joinFrame and UI.joinFrame:IsShown() then
+        UI.joinFrame:Hide()
+        return
+    end
     if UI.main and UI.main:IsShown() then
         UI.main:Hide()
         return
@@ -1684,7 +1897,7 @@ function UI.RefreshGuild()
         ui.inviteBtn:SetScript("OnClick", function()
             SideQuest.Invite(r.character)
         end)
-        ui.inviteBtn:SetEnabled(SideQuest.IsOfficer())
+        ui.inviteBtn:SetEnabled(SideQuest.DisplayIsOfficer())
         ui.selected = (chamber.selectedCharacter == r.character)
         ui.updateHoverButtons()
         ui:SetScript("OnClick", function()
@@ -2779,7 +2992,7 @@ function UI.RefreshRaids()
         chamber.emptyText:SetText("")
     end
 
-    local isOfficer = SideQuest.IsOfficer()
+    local isOfficer = SideQuest.DisplayIsOfficer()
     local y = 0
     for i, evt in ipairs(events) do
         local row = chamber.rows[i]
@@ -3198,6 +3411,9 @@ function UI.BuildConsolePanel(body)
         btn:SetScript("OnClick", function()
             UI.ShowConsoleSub(name)
         end)
+        if name == "Debug" then
+            btn:Hide() -- shown only for the Guild Master, see UI.RefreshOfficerVisibility
+        end
         panel.subButtons[name] = btn
     end
     panel.tabTop = CONSOLE_TAB_TOP
@@ -3210,6 +3426,7 @@ function UI.BuildConsolePanel(body)
     UI.BuildConsoleBank(panel)
     UI.BuildConsoleAnnounce(panel)
     UI.BuildConsoleSync(panel)
+    UI.BuildConsoleDebug(panel)
 end
 
 function UI.ShowConsoleSub(name)
@@ -3238,11 +3455,13 @@ function UI.ShowConsoleSub(name)
         UI.RefreshConsoleBank()
     elseif name == "Sync" then
         UI.RefreshConsoleSync()
+    elseif name == "Debug" then
+        UI.RefreshConsoleDebug()
     end
 end
 
 function UI.RefreshConsole()
-    if not SideQuest.IsOfficer() then
+    if not SideQuest.DisplayIsOfficer() then
         return
     end
     UI.ShowConsoleSub(UI.panels[OFFICER_TAB].activeSub or "Raid Night")
@@ -4015,7 +4234,7 @@ function UI.RefreshConsoleRecruits()
         return
     end
     local chamber = panel.recruitsChamber
-    local isOfficer = SideQuest.IsOfficer()
+    local isOfficer = SideQuest.DisplayIsOfficer()
     chamber.addBtn:SetEnabled(isOfficer, "Only officers can add recruits.")
 
     if not chamber.nameEdited and chamber.nameBox:GetText() == "" then
@@ -4405,6 +4624,108 @@ function UI.RefreshConsoleCalendar()
     setStateText(chamber.calendarText, summary .. ". One change per click.")
 end
 
+--- Debug sub-view (Guild Master only, see UI.RefreshOfficerVisibility):
+-- ADDON_ACTION_BLOCKED/FORBIDDEN events and swallowed handler errors
+-- (SQ.LogDebug, Core.lua), newest first, a Clear button, a read-only Copy
+-- box holding the full text, and "View as" preview buttons.
+function UI.BuildConsoleDebug(panel)
+    local sub = makeConsoleSub(panel, "Debug")
+    local chamber = createChamber(sub, "SideQuestConsoleDebugChamber")
+    chamber:SetAllPoints(sub)
+
+    local clearBtn = createButton(chamber.inner, "quiet", "Clear", 80, 22)
+    clearBtn:SetPoint("TOPLEFT", 14, -30)
+    clearBtn:SetScript("OnClick", function()
+        SideQuestDB.debug = { log = {} }
+        UI.RefreshConsoleDebug()
+    end)
+
+    local viewAsLabel = makeFontString(chamber.inner, FONT_DISPLAY, 11, C.gold, "LEFT")
+    viewAsLabel:SetPoint("LEFT", clearBtn, "RIGHT", 16, 0)
+    viewAsLabel:SetText(trackedCaps("View as"))
+
+    local viewAsButtons = {}
+    local prevBtn = nil
+    for _, role in ipairs(VIEW_AS_ROLES) do
+        local btn = createButton(chamber.inner, "quiet", VIEW_AS_LABEL[role], 90, 22)
+        if prevBtn then
+            btn:SetPoint("LEFT", prevBtn, "RIGHT", 6, 0)
+        else
+            btn:SetPoint("LEFT", viewAsLabel, "RIGHT", 10, 0)
+        end
+        btn:SetScript("OnClick", function()
+            SideQuest.SetViewAs(role)
+        end)
+        viewAsButtons[role] = btn
+        prevBtn = btn
+    end
+    chamber.viewAsButtons = viewAsButtons
+
+    local copyLabel = makeFontString(chamber.inner, FONT_DISPLAY, 11, C.gold, "LEFT")
+    copyLabel:SetPoint("TOPLEFT", clearBtn, "BOTTOMLEFT", 0, -14)
+    copyLabel:SetText(trackedCaps("Copy"))
+
+    local copyBox = createLinkBox(chamber.inner, "")
+    copyBox:SetSize(540, 20)
+    copyBox:SetPoint("TOPLEFT", copyLabel, "BOTTOMLEFT", 0, -4)
+    chamber.copyBox = copyBox
+
+    local scroll, content = buildScroll(chamber.inner, -112)
+    chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
+    chamber.clearBtn = clearBtn
+    panel.debugChamber = chamber
+end
+
+function UI.RefreshConsoleDebug()
+    local panel = UI.panels[OFFICER_TAB]
+    if not panel or not panel.debugChamber then
+        return
+    end
+    local chamber = panel.debugChamber
+    local log = (SideQuestDB.debug and SideQuestDB.debug.log) or {}
+    for _, r in ipairs(chamber.rows) do
+        r:Hide()
+    end
+    if #log == 0 then
+        if not chamber.emptyText then
+            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.emptyText:SetPoint("TOPLEFT")
+        end
+        setStateText(chamber.emptyText, "Nothing logged yet.", true)
+    elseif chamber.emptyText then
+        chamber.emptyText:SetText("")
+    end
+    local lines = {}
+    for i, e in ipairs(log) do
+        local when = date and date("%Y-%m-%d %H:%M:%S", e.at or 0) or tostring(e.at or 0)
+        local what
+        if e.kind == "blocked" then
+            what = (e.func or "?") .. "() (" .. (e.event or "?") .. ")"
+        else
+            what = (e.event or "?") .. ": " .. (e.message or "?")
+        end
+        local firstStackLine = e.stack and e.stack:match("[^\n]+")
+        local summary = when .. "  [" .. e.kind .. "]  " .. what .. (firstStackLine and ("  -- " .. firstStackLine) or "")
+        local row = chamber.rows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, chamber.content)
+            row:SetSize(560, 16)
+            row.text = makeFontString(row, FONT_BODY, 11, C.ink, "LEFT")
+            row.text:SetPoint("LEFT")
+            chamber.rows[i] = row
+        end
+        row:SetPoint("TOPLEFT", 0, -16 * (i - 1))
+        row.text:SetText(summary)
+        row:Show()
+        table.insert(lines, summary .. (e.stack and ("\n" .. e.stack) or ""))
+    end
+    setScrollContentHeight(chamber.scroll, 16 * #log)
+    chamber.copyBox:SetLinkText(table.concat(lines, "\n\n"))
+    for role, btn in pairs(chamber.viewAsButtons) do
+        btn:SetSelected(SideQuest.ViewAs() == role)
+    end
+end
+
 function UI.ShowExportBox(str)
     local chamber = UI.panels[OFFICER_TAB].syncChamber
     UI.ShowTab(OFFICER_TAB)
@@ -4442,6 +4763,10 @@ end)
 
 SideQuest.On("SQ_OPEN_MAIN_WINDOW", function()
     UI.Toggle()
+end)
+
+SideQuest.On("SQ_VIEW_AS_CHANGED", function()
+    UI.RefreshViewAs()
 end)
 
 SideQuest.On("SQ_STANDINGS_UPDATED", function()

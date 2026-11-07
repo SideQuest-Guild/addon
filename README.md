@@ -23,6 +23,8 @@ by default does so on its own, even while WoW is running. The game keeps the old
 Companion has installed an update, SideQuest says so in game with a **Reload now** button.
 
 In game, click the crest on the minimap or type `/sq` to open the window. Drag the crest round the minimap to move it.
+If you aren't in the SideQuest guild yet, this opens a single join window instead, with the website and Discord
+links and how to ask for an invite; the full window opens automatically once you're a member.
 Settings such as the minimap button, window scale and directory sharing are also in the game menu, under
 **Options > AddOns > SideQuest Guild** (or type `/sq options`).
 
