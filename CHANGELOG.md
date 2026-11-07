@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.0 (2026-11-07)
+
+### New
+
+- Every member gets the site's events from an officer's addon, and the Events tab lists the last 30 days' past events
+
 ## v0.12.1 (2026-11-07)
 
 ### Fixed
