@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.12.0 (2026-11-07)
+
+### New
+
+- Players outside the guild get a join window, the roster sync reports which ranks are officers, and the guild master gets a Console Debug view with View as
+
 ## v0.11.0 (2026-11-07)
 
 ### New
