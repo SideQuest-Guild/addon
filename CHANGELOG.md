@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.1 (2026-11-07)
+
+### Fixed
+
+- On WoW: Forever, Whisper and Invite buttons, Invite signed, turning the party into a raid, guild announcements and shift-clicking items into SideQuest's boxes work again, and a raid leader is recognised as one
+
 ## v0.9.0 (2026-11-06)
 
 ### New
