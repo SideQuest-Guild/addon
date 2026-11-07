@@ -31,8 +31,10 @@ function Announce.Post(text, toDiscord)
 
     SideQuest.WhenOutOfCombat(function()
         SideQuest.Comm.BroadcastAnnounce(item)
-        if SendChatMessage then
-            SendChatMessage("[SideQuest] " .. text, "GUILD")
+        -- Forever has no SendChatMessage global; C_ChatInfo.SendChatMessage replaces it.
+        local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+        if send then
+            send("[SideQuest] " .. text, "GUILD")
         end
     end)
 

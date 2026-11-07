@@ -233,15 +233,20 @@ local itemLinkBoxes = {}
 local function acceptItemLinks(box)
     table.insert(itemLinkBoxes, box)
 end
-if hooksecurefunc and ChatEdit_InsertLink then
-    hooksecurefunc("ChatEdit_InsertLink", function(link)
-        for _, box in ipairs(itemLinkBoxes) do
-            if box:IsVisible() and box:HasFocus() then
-                box:SetText(link)
-                return
-            end
+-- Forever has no ChatEdit_InsertLink global; ChatFrameUtil.InsertLink is the
+-- Mainline 12.x function HandleModifiedItemClick calls.
+local function onInsertLink(link)
+    for _, box in ipairs(itemLinkBoxes) do
+        if box:IsVisible() and box:HasFocus() then
+            box:SetText(link)
+            return
         end
-    end)
+    end
+end
+if hooksecurefunc and ChatFrameUtil and ChatFrameUtil.InsertLink then
+    hooksecurefunc(ChatFrameUtil, "InsertLink", onInsertLink)
+elseif hooksecurefunc and ChatEdit_InsertLink then
+    hooksecurefunc("ChatEdit_InsertLink", onInsertLink)
 end
 
 --- Enter in a search field lets go of the keyboard (InputBoxTemplate only
@@ -1656,10 +1661,10 @@ function UI.RefreshGuild()
         ui.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)
         ui.lastSeenText:SetText(r.online and "now" or (r.last_online_hours and (r.last_online_hours .. "h ago") or "--"))
         ui.whisperBtn:SetScript("OnClick", function()
-            if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(r.character)) end
+            SideQuest.Whisper(r.character)
         end)
         ui.inviteBtn:SetScript("OnClick", function()
-            if InviteUnit then InviteUnit(SideQuest.GameName(r.character)) end
+            SideQuest.Invite(r.character)
         end)
         ui.inviteBtn:SetEnabled(SideQuest.IsOfficer())
         ui.selected = (chamber.selectedCharacter == r.character)
@@ -1973,7 +1978,7 @@ function UI.RefreshCraftersSearch()
             row.skillText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
             row.skillText:SetText((entry.skill and ("skill " .. entry.skill) or "") .. (entry.online and "  (online)" or "  (offline)"))
             row.whisperBtn:SetScript("OnClick", function()
-                if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(entry.character)) end
+                SideQuest.Whisper(entry.character)
             end)
             row:Show()
             y = y + 20
@@ -2148,7 +2153,7 @@ function UI.RefreshCraftersProfessions()
         row.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)
         row.lastSeenText:SetText(m.online and "Online" or ago(craftersLastSeen(m.character)))
         row.whisperBtn:SetScript("OnClick", function()
-            if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(m.character)) end
+            SideQuest.Whisper(m.character)
         end)
         row:Show()
     end
@@ -2232,7 +2237,7 @@ function UI.RefreshCraftersCooldowns()
                 row.readyText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
                 row.readyText:SetText(readyWord(h.ready_at))
                 row.whisperBtn:SetScript("OnClick", function()
-                    if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(h.character)) end
+                    SideQuest.Whisper(h.character)
                 end)
                 row:Show()
                 y = y + 20
@@ -2384,7 +2389,7 @@ local function paintMarketRow(row, character, detail, class)
     row.detailText:SetPoint("LEFT", row.nameRow, "RIGHT", 10, 0)
     row.detailText:SetText(detail)
     row.whisperBtn:SetScript("OnClick", function()
-        if ChatFrame_SendTell then ChatFrame_SendTell(SideQuest.GameName(character)) end
+        SideQuest.Whisper(character)
     end)
 end
 
@@ -2824,9 +2829,7 @@ function UI.RefreshRaids()
         row.officerReason:SetShown(showsOfficerActions)
         if showsOfficerActions then
             local inCombat = SideQuest.InCombat()
-            local isLeader = type(IsRaidLeader) == "function" and IsRaidLeader()
-                or type(IsPartyLeader) == "function" and IsPartyLeader()
-                or not (IsInRaid and IsInRaid()) and not (IsInGroup and IsInGroup())
+            local isLeader = SideQuest.IsGroupLeader()
             local enabled = not inCombat and isLeader
             local reason = inCombat and "Disabled in combat" or (not isLeader and "Disabled: you are not the raid leader" or "")
             disableWithReason(row.inviteBtn, row.officerReason, enabled, reason)

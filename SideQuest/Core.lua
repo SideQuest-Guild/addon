@@ -478,20 +478,67 @@ function SQ.NormalizeUnit(unit)
     return SQ.CanonicalName(name, realm)
 end
 
---- The form the game's own whisper/invite calls expect for `character` (a
--- CanonicalName key). On Forever that's "First Surname": Blizzard's player
--- link handler passes the link's raw name straight to
--- ChatFrameUtil.SendTell and only converts to the "-" link form for /who
--- (Blizzard_UIPanels_Game/Mainline/ItemRefHandlers.lua, forever branch).
--- Elsewhere the canonical "Name-Realm" key is already the game's form.
+--- The name the game's whisper/invite/target calls take for `character` (a
+-- CanonicalName key). Blizzard's own Forever unit menu builds it with
+-- CHARACTERNAME_REALMNAME_SEPARATOR ("-") whenever there's no live unit --
+-- names from chat, the roster or the guild list
+-- (Blizzard_UnitPopup/Mainline/UnitPopupUtils.lua GetFullPlayerName) -- and
+-- the space form only for a unit token. The space form also breaks
+-- ChatFrameUtil.SendTell, which builds "/w <name> " and lets the slash
+-- parser split on the space. So the canonical "First-Surname" (or
+-- "Name-Realm") key is already the game's form.
 function SQ.GameName(character)
-    if not character or not SQ.IsForever() then
-        return character
+    return character
+end
+
+--- Open a whisper to `character`. Forever has no ChatFrame_SendTell global;
+-- ChatFrameUtil.SendTell is the Mainline 12.x replacement.
+function SQ.Whisper(character)
+    local target = SQ.GameName(character)
+    if not target or target == "" then
+        return
     end
-    local separator = Constants and Constants.CharacterNameSeparatorConsts
-        and Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR or " "
-    local first, surname = character:match("^([^-]+)-([^-]+)$")
-    return first and (first .. separator .. surname) or character
+    if ChatFrameUtil and ChatFrameUtil.SendTell then
+        ChatFrameUtil.SendTell(target)
+    elseif ChatFrame_SendTell then
+        ChatFrame_SendTell(target)
+    end
+end
+
+--- Invite `character` to the group. Forever has no InviteUnit global;
+-- C_PartyInfo.InviteUnit replaces it.
+function SQ.Invite(character)
+    local target = SQ.GameName(character)
+    if not target or target == "" then
+        return
+    end
+    if C_PartyInfo and C_PartyInfo.InviteUnit then
+        C_PartyInfo.InviteUnit(target)
+    elseif InviteUnit then
+        InviteUnit(target)
+    end
+end
+
+--- Turn the party into a raid (C_PartyInfo.ConvertToRaid on Forever).
+function SQ.ConvertToRaid()
+    if C_PartyInfo and C_PartyInfo.ConvertToRaid then
+        C_PartyInfo.ConvertToRaid()
+    elseif ConvertToRaid then
+        ConvertToRaid()
+    end
+end
+
+--- True when the player leads their party or raid, or isn't in a group.
+-- Forever has neither IsRaidLeader nor IsPartyLeader; UnitIsGroupLeader is
+-- the API both clients share.
+function SQ.IsGroupLeader()
+    if not ((IsInRaid and IsInRaid()) or (IsInGroup and IsInGroup())) then
+        return true
+    end
+    if UnitIsGroupLeader then
+        return SQ.Unsecret(UnitIsGroupLeader("player")) == true
+    end
+    return (IsRaidLeader and IsRaidLeader()) or (IsPartyLeader and IsPartyLeader()) or false
 end
 
 --------------------------------------------------------------------------

@@ -191,12 +191,24 @@ return function(h)
         assertEq(WowStub.invites[#WowStub.invites], "Alt1-Whitemane", "invite target uses SQ.GameName's form")
     end)
 
-    test("Forever: whisper and invite get the space-separated name, like Blizzard's own SendTell", function()
+    test("Forever: whisper and invite take the First-Surname form, through the APIs Forever has", function()
         resetAddon()
         WowStub.SetForever(true)
-        assertEq(SideQuest.GameName("Legs-Behindhead"), "Legs Behindhead", "First-Surname key -> First Surname")
-        assertEq(SideQuest.GameName("Legs"), "Legs", "a single token passes through")
-        WowStub.SetForever(false)
-        assertEq(SideQuest.GameName("Alt1-Whitemane"), "Alt1-Whitemane", "Name-Realm unchanged off Forever")
+        SideQuest.Whisper("Legs-Behindhead")
+        SideQuest.Invite("Legs-Behindhead")
+        assertEq(WowStub.whispers[#WowStub.whispers], "Legs-Behindhead",
+            "ChatFrameUtil.SendTell gets the hyphen form; a space would split the /w slash command")
+        assertEq(WowStub.invites[#WowStub.invites], "Legs-Behindhead", "C_PartyInfo.InviteUnit gets the same form")
+    end)
+
+    test("group leader: read from UnitIsGroupLeader, so Forever's raid leader can invite and place groups", function()
+        resetAddon()
+        WowStub.inRaid = true
+        WowStub.isGroupLeader = true
+        assertTrue(SideQuest.IsGroupLeader(), "the raid leader leads")
+        WowStub.isGroupLeader = false
+        assertTrue(not SideQuest.IsGroupLeader(), "a raid member doesn't")
+        WowStub.inRaid = false
+        assertTrue(SideQuest.IsGroupLeader(), "solo counts as leading")
     end)
 end

@@ -57,16 +57,12 @@ function Events.InviteSigned(eventId)
     local roster = Events.SignedRoster(evt)
     local currentCount = GetNumGroupMembers and GetNumGroupMembers() or 0
     if (currentCount + #roster) > 5 and not (IsInRaid and IsInRaid()) then
-        if ConvertToRaid then
-            ConvertToRaid()
-        end
+        SideQuest.ConvertToRaid()
     end
 
     local invited = {}
     for _, signup in ipairs(roster) do
-        if InviteUnit then
-            InviteUnit(SideQuest.GameName(signup.character))
-        end
+        SideQuest.Invite(signup.character)
         invited[#invited + 1] = signup.character
     end
     SideQuest.Print("Invited " .. #invited .. " signed member(s) for " .. tostring(evt.title))

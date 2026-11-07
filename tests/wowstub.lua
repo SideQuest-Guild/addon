@@ -26,7 +26,8 @@ WowStub = {
     realm = "Whitemane",
     lootItems = {},
     invites = {},
-    whispers = {}, -- list of ChatFrame_SendTell targets
+    whispers = {}, -- list of ChatFrameUtil.SendTell targets
+    isGroupLeader = true, -- UnitIsGroupLeader("player") while in a group
     convertToRaidCalls = 0,
     mouseOverFrame = nil, -- set to a frame to make Frame:IsMouseOver() true for it and its ancestors
     -- v2
@@ -589,9 +590,7 @@ function InCombatLockdown()
     return WowStub.inCombat
 end
 
-function SendChatMessage(msg, channel)
-    table.insert(WowStub.chatLog, { msg = msg, channel = channel })
-end
+-- Forever has no SendChatMessage global: C_ChatInfo.SendChatMessage (below) replaces it.
 
 --------------------------------------------------------------------------
 -- Auras + durability (v2, raid prep)
@@ -615,18 +614,30 @@ end
 -- Group management
 --------------------------------------------------------------------------
 
-function ConvertToRaid()
-    WowStub.convertToRaidCalls = WowStub.convertToRaidCalls + 1
-    WowStub.inRaid = true
+-- Forever has none of the InviteUnit, ConvertToRaid, ChatFrame_SendTell, IsRaidLeader or IsPartyLeader globals; the
+-- stub leaves them undefined so a call to one fails a test instead of silently doing nothing in game.
+C_PartyInfo = {
+    InviteUnit = function(name)
+        table.insert(WowStub.invites, name)
+    end,
+    ConvertToRaid = function()
+        WowStub.convertToRaidCalls = WowStub.convertToRaidCalls + 1
+        WowStub.inRaid = true
+    end,
+}
+
+function UnitIsGroupLeader(unit)
+    return unit == "player" and WowStub.isGroupLeader
 end
 
-function InviteUnit(name)
-    table.insert(WowStub.invites, name)
-end
-
-function ChatFrame_SendTell(target)
-    table.insert(WowStub.whispers, target)
-end
+ChatFrameUtil = {
+    SendTell = function(target)
+        table.insert(WowStub.whispers, target)
+    end,
+    InsertLink = function(link)
+        return false
+    end,
+}
 
 function SetRaidSubgroup(raidIndex, group)
     table.insert(WowStub.subgroupCalls, { index = raidIndex, group = group })
@@ -805,6 +816,9 @@ C_ChatInfo = {
         return Enum.SendAddonMessageResult.Success
     end,
     RegisterAddonMessagePrefix = function(prefix) end,
+    SendChatMessage = function(msg, channel)
+        table.insert(WowStub.chatLog, { msg = msg, channel = channel })
+    end,
 }
 
 --------------------------------------------------------------------------

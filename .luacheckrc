@@ -20,6 +20,8 @@ read_globals = {
     "GetNumLootItems", "GetLootSlotLink", "GiveMasterLoot",
     "ConvertToRaid", "InviteUnit", "GetGuildInfo",
     "C_GuildInfo", "C_ChatInfo", "C_Item", "C_Timer", "Enum", "C_Calendar", "C_DateAndTime",
+    -- Forever's chat/party calls (it has no InviteUnit/ChatFrame_SendTell/ConvertToRaid/IsRaidLeader globals)
+    "C_PartyInfo", "ChatFrameUtil", "UnitIsGroupLeader",
     -- Forever client identity (no realms, First-Surname)
     "RegionalUniqueNamesEnabled", "WOW_PROJECT_ID", "WOW_PROJECT_CAMELOT", "C_NameUtil", "Constants",
     "issecretvalue", "DEFAULT_CHAT_FRAME",
@@ -86,7 +88,7 @@ files["tests/wowstub.lua"] = {
         "strmatch", "securecallfunction", "Settings", "SettingsPanel",
         "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide",
         "ChatFrame_SendTell", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_ID", "RegionalUniqueNamesEnabled",
-        "Constants", "C_NameUtil",
+        "Constants", "C_NameUtil", "C_PartyInfo", "ChatFrameUtil", "UnitIsGroupLeader",
     },
 }
 
