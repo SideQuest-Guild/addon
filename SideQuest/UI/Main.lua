@@ -2985,7 +2985,7 @@ function UI.RefreshRaids()
         -- from an import that simply has no upcoming events right now.
         local everImported = SideQuestDB.standings and (SideQuestDB.standings.generated_at or 0) > 0
         setStateText(chamber.emptyText, everImported and "No events scheduled right now."
-            or "No event data yet -- SideQuest Companion loads it at login, "
+            or "No event data yet -- SideQuest Companion brings it in when you close WoW, for your next login, "
                 .. "or ask an officer to paste the site's import with /sq import.", true)
         return
     elseif chamber.emptyText then
@@ -4603,8 +4603,13 @@ function UI.RefreshConsoleCalendar()
     end
     if #actions == 0 then
         if #SideQuest.Events.Get() == 0 then
-            chamber.calendarBtn:SetEnabled(false, "No site events yet.")
-            setStateText(chamber.calendarText, "The calendar fills from the site's events once an import arrives.")
+            local everImported = SideQuestDB.standings and (SideQuestDB.standings.generated_at or 0) > 0
+            chamber.calendarBtn:SetEnabled(false, "No upcoming site events.")
+            setStateText(chamber.calendarText, everImported
+                and "The site has no events in the next 14 days. Schedule one there and SideQuest Companion "
+                    .. "brings it in after you next close WoW."
+                or "No site data yet. SideQuest Companion brings it in when you close WoW, for your next login.",
+                true)
         else
             chamber.calendarBtn:SetEnabled(false, "Nothing to change.")
             setStateText(chamber.calendarText, "Matches the site's events.")

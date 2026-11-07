@@ -53,6 +53,27 @@ return function(h)
             "hint says it's non-destructive: " .. chamber.sweepHint:GetText())
     end)
 
+    h.test("console sync calendar: no site events says whether the site has none or nothing was imported yet", function()
+        h.resetAddon()
+        SideQuest.UI.main = nil
+        WowStub.isOfficer = true
+        WowStub.SetUnit("player", { name = "Officer1", realm = "Whitemane", class = "PRIEST", guid = "Player-1-CONSOLE5" })
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Console")
+        SideQuest.UI.ShowConsoleSub("Sync")
+        SideQuest.Calendar.loaded = true
+
+        local chamber = SideQuest.UI.panels.Console.syncChamber
+        SideQuest.UI.RefreshConsoleCalendar()
+        h.assertTrue(chamber.calendarText:GetText():find("No site data yet", 1, true) ~= nil,
+            "nothing imported: " .. chamber.calendarText:GetText())
+
+        SideQuestDB.standings.generated_at = 1793500000
+        SideQuest.UI.RefreshConsoleCalendar()
+        h.assertTrue(chamber.calendarText:GetText():find("no events in the next 14 days", 1, true) ~= nil,
+            "imported, the site has nothing upcoming: " .. chamber.calendarText:GetText())
+    end)
+
     h.test("Raid Night recording control: disabled outside a raid, enabled and toggling inside one", function()
         h.resetAddon()
         SideQuest.UI.main = nil
