@@ -1187,6 +1187,10 @@ end
 function CreateFrame(kind, name, parent, template)
     local self = newMockRegion(kind, name, parent, template)
     self.__level = parent and parent:GetFrameLevel() + 1 or 0
+    -- where the addon created it, so the layout preview can name an
+    -- invalid-rect frame's source line
+    local caller = debug.getinfo(2, "Sl")
+    self.__src = caller and (caller.short_src .. ":" .. caller.currentline) or "?"
     self.SetFrameLevel = function(_, level) self.__level = level end
     if template == "UIPanelCloseButton" then
         -- Real template: a 32x32 button whose Normal texture is the

@@ -30,6 +30,12 @@ jobs:
       - name: luacheck
         run: luacheck SideQuest tests
 
+      # Builds every view and fails on a frame the game wouldn't draw (an
+      # anchor without a full size). Without the atlas cache it draws
+      # placeholders, which is fine: only the anchor math matters here.
+      - name: Layout check
+        run: luajit tests/preview/record.lua > /dev/null
+
       - name: Upload export fixture
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

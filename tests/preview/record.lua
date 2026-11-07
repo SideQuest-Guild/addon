@@ -432,18 +432,24 @@ local function resolveRect(obj) -- memoized, recursive on relativeTo/parent (cre
         local target = allPoints[#allPoints][1]
         if type(target) == "table" then
             local r = resolveRect(target)
-            resolved[obj] = { left = r.left, top = r.top, width = r.width, height = r.height }
+            resolved[obj] = { left = r.left, top = r.top, width = r.width, height = r.height, invalid = r.invalid }
             return resolved[obj]
         end
     end
 
     local points = currentAnchors(obj)
     local anchors = {}
+    -- WoW's valid-rect rule (ScriptRegion:IsRectValid): a region needs two
+    -- opposite anchors or one anchor plus an explicit size, and a region
+    -- anchored to an invalid one is invalid too -- the game draws neither.
+    -- `invalid` names the frame at the root of the problem.
+    local invalid
     for _, args in ipairs(points) do
         local point, relativeTo, relativePoint, x, y = normalizePoint(obj, args)
         relativeTo = relativeTo or obj.__parent
         if relativeTo and FRAC[point] and FRAC[relativePoint] then
             local r = resolveRect(relativeTo)
+            invalid = invalid or r.invalid
             local fx, fy = FRAC[point][1], FRAC[point][2]
             local rfx, rfy = FRAC[relativePoint][1], FRAC[relativePoint][2]
             local absX = r.left + rfx * r.width + x
@@ -476,6 +482,14 @@ local function resolveRect(obj) -- memoized, recursive on relativeTo/parent (cre
     -- that box per SetJustifyH, instead of sizing to its text
     local sizedText = obj.__kind == "FontString" and
         (spanX or #lastCallsOf(obj, "SetWidth") > 0 or #lastCallsOf(obj, "SetSize") > 0)
+
+    -- Frames (not text or textures, which size to their content) with an
+    -- anchor but no size on an axis fail that rule. Template frames take
+    -- their size from XML the stub doesn't model, so they're exempt.
+    if (not width or not height) and #anchors > 0 and not invalid
+        and obj.__kind ~= "FontString" and obj.__kind ~= "Texture" and not obj.__template then
+        invalid = obj
+    end
 
     -- fontstrings/textures with no size info size themselves to content
     -- (best-effort estimate: real average glyph advance for the shipped
@@ -540,7 +554,8 @@ local function resolveRect(obj) -- memoized, recursive on relativeTo/parent (cre
         top = 0
     end
 
-    resolved[obj] = { left = left, top = top, width = width, height = height, anchor = anchors[1], sizedText = sizedText }
+    resolved[obj] = { left = left, top = top, width = width, height = height, anchor = anchors[1], sizedText = sizedText,
+        invalid = invalid }
     return resolved[obj]
 end
 
@@ -894,12 +909,30 @@ local NON_VISUAL_KINDS = {
     Alpha = true, Scale = true, Translate = true, Rotation = true,
 }
 
+-- root frame of each invalid rect -> the views it blanked something in
+local invalidRects, invalidRectOrder = {}, {}
+
 local function emitView(name, root, width, height, scale)
     local body = {}
     local fontsUsed = {}
     tintFiltersUsed = {}
     local rootRect = resolveRect(root)
-    local descendants = visibleDescendants(root)
+    -- the game draws nothing with an invalid rect, so neither does the
+    -- preview; each one is reported and fails the run
+    local descendants = {}
+    for _, obj in ipairs(visibleDescendants(root)) do
+        local cause = not NON_VISUAL_KINDS[obj.__kind] and resolveRect(obj).invalid
+        if cause then
+            local src = cause.__src or "?"
+            if not invalidRects[src] then
+                invalidRects[src] = {}
+                table.insert(invalidRectOrder, src)
+            end
+            invalidRects[src][name] = true
+        else
+            table.insert(descendants, obj)
+        end
+    end
 
     -- Real nine-slice corners extend a few px past their container's own
     -- bounds by design (Blizzard's own PortraitFrameTemplate offsets like
@@ -1265,11 +1298,28 @@ fh:close()
 
 print("Preview HTML generation complete: " .. #ALL_NAMES .. " views.")
 
+local failed = false
 if #unknownAtlasList > 0 then
     io.stderr:write("\nFAILED: " .. #unknownAtlasList ..
         " atlas name(s) used by the addon are not real Blizzard atlas elements (typo?):\n")
     for _, n in ipairs(unknownAtlasList) do
         io.stderr:write("  - " .. n .. "\n")
     end
+    failed = true
+end
+if #invalidRectOrder > 0 then
+    io.stderr:write("\nFAILED: " .. #invalidRectOrder .. " frame(s) have an anchor but no explicit width or height,"
+        .. " so the game draws nothing anchored to them (give them a size, or anchor to a sized frame):\n")
+    for _, src in ipairs(invalidRectOrder) do
+        local views = {}
+        for view in pairs(invalidRects[src]) do
+            table.insert(views, view)
+        end
+        table.sort(views)
+        io.stderr:write("  - " .. src .. " (" .. table.concat(views, ", ") .. ")\n")
+    end
+    failed = true
+end
+if failed then
     WowStub.os.exit(1)
 end

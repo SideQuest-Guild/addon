@@ -289,7 +289,9 @@ end
 -- also changes the mark glyph and/or adds text.
 local function createQuestLogRow(parent)
     local row = CreateFrame("Button", nil, parent)
-    row:SetHeight(32)
+    -- width and height both: a row with only a height has no valid rect,
+    -- and the game then draws nothing anchored to it
+    row:SetSize(520, 32)
     -- the game's own quest marks: "!" while sign-ups are open, "?" once closed
     local mark = row:CreateTexture(nil, "ARTWORK")
     mark:SetSize(16, 16)
@@ -305,7 +307,7 @@ end
 --- A news row: the kind's icon, then the line and its meta.
 local function createNewsRow(parent)
     local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(32)
+    row:SetSize(520, 32)
     local icon = row:CreateTexture(nil, "ARTWORK")
     icon:SetSize(20, 20)
     icon:SetPoint("LEFT", 3, 0)
@@ -1511,29 +1513,42 @@ function UI.BuildGuildPanel(body)
     panel.chamber = chamber
 end
 
-local function buildGuildRow(content)
+-- Whisper/Invite sit right of the Last seen column, never over a column's
+-- text: the row runs on past Last seen just far enough to hold them.
+local GUILD_ROW_LAST_SEEN_W = 64
+local GUILD_ROW_BUTTON_W, GUILD_ROW_BUTTON_GAP = 66, 6
+
+local function buildGuildRow(content, cols)
     local ui = CreateFrame("Button", nil, content)
-    ui:SetSize(560, 22)
-    ui.indent = CreateFrame("Frame", nil, ui)
-    ui.indent:SetPoint("LEFT", 0, 0)
+    local buttonsLeft = cols.lastSeen + GUILD_ROW_LAST_SEEN_W
+    ui:SetSize(buttonsLeft + 2 * GUILD_ROW_BUTTON_W + GUILD_ROW_BUTTON_GAP, 22)
+    -- Everything in the row anchors to the row itself: a region anchored to
+    -- a frame whose rect is invalid (one point and no explicit height, as a
+    -- width-only spacer frame had here) is never drawn in game, which is
+    -- what blanked every name, gem and status word in the Guild tab.
     ui.expandBtn = UI.CreateExpandButton(ui)
-    ui.expandBtn:SetPoint("LEFT", ui.indent, "LEFT", 0, 0)
+    ui.expandBtn:SetPoint("LEFT", 0, 0)
     ui.statusIcon = ui:CreateTexture(nil, "ARTWORK")
     ui.statusIcon:SetSize(10, 10)
     ui.statusIcon:SetTexture(MEDIA_TEX .. "Gem")
-    ui.statusIcon:SetPoint("LEFT", ui.expandBtn, "RIGHT", 4, 0)
+    ui.statusIcon:SetPoint("LEFT", 20, 0)
     ui.nameRow = createNameRow(ui, 13)
     ui.nameRow:SetPoint("LEFT", ui.statusIcon, "RIGHT", 6, 0)
-    ui.statusWord = makeFontString(ui, FONT_BODY, 10, C.mist2, "LEFT")
     ui.levelText = makeFontString(ui, FONT_BODY, 12, C.ink, "RIGHT")
     ui.levelText:SetWidth(40)
+    ui.levelText:SetPoint("LEFT", cols.level, 0)
     ui.rankText = makeFontString(ui, FONT_BODY, 12, C.mist, "LEFT")
+    ui.rankText:SetPoint("LEFT", cols.rank, 0)
     ui.zoneText = makeFontString(ui, FONT_BODY, 12, C.mist, "LEFT")
+    ui.zoneText:SetPoint("LEFT", cols.zone, 0)
+    -- Last seen doubles as the word that goes with the online gem
+    -- (DESIGN.md: online state is the gem plus the word).
     ui.lastSeenText = makeFontString(ui, FONT_BODY, 11, C.mist2, "LEFT")
-    ui.whisperBtn = createButton(ui, "quiet", "Whisper", 66, 18)
-    ui.whisperBtn:SetPoint("RIGHT", -76, 0)
-    ui.inviteBtn = createButton(ui, "quiet", "Invite", 66, 18)
-    ui.inviteBtn:SetPoint("RIGHT", 0, 0)
+    ui.lastSeenText:SetPoint("LEFT", cols.lastSeen, 0)
+    ui.whisperBtn = createButton(ui, "quiet", "Whisper", GUILD_ROW_BUTTON_W, 18)
+    ui.whisperBtn:SetPoint("LEFT", buttonsLeft, 0)
+    ui.inviteBtn = createButton(ui, "quiet", "Invite", GUILD_ROW_BUTTON_W, 18)
+    ui.inviteBtn:SetPoint("LEFT", ui.whisperBtn, "RIGHT", GUILD_ROW_BUTTON_GAP, 0)
     ui.whisperBtn:Hide()
     ui.inviteBtn:Hide()
     -- Whisper/Invite sit inside the row's own hit rect, so moving the
@@ -1558,6 +1573,7 @@ local function buildGuildRow(content)
     ui:SetScript("OnLeave", updateHoverButtons)
     ui.whisperBtn:HookScript("OnLeave", updateHoverButtons)
     ui.inviteBtn:HookScript("OnLeave", updateHoverButtons)
+    ui.updateHoverButtons = updateHoverButtons
     return ui
 end
 
@@ -1649,27 +1665,19 @@ function UI.RefreshGuild()
         chamber.noResultText:SetText("")
     end
 
-    local COLS = chamber.cols
     local function paintRow(ui, r, indent)
-        ui.indent:SetWidth(indent)
+        ui.expandBtn:ClearAllPoints()
+        ui.expandBtn:SetPoint("LEFT", indent - 20, 0)
+        ui.statusIcon:ClearAllPoints()
+        ui.statusIcon:SetPoint("LEFT", indent, 0)
         local gem = r.online and C.online or C.offline
         ui.statusIcon:SetVertexColor(gem[1], gem[2], gem[3], 1)
         setNameRow(ui.nameRow, r.character, r.class)
-        ui.statusWord:ClearAllPoints()
-        ui.statusWord:SetPoint("LEFT", ui.nameRow, "RIGHT", 8, 0)
-        ui.statusWord:SetText(r.online and "Online" or "Offline")
-        ui.levelText:ClearAllPoints()
-        ui.levelText:SetPoint("LEFT", COLS.level, 0)
         ui.levelText:SetText(r.level and tostring(r.level) or "--")
-        ui.rankText:ClearAllPoints()
-        ui.rankText:SetPoint("LEFT", COLS.rank, 0)
         ui.rankText:SetText(r.rank or "")
-        ui.zoneText:ClearAllPoints()
-        ui.zoneText:SetPoint("LEFT", COLS.zone, 0)
         ui.zoneText:SetText(r.zone or "")
-        ui.lastSeenText:ClearAllPoints()
-        ui.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)
-        ui.lastSeenText:SetText(r.online and "now" or (r.last_online_hours and (r.last_online_hours .. "h ago") or "--"))
+        ui.lastSeenText:SetText(r.online and "Online"
+            or (r.last_online_hours and (r.last_online_hours .. "h ago") or "Offline"))
         ui.whisperBtn:SetScript("OnClick", function()
             SideQuest.Whisper(r.character)
         end)
@@ -1678,6 +1686,7 @@ function UI.RefreshGuild()
         end)
         ui.inviteBtn:SetEnabled(SideQuest.IsOfficer())
         ui.selected = (chamber.selectedCharacter == r.character)
+        ui.updateHoverButtons()
         ui:SetScript("OnClick", function()
             chamber.selectedCharacter = (chamber.selectedCharacter == r.character) and nil or r.character
             UI.RefreshGuild()
@@ -1690,7 +1699,7 @@ function UI.RefreshGuild()
         i = i + 1
         local ui = chamber.rows[i]
         if not ui then
-            ui = buildGuildRow(chamber.content)
+            ui = buildGuildRow(chamber.content, chamber.cols)
             chamber.rows[i] = ui
         end
         local expandKey = g.main.member_id or g.main.character
@@ -1716,7 +1725,7 @@ function UI.RefreshGuild()
                 i = i + 1
                 local altUi = chamber.rows[i]
                 if not altUi then
-                    altUi = buildGuildRow(chamber.content)
+                    altUi = buildGuildRow(chamber.content, chamber.cols)
                     chamber.rows[i] = altUi
                 end
                 altUi:SetPoint("TOPLEFT", 0, -y)
@@ -3391,6 +3400,7 @@ function UI.BuildConsoleRaidNight(panel)
     local awardList = CreateFrame("Frame", nil, content)
     awardList:SetPoint("TOPLEFT", awardHeading, "BOTTOMLEFT", 0, -6)
     awardList:SetPoint("TOPRIGHT", awardHeading, "BOTTOMRIGHT", 0, -6)
+    awardList:SetHeight(18 * 8) -- the newest 8 awards
     chamber.awardRows = {}
 
     chamber.presenceText, chamber.standbyText, chamber.awardHeading, chamber.awardList =
@@ -3672,7 +3682,7 @@ function UI.BuildConsoleLoot(panel)
 
     local header = CreateFrame("Frame", nil, chamber.inner)
     header:SetPoint("TOPLEFT", timeLeftText, "BOTTOMLEFT", 0, -10)
-    header:SetHeight(14)
+    header:SetSize(530, 14)
     local COLS = { rank = 0, name = 40, pr = 330, ep = 400, award = 470 }
     chamber.bidCols = COLS
     local rankHdr = makeFontString(header, FONT_BODY, 10, C.mist2, "LEFT")
@@ -4201,6 +4211,7 @@ function UI.BuildConsoleAnnounce(panel)
     local recentList = CreateFrame("Frame", nil, chamber.inner)
     recentList:SetPoint("TOPLEFT", recentHeading, "BOTTOMLEFT", 0, -6)
     recentList:SetPoint("TOPRIGHT", recentHeading, "BOTTOMRIGHT", 0, -6)
+    recentList:SetHeight(18 * 5) -- the newest 5 posts
     chamber.recentRows = {}
     chamber.recentHeading, chamber.recentList = recentHeading, recentList
     panel.announceChamber = chamber
