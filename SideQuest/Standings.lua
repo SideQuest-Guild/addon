@@ -25,7 +25,7 @@ function Standings.LoadFromImport(payload)
         SideQuestDB.killed_encounters = payload.killed_encounters
     end
     if payload.events then
-        SideQuestDB.events = payload.events
+        SideQuest.Events.Load(payload.events, payload.past_events, payload.generated_at)
     end
 end
 
@@ -88,9 +88,13 @@ function Standings.BroadcastAfterImport()
     if not SideQuest.IsOfficer() then
         return
     end
+    -- events ride along so members never need an import string; older
+    -- members' addons read only generated_at/rows and ignore the rest
     local payload = {
         generated_at = SideQuestDB.standings.generated_at,
         rows = SideQuestDB.standings.rows,
+        events = SideQuestDB.events,
+        past_events = SideQuestDB.pastEvents,
     }
     local json = SideQuestJSON.encode(payload)
     SideQuest.Comm.BroadcastStandings(json)
@@ -98,16 +102,23 @@ end
 
 Standings.answeredRequestAt = 0
 
+--- What we hold, for STANDINGS_REQ: the older of our standings and our
+-- events, so a member whose standings came from an officer on an addon that
+-- didn't share events still asks until one that does answers.
+function Standings.HeldGeneratedAt()
+    return math.min(SideQuestDB.standings.generated_at or 0, SideQuestDB.eventsAt or 0)
+end
+
 function Standings.RequestOnLogin()
     -- members request; a small random delay avoids a thundering herd, and we
     -- only need one answer so we stop listening once we have one.
-    local delay = math.random(1, 5)
+    local function send()
+        SideQuest.Comm.SendRaw("STANDINGS_REQ|" .. tostring(Standings.HeldGeneratedAt()), "GUILD")
+    end
     if C_Timer and C_Timer.After then
-        C_Timer.After(delay, function()
-            SideQuest.Comm.SendRaw("STANDINGS_REQ|" .. tostring(SideQuestDB.standings.generated_at or 0), "GUILD")
-        end)
+        C_Timer.After(math.random(1, 5), send)
     else
-        SideQuest.Comm.SendRaw("STANDINGS_REQ|" .. tostring(SideQuestDB.standings.generated_at or 0), "GUILD")
+        send()
     end
 end
 
@@ -137,11 +148,19 @@ SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, sender)
         end
     elseif msgType == "STANDINGS" then
         local ok, data = pcall(SideQuestJSON.decode, payload)
-        if ok and type(data) == "table" and (not SideQuestDB.standings.generated_at
-            or (data.generated_at or 0) > SideQuestDB.standings.generated_at) then
+        if not ok or type(data) ~= "table" then
+            return
+        end
+        local generatedAt = data.generated_at or 0
+        if not SideQuestDB.standings.generated_at or generatedAt > SideQuestDB.standings.generated_at then
             SideQuestDB.standings.generated_at = data.generated_at
             SideQuestDB.standings.rows = data.rows
             SideQuest.Fire("SQ_STANDINGS_UPDATED")
+        end
+        -- an officer on an addon that predates event sharing sends no events: keep ours
+        if type(data.events) == "table" and generatedAt > (SideQuestDB.eventsAt or 0) then
+            SideQuest.Events.Load(data.events, type(data.past_events) == "table" and data.past_events or nil,
+                generatedAt)
         end
     end
 end)

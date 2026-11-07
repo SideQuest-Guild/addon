@@ -189,6 +189,14 @@ SideQuestDB.events = {
         { character = "Demo5", status = "absent" },
     } },
 }
+-- the site's recent past events, as answer counts (the Raids tab's "Past events" list)
+SideQuestDB.pastEvents = {
+    { id = "4d5e6f70-8192-4a1b-9c2d-3e4f5a6b7c90", title = "Movie Night", kind = "social",
+        starts_at = WowStub.time - 30 * 3600, going = 6, maybe = 2, cant = 1 },
+    { id = "5e6f7081-92a3-4a1b-9c2d-3e4f5a6b7c91", title = "Demo Raid Night: Karazhan", kind = "raid",
+        starts_at = WowStub.time - 6 * 86400, size = 10, going = 10, maybe = 0, cant = 2 },
+}
+SideQuestDB.eventsAt = WowStub.time
 SideQuest.Calendar.loaded = true -- as after the server's CALENDAR_UPDATE_EVENT_LIST; the demo event isn't on it yet
 SideQuestDB.mySignups["2b3c4d5e-6f70-4a1b-9c2d-3e4f5a6b7c8e"] = { status = "signed", sentAt = WowStub.time, acked = true }
 

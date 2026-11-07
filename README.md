@@ -49,7 +49,7 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 | Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. |
 | Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill; and who has Transmute, Mooncloth and other craft cooldowns ready. |
 | Market | What guildmates sell and want to buy, open requests for materials, and who holds an item. Mine lists and edits your own. |
-| Events | Upcoming events, how many have signed up for each role, and your own answer. |
+| Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
 | News | Guild announcements and recent activity. |
 
@@ -187,8 +187,8 @@ After the raid, the record has to reach the website. Pick whichever is easiest:
 
 When the website confirms the import, type `/sq export clear` so the next night starts empty. SideQuest Companion
 stages the new import on its own, so an officer running it just needs to log in; everyone else clicks **Import** on
-the sync page's text and pastes it with `/sq import`. Once one officer imports, the addon shares the new points with
-every member online.
+the sync page's text and pastes it with `/sq import`. Once one officer imports, the addon shares the new points and
+events with every member online, and members who log in later get them from any officer online.
 
 ### sidequest-sync
 
@@ -203,7 +203,7 @@ uvx --from "git+https://github.com/SideQuest-Guild/addon#subdirectory=uploader" 
 
 When the website confirms the import, type `/sq export clear` so the next night starts empty. Then click **Copy game
 import string** on the sync page and paste it into `/sq import` in game. Once one officer imports, the addon shares the
-new points with every member online.
+new points and events with every member online.
 
 ## Not yet tested on Forever
 
