@@ -1,7 +1,8 @@
 -- SideQuest/Roster.lua
 -- Guild roster sweep (contract v2 "roster"): recorder's latest
--- GetGuildRosterInfo pass, exported as a snapshot and used locally to
--- merge with the imported public member list in the Guild tab.
+-- GetGuildRosterInfo pass plus the guild's ranks (which are officer ranks),
+-- exported as a snapshot and used locally to merge with the imported public
+-- member list in the Guild tab.
 
 SideQuest = SideQuest or {}
 SideQuest.Roster = {}
@@ -25,6 +26,45 @@ local function offlineHours(index)
         return nil
     end
     return (hours or 0) + (days or 0) * 24 + (months or 0) * 30 * 24 + (years or 0) * 365 * 24
+end
+
+-- addon-contract-v2.md: roster.ranks, at most 10 entries, index 0-based
+-- (0 = Guild Master, matching rank_index). rankOrder (GuildControlGetRankName/
+-- GuildControlGetRankFlags) is 1-based, so rankOrder = index + 1.
+local MAX_RANKS = 10
+local OFFICER_FLAG_INDEX = 22 -- Blizzard_GuildControlUI.xml OfficerCheckbox id="22"
+
+--- The guild's ranks for export: name + whether each carries officer
+-- privileges. nil when the client doesn't expose the rank APIs at all. The
+-- Guild Master (index 0) is always an officer; every other rank's flag comes
+-- from a pcall'd GuildControlGetRankFlags, so a missing/erroring call sends
+-- officer=nil (unknown) instead of guessing.
+local function sweepRanks()
+    if type(GuildControlGetNumRanks) ~= "function" or type(GuildControlGetRankName) ~= "function" then
+        return nil
+    end
+    local count = GuildControlGetNumRanks()
+    if not count or count <= 0 then
+        return nil
+    end
+    local ranks = {}
+    for index = 0, math.min(count, MAX_RANKS) - 1 do
+        local rankOrder = index + 1
+        local name = SideQuest.Unsecret(GuildControlGetRankName(rankOrder))
+        if name then
+            local officer = nil
+            if index == 0 then
+                officer = true
+            elseif C_GuildInfo and C_GuildInfo.GuildControlGetRankFlags then
+                local ok, flags = pcall(C_GuildInfo.GuildControlGetRankFlags, rankOrder)
+                if ok and type(flags) == "table" then
+                    officer = flags[OFFICER_FLAG_INDEX] and true or false
+                end
+            end
+            table.insert(ranks, { index = index, name = name, officer = officer })
+        end
+    end
+    return ranks
 end
 
 --- True when the roster APIs this module needs exist on this client. Guild
@@ -84,7 +124,7 @@ function Roster.Sweep(auto)
         end
     end
 
-    local snapshot = { taken_at = now(), members = members }
+    local snapshot = { taken_at = now(), members = members, ranks = sweepRanks() }
     SideQuestDB.roster = snapshot
     SideQuestDB.pending.roster = snapshot
     SideQuest.Fire("SQ_ROSTER_UPDATED", snapshot)

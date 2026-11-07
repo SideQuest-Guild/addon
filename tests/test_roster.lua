@@ -89,4 +89,68 @@ return function(h)
         h.assertEq(#snapshot.members, 1, "the unreadable member is skipped, not stored broken")
         h.assertEq(snapshot.members[1].character, "Bob-Whitemane", "the readable member still comes through")
     end)
+
+    h.test("rank export: ranks sweep into the snapshot, GM always officer, others from the flags call", function()
+        h.resetAddon()
+        WowStub.guildRoster = roster(1)
+        WowStub.guildRanks = {
+            [1] = { name = "Guild Master" }, -- no officer field -- GM is always officer=true regardless
+            [2] = { name = "Officer", officer = true },
+            [3] = { name = "Raider", officer = false },
+        }
+        local snapshot = SideQuest.Roster.Sweep()
+        h.assertEq(#snapshot.ranks, 3, "every configured rank swept")
+        h.assertEq(snapshot.ranks[1].index, 0, "Guild Master is index 0")
+        h.assertEq(snapshot.ranks[1].name, "Guild Master")
+        h.assertEq(snapshot.ranks[1].officer, true, "index 0 is always officer=true")
+        h.assertEq(snapshot.ranks[2].officer, true, "flags() reported officer=true")
+        h.assertEq(snapshot.ranks[3].officer, false, "flags() reported officer=false")
+    end)
+
+    h.test("rank export: a missing or erroring flags call sends officer=null instead of guessing", function()
+        h.resetAddon()
+        WowStub.guildRoster = roster(1)
+        WowStub.guildRanks = {
+            [1] = { name = "Guild Master" },
+            [2] = { name = "Officer", flagsError = true },
+        }
+        local snapshot = SideQuest.Roster.Sweep()
+        h.assertEq(snapshot.ranks[2].officer, nil, "flags() erroring leaves officer unknown (nil)")
+    end)
+
+    h.test("rank export: ranks are omitted (nil, not an empty array) when the client has no rank API", function()
+        h.resetAddon()
+        WowStub.guildRoster = roster(1)
+        WowStub.guildRanks = nil
+        local snapshot = SideQuest.Roster.Sweep()
+        h.assertEq(snapshot.ranks, nil, "no rank API on this client -- ranks omitted")
+    end)
+
+    h.test("rank export: capped at 10 entries", function()
+        h.resetAddon()
+        WowStub.guildRoster = roster(1)
+        local ranks = {}
+        for i = 1, 15 do
+            ranks[i] = { name = "Rank" .. i, officer = (i == 1) }
+        end
+        WowStub.guildRanks = ranks
+        local snapshot = SideQuest.Roster.Sweep()
+        h.assertEq(#snapshot.ranks, 10, "capped at the contract's 10 entries")
+    end)
+
+    h.test("rank export: BuildExportPayload carries roster.ranks only when the client has them", function()
+        h.resetAddon()
+        WowStub.isOfficer = true
+        WowStub.guildRoster = roster(2)
+        WowStub.guildRanks = { [1] = { name = "Guild Master" }, [2] = { name = "Officer", officer = true } }
+        SideQuest.Roster.Sweep()
+        local payload = SideQuest.Codec.BuildExportPayload("Me-Whitemane", "SideQuest", "Whitemane")
+        h.assertEq(#payload.roster.ranks, 2, "ranks present in the export")
+        h.assertEq(payload.roster.ranks[1].name, "Guild Master")
+
+        WowStub.guildRanks = nil
+        SideQuest.Roster.Sweep()
+        local payload2 = SideQuest.Codec.BuildExportPayload("Me-Whitemane", "SideQuest", "Whitemane")
+        h.assertTrue(payload2.roster.ranks == nil, "ranks omitted from the export when unavailable")
+    end)
 end

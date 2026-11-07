@@ -26,7 +26,7 @@ local function defaultDB()
             awards = {},
             -- v2 sections (contract v2): accumulate here, cleared by /sq export clear
             -- like v1 pending.
-            roster = nil, -- { taken_at, members = {} } single latest snapshot, or nil
+            roster = nil, -- { taken_at, members = {}, ranks = nil|{} } single latest snapshot, or nil
             professions = {}, -- list of { character, profession, skill, max_skill, scanned_at, recipes }
             signups = {}, -- relayed member sign-ups awaiting export
             bank = {}, -- guild bank log rows
@@ -87,6 +87,8 @@ local function defaultDB()
         mySignups = {}, -- event_id -> { status, sentAt, acked }
         addonVersions = {}, -- character -> { version, seenAt } learned from HELLO
         prepAnswers = {}, -- character -> prep report, cleared each time an officer opens a new PREP_Q
+        -- ADDON_ACTION_BLOCKED/FORBIDDEN events + handler errors SQ.Fire swallows (Debug console view, GM-only).
+        debug = { log = {} },
         ui = {
             pos = nil, width = nil, height = nil, scale = nil, tab = nil,
             -- LibDBIcon-1.0 reads and writes this table: degrees round the rim (0 = right), and hidden or not
@@ -268,6 +270,9 @@ function SQ.Fire(eventName, ...)
         local ok, err = pcall(cb, ...)
         if not ok and SQ.Print then
             SQ.Print("|cffff4444Error|r in handler for " .. tostring(eventName) .. ": " .. tostring(err))
+            if SQ.LogDebug then
+                SQ.LogDebug({ kind = "error", event = eventName, message = tostring(err) })
+            end
         end
     end
 end
@@ -588,6 +593,203 @@ function SQ.IsOfficer()
 end
 
 --------------------------------------------------------------------------
+-- Guild membership detection
+--------------------------------------------------------------------------
+
+-- The SideQuest guild's exact in-game name, compared against GetGuildInfo
+-- ("player")'s own guild-name return -- the same value Sync.lua already
+-- stamps onto every export payload's "guild" field.
+SQ.GUILD_NAME = "SideQuest"
+
+-- IsInGuild() can read false for a frame or two right after login before the
+-- client has the player's own guild data, the same lag CanEditOfficerNote
+-- has above; guildMembershipKnown only flips once PLAYER_GUILD_UPDATE or
+-- GUILD_ROSTER_UPDATE has fired (or IsInGuild() itself turns true), so a
+-- member whose guild info is still loading is never mistaken for someone
+-- who isn't in the guild.
+local guildMembershipKnown = false
+
+--- Test-only: clears the "has guild info resolved yet" latch between tests.
+function SQ.ResetGuildMembershipState()
+    guildMembershipKnown = false
+end
+
+--- true while in the SideQuest guild, false once confirmed otherwise (a
+-- different guild, or no guild at all), nil while that still isn't known.
+-- Callers deciding whether to show member-only UI must treat nil as "assume
+-- member": a real member never flashes the non-member view while login is
+-- still settling, at the cost of a real non-member briefly seeing the member
+-- view until the first PLAYER_GUILD_UPDATE/GUILD_ROSTER_UPDATE resolves it.
+function SQ.IsGuildMember()
+    local inGuild = type(IsInGuild) == "function" and IsInGuild()
+    if inGuild then
+        guildMembershipKnown = true
+        local name = type(GetGuildInfo) == "function" and GetGuildInfo("player")
+        if not name then
+            return nil -- in a guild whose name hasn't loaded yet
+        end
+        return name == SQ.GUILD_NAME
+    end
+    if not guildMembershipKnown then
+        return nil
+    end
+    return false
+end
+
+SQ.On("PLAYER_GUILD_UPDATE", function()
+    guildMembershipKnown = true
+end)
+SQ.RegisterGameEvent("PLAYER_GUILD_UPDATE")
+SQ.On("GUILD_ROSTER_UPDATE", function()
+    guildMembershipKnown = true
+end)
+SQ.RegisterGameEvent("GUILD_ROSTER_UPDATE")
+-- Players with no guild may never get either event; a few seconds into the world, no guild means no guild.
+SQ.On("PLAYER_ENTERING_WORLD", function()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(5, function()
+            guildMembershipKnown = true
+        end)
+    end
+end)
+
+--- true when in the SideQuest guild and at guild rank index 0 (Guild
+-- Master, GetGuildInfo's own rankIndex return).
+function SQ.IsGuildMaster()
+    if SQ.IsGuildMember() ~= true then
+        return false
+    end
+    if type(GetGuildInfo) ~= "function" then
+        return false
+    end
+    local _, _, rankIndex = GetGuildInfo("player")
+    return rankIndex == 0
+end
+
+--------------------------------------------------------------------------
+-- Debug log: ADDON_ACTION_BLOCKED/FORBIDDEN events and handler errors
+-- SQ.Fire already swallows, so the GM can see what went wrong without
+-- reproducing it live. Capped at DEBUG_LOG_MAX entries, newest first.
+-- Cheap to record for everyone; only the Console "Debug" sub-view
+-- (GM-only, UI/Main.lua) reads it.
+--------------------------------------------------------------------------
+
+local DEBUG_LOG_MAX = 50
+local DEBUG_STACK_LINES = 6
+
+function SQ.LogDebug(entry)
+    if not SideQuestDB then
+        return
+    end
+    SideQuestDB.debug = SideQuestDB.debug or { log = {} }
+    entry.at = entry.at or (GetServerTime and GetServerTime() or 0)
+    table.insert(SideQuestDB.debug.log, 1, entry)
+    for i = #SideQuestDB.debug.log, DEBUG_LOG_MAX + 1, -1 do
+        table.remove(SideQuestDB.debug.log, i)
+    end
+end
+
+--- A short, trimmed debugstack() (first DEBUG_STACK_LINES frames only --
+-- the full stack is noisy and not worth keeping in SavedVariables), or
+-- nil when debugstack isn't available or errors.
+function SQ.ShortStack()
+    if type(debugstack) ~= "function" then
+        return nil
+    end
+    local ok, stack = pcall(debugstack, 2)
+    if not ok or type(stack) ~= "string" then
+        return nil
+    end
+    local lines = {}
+    for line in stack:gmatch("[^\n]+") do
+        table.insert(lines, line)
+        if #lines >= DEBUG_STACK_LINES then
+            break
+        end
+    end
+    return table.concat(lines, "\n")
+end
+
+local function onActionBlocked(eventName)
+    return function(addonName, functionName)
+        if addonName ~= SQ.ADDON_NAME then
+            return
+        end
+        SQ.LogDebug({ kind = "blocked", event = eventName, func = functionName, stack = SQ.ShortStack() })
+    end
+end
+SQ.On("ADDON_ACTION_BLOCKED", onActionBlocked("ADDON_ACTION_BLOCKED"))
+SQ.RegisterGameEvent("ADDON_ACTION_BLOCKED")
+SQ.On("ADDON_ACTION_FORBIDDEN", onActionBlocked("ADDON_ACTION_FORBIDDEN"))
+SQ.RegisterGameEvent("ADDON_ACTION_FORBIDDEN")
+
+--------------------------------------------------------------------------
+-- "View as": a GM-only, session-only (never saved, /reload clears it)
+-- override that makes the Display* checks below report a different role,
+-- so the GM can preview what a member/officer/non-member sees. Never
+-- touches SQ.IsGuildMember/IsOfficer/IsGuildMaster themselves -- exports,
+-- comms, the HELLO officer flag and recorder rights all read those real
+-- checks and are unaffected; only UI/Main.lua's drawing decisions consult
+-- the Display* wrappers.
+--------------------------------------------------------------------------
+
+local viewAsRole = nil -- nil (off), "nonmember", "member", "officer"
+
+--- Test-only: clears the view-as override between tests.
+function SQ.ResetViewAsState()
+    viewAsRole = nil
+end
+
+--- Turns the override on (GM only -- a non-GM call is a silent no-op, same
+-- as a real non-GM having no way to reach the Debug view) or off (role =
+-- nil always succeeds, so Exit/the join pane's banner always works).
+-- Fires SQ_VIEW_AS_CHANGED either way so UI/Main.lua can rebuild.
+function SQ.SetViewAs(role)
+    if role ~= "nonmember" and role ~= "member" and role ~= "officer" then
+        role = nil
+    end
+    if role ~= nil and not SQ.IsGuildMaster() then
+        return false
+    end
+    viewAsRole = role
+    SQ.Fire("SQ_VIEW_AS_CHANGED", viewAsRole)
+    return true
+end
+
+function SQ.ViewAs()
+    return viewAsRole
+end
+
+--- Display-only guild membership: what UI/Main.lua should draw.
+function SQ.DisplayIsGuildMember()
+    if viewAsRole == "nonmember" then
+        return false
+    elseif viewAsRole == "member" or viewAsRole == "officer" then
+        return true
+    end
+    return SQ.IsGuildMember()
+end
+
+--- Display-only officer status: what UI/Main.lua should draw.
+function SQ.DisplayIsOfficer()
+    if viewAsRole == "nonmember" or viewAsRole == "member" then
+        return false
+    elseif viewAsRole == "officer" then
+        return true
+    end
+    return SQ.IsOfficer()
+end
+
+--- Display-only GM status: what UI/Main.lua should draw. Any active
+-- override hides the GM-only Debug view, including "Officer".
+function SQ.DisplayIsGuildMaster()
+    if viewAsRole ~= nil then
+        return false
+    end
+    return SQ.IsGuildMaster()
+end
+
+--------------------------------------------------------------------------
 -- Slash commands
 --------------------------------------------------------------------------
 
@@ -668,6 +870,22 @@ SQ.RegisterSlash("dir", function()
         SQ.Print("My record last updated " .. tostring(entry.seen_at) .. ".")
     end
 end, "dir - directory sharing status")
+
+SQ.RegisterSlash("viewas", function(rest)
+    local arg = (rest or ""):lower()
+    local ROLES = { nonmember = "nonmember", member = "member", officer = "officer", off = nil }
+    if arg == "" or not (arg == "off" or ROLES[arg]) then
+        SQ.Print("Usage: /sq viewas member|officer|nonmember|off")
+        return
+    end
+    local role = (arg ~= "off") and ROLES[arg] or nil
+    if role ~= nil and not SQ.IsGuildMaster() then
+        SQ.Print("Only the Guild Master can use View as.")
+        return
+    end
+    SQ.SetViewAs(role)
+    SQ.Print("Viewing as: " .. (SQ.ViewAs() or "yourself"))
+end, "viewas member|officer|nonmember|off - GM-only UI preview")
 
 --------------------------------------------------------------------------
 -- Bootstrap

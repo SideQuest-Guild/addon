@@ -219,6 +219,9 @@ function Codec.BuildExportPayload(recorderName, guildName, realmName)
     }
     if pending.roster then
         payload.roster = { taken_at = pending.roster.taken_at, members = arr(pending.roster.members or {}) }
+        if pending.roster.ranks then
+            payload.roster.ranks = arr(pending.roster.ranks)
+        end
     end
     do
         local itemIds, recipeIds = collectDirectoryIds(db.directory or {})

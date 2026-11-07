@@ -22,6 +22,8 @@ WowStub = {
     inRaid = false,
     instance = { inInstance = false, instanceType = "none", instanceID = 0, difficultyID = 1 },
     isOfficer = false,
+    inGuild = true, -- IsInGuild(); default true so GetGuildInfo's "SideQuest" default means "a member" everywhere
+    rankIndex = 0, -- GetGuildInfo's own rankIndex return; 0 = Guild Master
     guildName = "SideQuest",
     realm = "Whitemane",
     lootItems = {},
@@ -32,6 +34,7 @@ WowStub = {
     mouseOverFrame = nil, -- set to a frame to make Frame:IsMouseOver() true for it and its ancestors
     -- v2
     guildRoster = {}, -- list of { name, rank, rankIndex, level, class, zone, online }
+    guildRanks = nil, -- nil (API unavailable), or list of { name, officer = bool, flagsError = true } index 1 = rankOrder 1 (GM)
     professions = {}, -- array (up to 5) of { name, skillLine, skill, maxSkill }; see GetProfessions()
     openTradeSkill = nil, -- { professionID, skillLineID, professionName, skillLevel, maxSkillLevel, linked, guild, recipes, child } or nil
     guildTradeSkillsEnabled = false,
@@ -253,10 +256,53 @@ C_GuildInfo = {
         end
         return WowStub.isOfficer
     end,
+    -- rankOrder is 1-based (index+1); flag 22 is "has officer privileges"
+    -- (Blizzard_GuildControlUI.xml OfficerCheckbox id="22"). A rank with
+    -- `flagsError` simulates the real call erroring/missing on some ranks.
+    GuildControlGetRankFlags = function(rankOrder)
+        local r = WowStub.guildRanks and WowStub.guildRanks[rankOrder]
+        if not r then
+            return nil
+        end
+        if r.flagsError then
+            error("GuildControlGetRankFlags failed")
+        end
+        local flags = {}
+        for i = 1, 32 do
+            flags[i] = false
+        end
+        flags[22] = r.officer and true or false
+        return flags
+    end,
 }
 
+function IsInGuild()
+    return WowStub.inGuild and true or false
+end
+
 function GetGuildInfo(unit)
-    return WowStub.guildName, "Officer", 0
+    if not WowStub.inGuild then
+        return nil
+    end
+    return WowStub.guildName, "Officer", WowStub.rankIndex or 0
+end
+
+-- A trimmed, deterministic fake call stack; SQ.ShortStack() (Core.lua) trims
+-- to its first few lines regardless, so the exact content doesn't matter.
+function debugstack(level, lines, linesAfter)
+    return "[string \"SideQuest/Core.lua\"]:1: in function 'demo'\n"
+        .. "[string \"SideQuest/Core.lua\"]:2: in function 'caller'\n"
+        .. "[string \"SideQuest/Core.lua\"]:3: in main chunk"
+end
+
+-- Rank count/name: nil (API unavailable) unless a test configures WowStub.guildRanks.
+function GuildControlGetNumRanks()
+    return WowStub.guildRanks and #WowStub.guildRanks or nil
+end
+
+function GuildControlGetRankName(rankOrder)
+    local r = WowStub.guildRanks and WowStub.guildRanks[rankOrder]
+    return r and r.name or nil
 end
 
 function GetNumGuildMembers()

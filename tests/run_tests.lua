@@ -77,6 +77,11 @@ local function resetAddon()
     SideQuest.Professions.ResetState()
     SideQuest.Sync.ResetInboxState()
     WowStub.isOfficer = false
+    WowStub.inGuild = true
+    WowStub.guildRanks = nil
+    WowStub.rankIndex = 0
+    SideQuest.ResetGuildMembershipState()
+    SideQuest.ResetViewAsState()
     WowStub.officerNoteCalls = 0
     WowStub.officerKnownAfterCalls = nil
     WowStub.chatLog = {}
