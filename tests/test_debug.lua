@@ -122,7 +122,7 @@ return function(h)
         SideQuest.SetViewAs(nil)
     end)
 
-    h.test("view as: nonmember preview rebuilds into the join pane with an Exit banner", function()
+    h.test("view as: nonmember preview rebuilds into the join pane with a Back to my view button", function()
         h.resetAddon()
         SideQuest.UI.main = nil
         SideQuest.UI.joinFrame = nil
@@ -132,14 +132,29 @@ return function(h)
         SideQuest.SetViewAs("nonmember")
         h.assertTrue(SideQuest.UI.joinFrame ~= nil and SideQuest.UI.joinFrame:IsShown(), "rebuilt into the join pane")
         h.assertTrue(not SideQuest.UI.main:IsShown(), "tabbed window hidden")
-        h.assertTrue(SideQuest.UI.joinFrame.viewAsBanner:IsShown(), "join pane shows the exit banner")
-        h.assertTrue(SideQuest.UI.joinFrame.viewAsBanner.label:GetText():find("Exit", 1, true) ~= nil,
-            "banner names Exit: " .. SideQuest.UI.joinFrame.viewAsBanner.label:GetText())
+        h.assertEq(SideQuest.ViewAs(), "nonmember", "the rebuild itself doesn't end the preview")
+        local banner = SideQuest.UI.joinFrame.viewAsBanner
+        h.assertTrue(banner:IsShown(), "join pane shows the preview bar")
+        h.assertEq(banner.label:GetText(), "Previewing as Non-member", "bar names the role")
 
-        local onClick = SideQuest.UI.joinFrame.viewAsBanner:GetScript("OnClick")
-        onClick()
-        h.assertEq(SideQuest.ViewAs(), nil, "banner click clears the override")
+        banner.exitBtn:GetScript("OnClick")()
+        h.assertEq(SideQuest.ViewAs(), nil, "Back to my view clears the override")
         h.assertTrue(SideQuest.UI.main ~= nil and SideQuest.UI.main:IsShown(), "back to the real tabbed window")
+    end)
+
+    h.test("view as: closing the window ends the preview", function()
+        h.resetAddon()
+        WowStub.isOfficer = true
+        SideQuest.UI.main = nil
+        SideQuest.UI.Show()
+        SideQuest.SetViewAs("member")
+        h.assertTrue(SideQuest.UI.main:IsShown(), "member preview keeps the tabbed window")
+        h.assertTrue(SideQuest.UI.main.viewAsBanner:IsShown(), "with the preview bar")
+
+        SideQuest.UI.main:Hide()
+        h.assertEq(SideQuest.ViewAs(), nil, "closing it goes back to your own view")
+        SideQuest.UI.Show()
+        h.assertTrue(SideQuest.UI.tabButtons["Console"]:IsShown(), "Console is back on the next open")
     end)
 
     h.test("view as: /sq viewas is a GM-only fallback that always allows exit", function()

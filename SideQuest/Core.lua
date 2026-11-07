@@ -494,26 +494,40 @@ end
 -- CHARACTERNAME_REALMNAME_SEPARATOR ("-") whenever there's no live unit --
 -- names from chat, the roster or the guild list
 -- (Blizzard_UnitPopup/Mainline/UnitPopupUtils.lua GetFullPlayerName) -- and
--- the space form only for a unit token. The space form also breaks
--- ChatFrameUtil.SendTell, which builds "/w <name> " and lets the slash
--- parser split on the space. So the canonical "First-Surname" (or
--- "Name-Realm") key is already the game's form.
+-- the space form only for a unit token. A whisper target with a space
+-- would also be split by the /w slash parser. So the canonical
+-- "First-Surname" (or "Name-Realm") key is already the game's form.
 function SQ.GameName(character)
     return character
 end
 
---- Open a whisper to `character`. Forever has no ChatFrame_SendTell global;
--- ChatFrameUtil.SendTell is the Mainline 12.x replacement.
+--- Ask the UI to open SideQuest's own whisper box for `character`.
+-- Never ChatFrameUtil.SendTell / ChatFrame_SendTell: called from addon code
+-- they write the chat box's chatType/tellTarget attributes tainted, every
+-- macro line copies those attributes before it runs (Blizzard_ChatFrameBase
+-- MacroExecutionManager.lua), and from then on secure macro buttons --
+-- another addon's /targetexact button, say -- get TargetUnit blocked with
+-- the game blaming SideQuest, until a /reload.
 function SQ.Whisper(character)
     local target = SQ.GameName(character)
     if not target or target == "" then
         return
     end
-    if ChatFrameUtil and ChatFrameUtil.SendTell then
-        ChatFrameUtil.SendTell(target)
-    elseif ChatFrame_SendTell then
-        ChatFrame_SendTell(target)
+    SQ.Fire("SQ_OPEN_WHISPER", target)
+end
+
+--- Send `text` to `target` as a whisper without going through the chat box.
+function SQ.SendWhisper(target, text)
+    if not target or target == "" or not text or text == "" then
+        return false
     end
+    -- Forever has no SendChatMessage global; C_ChatInfo.SendChatMessage replaces it.
+    local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+    if not send then
+        return false
+    end
+    send(text, "WHISPER", nil, target)
+    return true
 end
 
 --- Invite `character` to the group. Forever has no InviteUnit global;

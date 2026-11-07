@@ -46,7 +46,7 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 | Tab | What it shows |
 |---|---|
 | You | Your PR and where it ranks, your last four weeks of points, your next event with Going, Maybe and Can't buttons, and who's online. |
-| Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. |
+| Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. Whisper opens a small SideQuest box: replies come back in chat as usual. |
 | Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill; and who has Transmute, Mooncloth and other craft cooldowns ready. |
 | Market | What guildmates sell and want to buy, open requests for materials, and who holds an item. Mine lists and edits your own. |
 | Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. |
@@ -140,6 +140,7 @@ The other Console tabs:
 | Bank | Saves the open guild bank tab's log for the website. |
 | Announce | Posts a message to guild chat and every member's News tab, and to Discord if you tick the box. |
 | Sync | Shows what hasn't been sent to the website yet, with Export and Import buttons. **Update calendar** puts the site's upcoming events on the in-game guild calendar. |
+| Debug | Guild Master only. Lists what the game blocked SideQuest from doing and errors the addon caught, with a box to copy them. **View as** shows the windows as a non-member, member or officer sees them; **Back to my view**, closing the window or `/sq viewas off` ends it. |
 
 ### The guild calendar
 

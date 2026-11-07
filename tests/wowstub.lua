@@ -891,8 +891,8 @@ C_ChatInfo = {
         return Enum.SendAddonMessageResult.Success
     end,
     RegisterAddonMessagePrefix = function(prefix) end,
-    SendChatMessage = function(msg, channel)
-        table.insert(WowStub.chatLog, { msg = msg, channel = channel })
+    SendChatMessage = function(msg, channel, _language, target)
+        table.insert(WowStub.chatLog, { msg = msg, channel = channel, target = target })
     end,
 }
 
@@ -1164,11 +1164,23 @@ local function newMockRegion(kind, name, parent, template)
         return self
     end
 
-    local shown = true -- real WoW Frame/Texture/FontString default to shown; Hide() is explicit
-    self.Show = function() shown = true end
-    self.Hide = function() shown = false end
+    -- real WoW Frame/Texture/FontString default to shown; Hide() is explicit. Like the client, a change of shown
+    -- state runs OnShow/OnHide (the stub doesn't model hidden parents, so it fires on the frame's own flag).
+    local shown = true
+    local function setShown(want)
+        if want == shown then
+            return
+        end
+        shown = want
+        local handler = scripts[want and "OnShow" or "OnHide"]
+        if handler then
+            handler(self)
+        end
+    end
+    self.Show = function() setShown(true) end
+    self.Hide = function() setShown(false) end
     self.IsShown = function() return shown end
-    self.SetShown = function(_, cond) shown = cond and true or false end
+    self.SetShown = function(_, cond) setShown(cond and true or false) end
 
     self.SetScrollChild = function(_, child) self.__scrollChild = child end
     self.GetScrollChild = function() return self.__scrollChild end

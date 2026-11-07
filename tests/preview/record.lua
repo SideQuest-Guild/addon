@@ -1304,13 +1304,21 @@ emit("join-064", UI.joinFrame, 420, 330, 0.64)
 WowStub.inGuild = true
 WowStub.FireEvent("PLAYER_GUILD_UPDATE")
 
--- "viewing as" banner, floating above whichever window is open
+-- the "previewing as" bar, inside whichever window is open
 UI.main = nil
 UI.Show()
 SideQuest.SetViewAs("member")
 emit("viewas-banner", UI.main, 860, 560, 1)
 emit("viewas-banner-064", UI.main, 860, 560, 0.64)
+SideQuest.SetViewAs("nonmember")
+emit("viewas-join", UI.joinFrame, 420, 330, 1)
+emit("viewas-join-064", UI.joinFrame, 420, 330, 0.64)
 SideQuest.SetViewAs(nil)
+
+-- SideQuest's own whisper box (the Whisper buttons never open the game's chat box)
+SideQuest.Whisper("Demo2-Whitemane")
+emit("whisper", UI.whisperFrame, 380, 112, 1)
+emit("whisper-064", UI.whisperFrame, 380, 112, 0.64)
 
 local galleryItems = {}
 for _, n in ipairs(ALL_NAMES) do
