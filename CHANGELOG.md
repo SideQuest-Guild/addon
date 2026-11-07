@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.2 (2026-11-07)
+
+### Fixed
+
+- Import imports what you pasted, Last seen shows Online in green and offline muted, and Debug entries read cleanly
+
 ## v0.13.1 (2026-11-07)
 
 ### Fixed
