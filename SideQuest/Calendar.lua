@@ -13,7 +13,11 @@ local Calendar = SideQuest.Calendar
 
 local TITLE_MAX_BYTES = 31 -- the calendar's title box takes 31 letters; bytes is the safe reading of that
 local BUSY_TIMEOUT = 10 -- seconds to wait for the server to confirm a change before allowing the next one
-local REQUEST_THROTTLE = 60 -- seconds between C_Calendar.OpenCalendar requests
+local REQUEST_THROTTLE = 10 -- seconds between C_Calendar.OpenCalendar requests
+-- Seconds after a request by which the client's calendar counts as in, even without CALENDAR_UPDATE_EVENT_LIST: that
+-- event doesn't reliably come (an officer's Sync tab sat on "Loading the calendar" for good, likely after a /reload
+-- with the calendar already cached). Blizzard's own calendar never waits for it; it reads what's there.
+local SETTLE_SECONDS = 10
 local EVENT_URL = "https://sidequest-guild.com/events/detail/?id="
 
 -- Site EventKind -> label and calendar event type, for every kind the import can carry.
@@ -33,8 +37,10 @@ local EVENT_TYPE_FALLBACK = { Raid = 0, Dungeon = 1, PvP = 2, Meeting = 3, Other
 
 Calendar.busyUntil = 0
 Calendar.lastRequestAt = nil
--- Set by the first CALENDAR_UPDATE_EVENT_LIST. Until then the calendar reads as empty, and planning against it
--- would add every event a second time.
+Calendar.firstRequestAt = nil
+-- Whether the calendar's contents can be trusted. Until then the calendar may read as empty, and planning against it
+-- would add every event a second time. Set by CALENDAR_UPDATE_EVENT_LIST, by entries showing up in this month, or
+-- by SETTLE_SECONDS passing since the first request (see Calendar.IsLoaded).
 Calendar.loaded = false
 
 local function now()
@@ -158,7 +164,7 @@ function Calendar.Plan()
     if not Calendar.IsAvailable() then
         return nil, "This client has no guild calendar."
     end
-    if not Calendar.loaded then
+    if not Calendar.IsLoaded() then
         Calendar.Request()
         return nil, "Loading the calendar from the server..."
     end
@@ -349,7 +355,29 @@ function Calendar.Step()
     SideQuest.Fire("SQ_CALENDAR_CHANGED")
 end
 
---- Ask the server for the calendar, at most once a minute; CALENDAR_UPDATE_EVENT_LIST answers.
+--- Whether anything shows in the month the calendar has open (holidays, resets and guild events all count).
+local function monthHasEntries()
+    local info = C_Calendar.GetMonthInfo and C_Calendar.GetMonthInfo(0)
+    for day = 1, (info and info.numDays) or 31 do
+        if C_Calendar.GetNumDayEvents(0, day) > 0 then
+            return true
+        end
+    end
+    return false
+end
+
+--- Whether the calendar's contents can be planned against: the server has answered, the month shows entries, or a
+-- request has had SETTLE_SECONDS to land.
+function Calendar.IsLoaded()
+    if not Calendar.loaded and Calendar.firstRequestAt
+        and (monthHasEntries() or now() - Calendar.firstRequestAt >= SETTLE_SECONDS) then
+        Calendar.loaded = true
+    end
+    return Calendar.loaded
+end
+
+--- Ask the server for the calendar, at most every REQUEST_THROTTLE seconds, and look again once it has had time to
+-- land (CALENDAR_UPDATE_EVENT_LIST answers sooner when it comes).
 function Calendar.Request()
     if not (C_Calendar and C_Calendar.OpenCalendar) then
         return
@@ -359,7 +387,20 @@ function Calendar.Request()
         return
     end
     Calendar.lastRequestAt = t
+    Calendar.firstRequestAt = Calendar.firstRequestAt or t
+    -- As Blizzard's calendar does on show: open on this month, so month offset 0 is today's month.
+    local today = C_DateAndTime.GetCurrentCalendarTime()
+    if C_Calendar.SetAbsMonth and today then
+        C_Calendar.SetAbsMonth(today.month, today.year)
+    end
     C_Calendar.OpenCalendar()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(SETTLE_SECONDS + 1, function()
+            if not Calendar.loaded then
+                SideQuest.Fire("SQ_CALENDAR_CHANGED")
+            end
+        end)
+    end
 end
 
 SideQuest.RegisterSlash("calendar", function()

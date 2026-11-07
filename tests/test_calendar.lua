@@ -11,6 +11,7 @@ return function(h)
         WowStub.ResetCalendar()
         Calendar.busyUntil = 0
         Calendar.lastRequestAt = nil
+        Calendar.firstRequestAt = nil
         Calendar.prompted = false
         Calendar.promptSilenced = false
         WowStub.activePopup = nil
@@ -49,6 +50,30 @@ return function(h)
         SideQuest.Fire("CALENDAR_UPDATE_EVENT_LIST")
         Calendar.Step()
         h.assertEq(#WowStub.calendar.events, 1, "adds once the calendar is in")
+    end)
+
+    h.test("calendar: with no word from the server, it plans once the request has had time to land", function()
+        reset()
+        Calendar.loaded = false
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        Calendar.Step()
+        h.assertEq(#WowStub.calendar.events, 0, "nothing added straight after asking")
+        h.assertTrue(WowStub.calendar.absMonth ~= nil, "opened the calendar on this month, as Blizzard's does")
+        WowStub.Advance(11) -- CALENDAR_UPDATE_EVENT_LIST never comes (as after a /reload)
+        Calendar.Step()
+        h.assertEq(#WowStub.calendar.events, 1, "adds once the client's calendar has had time to fill")
+    end)
+
+    h.test("calendar: entries already in this month mean the calendar is in", function()
+        reset()
+        Calendar.loaded = false
+        local today = date("!*t", WowStub.time + WowStub.calendar.realmOffset)
+        table.insert(WowStub.calendar.events, { title = "Fishing Extravaganza", calendarType = "HOLIDAY",
+            year = today.year, month = today.month, day = today.day, hour = 14, minute = 0 })
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        Calendar.Step() -- asks; the holiday shows the month is filled
+        Calendar.Step()
+        h.assertEq(#WowStub.calendar.events, 2, "the site event goes on without waiting")
     end)
 
     h.test("calendar: a site event goes on as a guild announcement at the realm's local time", function()

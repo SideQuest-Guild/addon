@@ -750,6 +750,9 @@ C_Calendar = {
     OpenCalendar = function()
         WowStub.calendar.openCalendarCalls = WowStub.calendar.openCalendarCalls + 1
     end,
+    SetAbsMonth = function(month, year)
+        WowStub.calendar.absMonth = { month = month, year = year }
+    end,
     GetMonthInfo = function(offset)
         local year, month = monthAt(offset or 0)
         return { year = year, month = month }
