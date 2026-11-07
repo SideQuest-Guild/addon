@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.1 (2026-11-07)
+
+### Fixed
+
+- Guild member names show again, and Whisper/Invite sit beside Last seen instead of on top of it
+
 ## v0.10.0 (2026-11-07)
 
 ### New
