@@ -187,7 +187,7 @@ return function(h)
         row.whisperBtn:GetScript("OnClick")()
         row.inviteBtn:GetScript("OnClick")()
 
-        assertEq(WowStub.whispers[#WowStub.whispers], "Alt1-Whitemane", "whisper target uses SQ.GameName's form")
+        assertEq(SideQuest.UI.whisperFrame.target, "Alt1-Whitemane", "whisper target uses SQ.GameName's form")
         assertEq(WowStub.invites[#WowStub.invites], "Alt1-Whitemane", "invite target uses SQ.GameName's form")
     end)
 
@@ -196,8 +196,17 @@ return function(h)
         WowStub.SetForever(true)
         SideQuest.Whisper("Legs-Behindhead")
         SideQuest.Invite("Legs-Behindhead")
-        assertEq(WowStub.whispers[#WowStub.whispers], "Legs-Behindhead",
-            "ChatFrameUtil.SendTell gets the hyphen form; a space would split the /w slash command")
+        local frame = SideQuest.UI.whisperFrame
+        assertTrue(frame:IsShown(), "SideQuest's whisper box opens")
+        frame.box:SetText("lfg?")
+        frame.box:GetScript("OnEnterPressed")(frame.box)
+        local sent = WowStub.chatLog[#WowStub.chatLog]
+        assertEq(sent.channel, "WHISPER", "sent as a whisper")
+        assertEq(sent.target, "Legs-Behindhead", "hyphen form; a space would split a /w command")
+        assertEq(sent.msg, "lfg?", "the typed text")
+        assertTrue(not frame:IsShown(), "box closes once sent")
+        assertEq(#WowStub.whispers, 0,
+            "never opens the game's chat box: from addon code that taints it and gets macro /target buttons blocked")
         assertEq(WowStub.invites[#WowStub.invites], "Legs-Behindhead", "C_PartyInfo.InviteUnit gets the same form")
     end)
 

@@ -638,28 +638,41 @@ local function saveGeometry()
     SideQuestDB.ui.height = main:GetHeight()
 end
 
---- A banner bar floating just above `ownerFrame`'s top edge, shown only
--- while SideQuest.ViewAs() is set ("Viewing as <role> -- Exit"); clicking
--- it turns the override off. Attached to both the main and join windows
--- so the GM can never lose their way back (the join pane itself needs an
--- exit, since viewing as non-member makes the Console unreachable).
+--- The "previewing as <role>" bar with a "Back to my view" button, shown
+-- only while SideQuest.ViewAs() is set. It sits inside the window (a bar
+-- above the window's edge ends up off screen when the window is near the
+-- top, and the window is clamped to the screen, not the bar). Both the main
+-- and join windows get one, and closing either window also ends the
+-- preview (endViewAsOnHide), so the GM can never get stuck.
 local function createViewAsBanner(ownerFrame)
-    local banner = CreateFrame("Button", nil, ownerFrame)
-    banner:SetHeight(22)
-    banner:SetPoint("BOTTOMLEFT", ownerFrame, "TOPLEFT", 0, 4)
-    banner:SetPoint("BOTTOMRIGHT", ownerFrame, "TOPRIGHT", 0, 4)
+    local banner = CreateFrame("Frame", nil, ownerFrame)
+    banner:SetSize(420, 28)
+    banner:SetFrameLevel(ownerFrame:GetFrameLevel() + 20)
     local bg = banner:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints(banner)
-    bg:SetColorTexture(0.55, 0.36, 0.08, 0.92)
-    local label = makeFontString(banner, FONT_BODY, 12, C.ink, "CENTER")
-    label:SetPoint("CENTER")
+    bg:SetColorTexture(0.30, 0.19, 0.04, 0.95)
+    local label = makeFontString(banner, FONT_BODY, 12, C.ink, "LEFT")
+    label:SetPoint("LEFT", 10, 0)
     shade(label)
-    banner.label = label
-    banner:SetScript("OnClick", function()
+    local exitBtn = createButton(banner, "primary", "Back to my view", 130, 20)
+    exitBtn:SetPoint("RIGHT", -4, 0)
+    exitBtn:SetScript("OnClick", function()
         SideQuest.SetViewAs(nil)
     end)
+    banner.label, banner.exitBtn = label, exitBtn
     banner:Hide()
     return banner
+end
+
+--- Closing a window while previewing ends the preview. UI.RefreshViewAs
+-- hides and reopens the windows itself, so it sets UI.rebuildingViewAs.
+local function endViewAsOnHide(frame)
+    frame:HookScript("OnHide", function()
+        if not UI.rebuildingViewAs and SideQuest.ViewAs() then
+            SideQuest.SetViewAs(nil)
+            SideQuest.Print("Back to your own view.")
+        end
+    end)
 end
 
 function UI.BuildMainFrame()
@@ -811,6 +824,8 @@ function UI.BuildMainFrame()
     UI.BuildConsolePanel(body)
 
     main.viewAsBanner = createViewAsBanner(main)
+    main.viewAsBanner:SetPoint("TOP", header, "TOP", 0, -8)
+    endViewAsOnHide(main)
 
     UI.RefreshOfficerVisibility()
     UI.RefreshFreshness()
@@ -923,6 +938,9 @@ function UI.BuildJoinFrame()
     frame.websiteBox, frame.discordBox = websiteBox, discordBox
     frame.websiteHint, frame.discordHint = websiteHint, discordHint
     frame.viewAsBanner = createViewAsBanner(frame)
+    frame.viewAsBanner:SetPoint("BOTTOM", chamber, "BOTTOM", 0, 10)
+    frame.viewAsBanner:SetWidth(contentW)
+    endViewAsOnHide(frame)
 
     UI.joinFrame = frame
     return frame
@@ -937,6 +955,81 @@ function UI.ShowJoin()
         UI.PlayOpenAnim(frame)
     end)
 end
+
+--------------------------------------------------------------------------
+-- Whisper box: SideQuest's own one-line whisper, so the Whisper buttons
+-- never touch the game's chat box (see SideQuest.Whisper in Core.lua).
+-- Replies arrive in chat as usual.
+--------------------------------------------------------------------------
+
+function UI.BuildWhisperFrame()
+    if UI.whisperFrame then
+        return UI.whisperFrame
+    end
+    local frame = createChamber(UIParent, "SideQuestWhisperFrame")
+    frame:SetSize(380, 112)
+    -- over the main window (HIGH)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetToplevel(true)
+    frame:SetClampedToScreen(true)
+    frame:SetPoint("CENTER", 0, 120)
+    UI.ApplyWindowScale(frame)
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:Hide()
+    _G.UISpecialFrames = _G.UISpecialFrames or {}
+    table.insert(_G.UISpecialFrames, "SideQuestWhisperFrame")
+    createRibbon(frame, "Whisper")
+
+    local inner = frame.inner
+    local title = makeFontString(inner, FONT_BODY, 13, C.ink, "LEFT")
+    title:SetPoint("TOPLEFT", 6, -28)
+
+    local box = CreateFrame("EditBox", nil, inner, "InputBoxTemplate")
+    box:SetSize(250, 20)
+    box:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 6, -8)
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(255)
+    skinEditBox(box, "Message")
+
+    local sendBtn = createButton(inner, "primary", "Send", 70, 22)
+    sendBtn:SetPoint("LEFT", box, "RIGHT", 10, 0)
+
+    local hint = makeFontString(inner, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+    hint:SetPoint("TOPLEFT", box, "BOTTOMLEFT", -6, -6)
+    hint:SetText("Enter sends, Esc closes. Replies show in chat.")
+
+    local function send()
+        if SideQuest.SendWhisper(frame.target, box:GetText()) then
+            box:SetText("")
+            frame:Hide()
+        end
+    end
+    sendBtn:SetScript("OnClick", send)
+    box:SetScript("OnEnterPressed", send)
+    box:SetScript("OnEscapePressed", function()
+        frame:Hide()
+    end)
+
+    frame.title, frame.box, frame.sendBtn = title, box, sendBtn
+    UI.whisperFrame = frame
+    return frame
+end
+
+--- Not a protected frame, so it opens in combat too.
+function UI.OpenWhisper(target)
+    local frame = UI.BuildWhisperFrame()
+    frame.target = target
+    frame.title:SetText(target)
+    frame.box:SetText("")
+    frame:Show()
+    frame.box:SetFocus()
+end
+
+SideQuest.On("SQ_OPEN_WHISPER", UI.OpenWhisper)
 
 function UI.RefreshOfficerVisibility()
     local btn = UI.tabButtons and UI.tabButtons[OFFICER_TAB]
@@ -972,7 +1065,7 @@ function UI.UpdateViewAsBanner()
     for _, frame in ipairs({ UI.main, UI.joinFrame }) do
         if frame and frame.viewAsBanner then
             if role then
-                frame.viewAsBanner.label:SetText("Viewing as " .. (VIEW_AS_LABEL[role] or role) .. " -- Exit")
+                frame.viewAsBanner.label:SetText("Previewing as " .. (VIEW_AS_LABEL[role] or role))
                 frame.viewAsBanner:Show()
             else
                 frame.viewAsBanner:Hide()
@@ -986,8 +1079,10 @@ end
 -- tabbed window and vice versa), then restore the banner.
 function UI.RefreshViewAs()
     local wasOpen = (UI.main and UI.main:IsShown()) or (UI.joinFrame and UI.joinFrame:IsShown())
+    UI.rebuildingViewAs = true
     if UI.main then UI.main:Hide() end
     if UI.joinFrame then UI.joinFrame:Hide() end
+    UI.rebuildingViewAs = false
     UI.RefreshOfficerVisibility()
     UI.UpdateViewAsBanner()
     if wasOpen then
