@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.0 (2026-11-07)
+
+### New
+
+- Item tooltips and the Market show the auction house price from the guild site, with how many are listed and how fresh it is
+
 ## v0.9.1 (2026-11-07)
 
 ### Fixed
