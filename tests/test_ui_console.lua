@@ -53,6 +53,29 @@ return function(h)
             "hint says it's non-destructive: " .. chamber.sweepHint:GetText())
     end)
 
+    h.test("console sync: Import applies the pasted text instead of clearing it", function()
+        h.resetAddon()
+        SideQuest.UI.main = nil
+        WowStub.isOfficer = true
+        WowStub.SetUnit("player", { name = "Officer1", realm = "Whitemane", class = "PRIEST", guid = "Player-1-CONSOLE6" })
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Console")
+        SideQuest.UI.ShowConsoleSub("Sync")
+        local chamber = SideQuest.UI.panels.Console.syncChamber
+
+        local payload = { v = 1, generated_at = 1793500000, rules = nil, standings = {}, killed_encounters = {},
+            events = {} }
+        chamber.editBox:SetText(" " .. SideQuest.Codec.EncodeImport(payload) .. " ")
+        chamber.importBtn:GetScript("OnClick")()
+        h.assertEq(SideQuestDB.standings.generated_at, 1793500000, "the pasted import was applied")
+        h.assertEq(chamber.importResult:GetText(), "Imported.", "says so next to the button")
+
+        chamber.editBox:SetText("not an import")
+        chamber.importBtn:GetScript("OnClick")()
+        h.assertTrue(chamber.importResult:GetText():find("isn't a SideQuest import", 1, true) ~= nil,
+            "a bad paste says so: " .. chamber.importResult:GetText())
+    end)
+
     h.test("console sync calendar: no site events says whether the site has none or nothing was imported yet", function()
         h.resetAddon()
         SideQuest.UI.main = nil

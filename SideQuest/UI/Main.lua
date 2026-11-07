@@ -1983,8 +1983,10 @@ function UI.RefreshGuild()
         ui.levelText:SetText(r.level and tostring(r.level) or "--")
         ui.rankText:SetText(r.rank or "")
         ui.zoneText:SetText(r.zone or "")
+        -- same tint as the gem: online reads green, offline muted
         ui.lastSeenText:SetText(r.online and "Online"
             or (r.last_online_hours and (r.last_online_hours .. "h ago") or "Offline"))
+        ui.lastSeenText:SetTextColor(gem[1], gem[2], gem[3], 1)
         ui.whisperBtn:SetScript("OnClick", function()
             SideQuest.Whisper(r.character)
         end)
@@ -2478,6 +2480,8 @@ function UI.RefreshCraftersProfessions()
         row.lastSeenText:ClearAllPoints()
         row.lastSeenText:SetPoint("LEFT", COLS.lastSeen, 0)
         row.lastSeenText:SetText(m.online and "Online" or ago(craftersLastSeen(m.character)))
+        local seenColor = m.online and C.online or C.offline
+        row.lastSeenText:SetTextColor(seenColor[1], seenColor[2], seenColor[3], 1)
         row.whisperBtn:SetScript("OnClick", function()
             SideQuest.Whisper(m.character)
         end)
@@ -4627,19 +4631,39 @@ function UI.BuildConsoleSync(panel)
 
     local importBtn = createButton(chamber.inner, "primary", "Import", 120, 22)
     importBtn:SetPoint("LEFT", exportBtn, "RIGHT", 8, 0)
-    importBtn:SetScript("OnClick", function()
-        SideQuest.Fire("SQ_SHOW_IMPORT")
-    end)
 
     local editBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
     editBox:SetSize(500, 20)
     editBox:SetPoint("TOPLEFT", exportBtn, "BOTTOMLEFT", 0, -10)
     editBox:SetAutoFocus(false)
-    editBox:SetScript("OnEnterPressed", function(self)
-        SideQuest.Sync.ImportString(self:GetText())
-        UI.RefreshConsoleSync()
-    end)
     skinEditBox(editBox, "Paste import text")
+
+    local importResult = makeFontString(chamber.inner, FONT_BODY, 11, C.mist, "LEFT")
+    importResult:SetPoint("LEFT", importBtn, "RIGHT", 12, 0)
+    importResult:SetWidth(240)
+    chamber.importResult = importResult
+
+    -- Import applies whatever is pasted in the box; with nothing pasted it
+    -- just puts the cursor there.
+    local function runImport()
+        local text = (editBox:GetText() or ""):match("^%s*(.-)%s*$")
+        if text == "" or text:sub(1, 5) == "SQX1:" then
+            editBox:SetText("")
+            editBox:SetFocus()
+            setStateText(importResult, "Paste the site's import text in the box, then click Import.", false)
+            return
+        end
+        if SideQuest.Sync.ImportString(text) then
+            editBox:SetText("")
+            editBox:ClearFocus()
+            setStateText(importResult, "Imported.", false)
+        else
+            setStateText(importResult, "That isn't a SideQuest import -- see chat for why.", true)
+        end
+        UI.RefreshConsoleSync()
+    end
+    importBtn:SetScript("OnClick", runImport)
+    editBox:SetScript("OnEnterPressed", runImport)
 
     local syncHelpText = makeFontString(chamber.inner, FONT_BODY, 11, C.mist2, "LEFT")
     syncHelpText:SetPoint("TOPLEFT", editBox, "BOTTOMLEFT", 0, -10)
@@ -4694,7 +4718,7 @@ function UI.BuildConsoleSync(panel)
     calendarText:SetPoint("LEFT", calendarBtn, "RIGHT", 10, 0)
     calendarText:SetWidth(370)
 
-    chamber.pendingHeading, chamber.editBox = pendingHeading, editBox
+    chamber.pendingHeading, chamber.editBox, chamber.importBtn = pendingHeading, editBox, importBtn
     chamber.calendarBtn, chamber.calendarText = calendarBtn, calendarText
     panel.syncChamber = chamber
 end
@@ -4841,13 +4865,17 @@ function UI.RefreshConsoleDebug()
     local lines = {}
     for i, e in ipairs(log) do
         local when = date and date("%Y-%m-%d %H:%M:%S", e.at or 0) or tostring(e.at or 0)
-        local what
+        local what, stack
         if e.kind == "blocked" then
-            what = (e.func or "?") .. "() (" .. (e.event or "?") .. ")"
+            -- the game already names it with "()"; the stack recorded by
+            -- older versions was only SideQuest's own event handler, so skip it
+            local func = e.func or "?"
+            what = func .. (func:find("%)$") and "" or "()") .. " (" .. (e.event or "?") .. ")"
         else
             what = (e.event or "?") .. ": " .. (e.message or "?")
+            stack = e.stack
         end
-        local firstStackLine = e.stack and e.stack:match("[^\n]+")
+        local firstStackLine = stack and stack:match("[^\n]+")
         local summary = when .. "  [" .. e.kind .. "]  " .. what .. (firstStackLine and ("  -- " .. firstStackLine) or "")
         local row = chamber.rows[i]
         if not row then
@@ -4860,7 +4888,7 @@ function UI.RefreshConsoleDebug()
         row:SetPoint("TOPLEFT", 0, -16 * (i - 1))
         row.text:SetText(summary)
         row:Show()
-        table.insert(lines, summary .. (e.stack and ("\n" .. e.stack) or ""))
+        table.insert(lines, summary .. (stack and ("\n" .. stack) or ""))
     end
     setScrollContentHeight(chamber.scroll, 16 * #log)
     chamber.copyBox:SetLinkText(table.concat(lines, "\n\n"))
