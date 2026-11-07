@@ -18,6 +18,10 @@ download the zip from [GitHub releases](https://github.com/SideQuest-Guild/addon
 CurseForge and GitHub get the same zip, built by GitHub Actions and signed. [SECURITY.md](SECURITY.md) shows how to
 check that a zip you downloaded came from this repo.
 
+[SideQuest Companion](https://github.com/SideQuest-Guild/companion/releases) also installs and updates the addon, and
+by default does so on its own, even while WoW is running. The game keeps the old version until you `/reload`; when
+Companion has installed an update, SideQuest says so in game with a **Reload now** button.
+
 In game, click the crest on the minimap or type `/sq` to open the window. Drag the crest round the minimap to move it.
 Settings such as the minimap button, window scale and directory sharing are also in the game menu, under
 **Options > AddOns > SideQuest Guild** (or type `/sq options`).

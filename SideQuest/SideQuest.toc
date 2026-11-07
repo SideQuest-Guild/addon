@@ -42,6 +42,7 @@ Bank.lua
 Battlegrounds.lua
 Prep.lua
 Sync.lua
+Updates.lua
 UI\Skin.lua
 UI\Main.lua
 UI\Tooltip.lua

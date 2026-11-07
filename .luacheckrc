@@ -48,6 +48,8 @@ read_globals = {
     "Settings", "SettingsPanel", "MinimalSliderWithSteppersMixin",
     -- optional third-party price hints (Market.SuggestPrice), never required
     "Auctionator", "TSM_API",
+    -- update notice (Updates.lua)
+    "C_AddOns", "GetAddOnMetadata", "ReloadUI",
 }
 
 -- The WoW client has no `os` or `io` library (only the `date`/`time` globals): using them errors in game.
@@ -89,7 +91,7 @@ files["tests/wowstub.lua"] = {
         "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide",
         "ChatFrame_SendTell", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_ID", "RegionalUniqueNamesEnabled",
         "Constants", "C_NameUtil", "C_PartyInfo", "ChatFrameUtil", "UnitIsGroupLeader",
-        "TooltipDataProcessor",
+        "TooltipDataProcessor", "C_AddOns", "ReloadUI",
     },
 }
 
@@ -160,4 +162,8 @@ files["tests/test_ui_guild_rows.lua"] = {
 
 files["tests/test_identity.lua"] = {
     globals = { "WowStub", "SideQuestDB", "GetNumGuildMembers" },
+}
+
+files["tests/test_updates.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
 }
