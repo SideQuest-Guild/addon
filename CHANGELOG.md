@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.1 (2026-11-07)
+
+### Fixed
+
+- Whisper buttons no longer get other addons' target buttons blocked, and View as has a Back to my view button
+
 ## v0.13.0 (2026-11-07)
 
 ### New
