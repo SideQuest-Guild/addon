@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>whisper</title>
+<style>
+@font-face { font-family: 'SQ Body Italic'; src: url('../fonts/EBGaramond-Italic.ttf'); }
+@font-face { font-family: 'SQ Body'; src: url('../fonts/EBGaramond.ttf'); }
+@font-face { font-family: 'SQ Display'; src: url('../fonts/LibertinusSerifDisplay.ttf'); }
+html, body { margin: 0; background: #05070c; }
+.stage { position: relative; width: 380px; height: 128px; transform: scale(1); transform-origin: top left; overflow: hidden; }
+.r { box-sizing: border-box; }
+.footer { font: 11px sans-serif; color: #889; background: #000c; padding: 6px 10px; max-width: 640px; }
+</style></head>
+<body>
+
+<div class="stage">
+<div class="r tex" style="position:absolute;left:2.1px;top:18.0px;width:376.0px;height:108.0px;background-image:linear-gradient(to top,rgba(10,15,26,0.97),rgba(16,26,44,0.97));"></div>
+<div class="r tex" style="position:absolute;left:0.1px;top:16.0px;width:12.0px;height:12.0px;background-image:url('../tex/Chamber.png');background-size:32.000px 32.000px;background-position:-0.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:368.1px;top:16.0px;width:12.0px;height:12.0px;background-image:url('../tex/Chamber.png');background-size:32.000px 32.000px;background-position:-20.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:0.1px;top:116.0px;width:12.0px;height:12.0px;background-image:url('../tex/Chamber.png');background-size:32.000px 32.000px;background-position:-0.000px -20.000px;"></div>
+<div class="r tex" style="position:absolute;left:368.1px;top:116.0px;width:12.0px;height:12.0px;background-image:url('../tex/Chamber.png');background-size:32.000px 32.000px;background-position:-20.000px -20.000px;"></div>
+<div class="r tex" style="position:absolute;left:12.1px;top:16.0px;width:356.0px;height:12.0px;background-image:url('../tex/Chamber.png');background-size:1424.000px 32.000px;background-position:-534.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:12.1px;top:116.0px;width:356.0px;height:12.0px;background-image:url('../tex/Chamber.png');background-size:1424.000px 32.000px;background-position:-534.000px -20.000px;"></div>
+<div class="r tex" style="position:absolute;left:0.1px;top:28.0px;width:12.0px;height:88.0px;background-image:url('../tex/Chamber.png');background-size:32.000px 352.000px;background-position:-0.000px -132.000px;"></div>
+<div class="r tex" style="position:absolute;left:368.1px;top:28.0px;width:12.0px;height:88.0px;background-image:url('../tex/Chamber.png');background-size:32.000px 352.000px;background-position:-20.000px -132.000px;"></div>
+<div class="r tex" style="position:absolute;left:0.0px;top:15.9px;width:9.0px;height:9.0px;background-image:url('../tex/Diamond.png');background-size:100% 100%;"></div>
+<div class="r tex" style="position:absolute;left:371.2px;top:15.9px;width:9.0px;height:9.0px;background-image:url('../tex/Diamond.png');background-size:100% 100%;"></div>
+<div class="r tex" style="position:absolute;left:0.0px;top:119.1px;width:9.0px;height:9.0px;background-image:url('../tex/Diamond.png');background-size:100% 100%;"></div>
+<div class="r tex" style="position:absolute;left:371.2px;top:119.1px;width:9.0px;height:9.0px;background-image:url('../tex/Diamond.png');background-size:100% 100%;"></div>
+<div class="r frame" style="position:absolute;left:8.1px;top:24.0px;width:364.0px;height:96.0px;"></div>
+<div class="r fs" style="position:absolute;left:14.1px;top:52.0px;font-family:'SQ Body';font-size:13.0px;color:rgba(242,239,233,1.00);font-variant-numeric:tabular-nums;white-space:pre;overflow:visible;">Demo2-Whitemane</div>
+<div class="r fs" style="position:absolute;left:14.1px;top:100.0px;font-family:'SQ Body Italic';font-size:10.0px;color:rgba(150,162,184,1.00);font-variant-numeric:tabular-nums;white-space:pre;overflow:visible;">Enter sends, Esc closes. Replies show in chat.</div>
+<div class="r frame" style="position:absolute;left:20.1px;top:74.0px;width:250.0px;height:20.0px;"></div>
+<div class="r frame" style="position:absolute;left:280.1px;top:73.0px;width:70.0px;height:22.0px;display:flex;align-items:center;justify-content:center;font-family:'SQ Body';font-size:11px;color:#c4cddd;overflow:hidden;white-space:nowrap;">Send</div>
+<div class="r tex" style="position:absolute;left:20.1px;top:74.0px;width:8.0px;height:20.0px;background-image:url('../tex/FieldWell.png');background-size:64.000px 26.667px;background-position:-0.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:262.1px;top:74.0px;width:8.0px;height:20.0px;background-image:url('../tex/FieldWell.png');background-size:64.000px 26.667px;background-position:-56.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:28.1px;top:74.0px;width:234.0px;height:20.0px;background-image:url('../tex/FieldWell.png');background-size:312.000px 26.667px;background-position:-39.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:280.1px;top:73.0px;width:8.0px;height:22.0px;background-image:url('../tex/ButtonPrimary.png');background-size:64.000px 29.333px;background-position:-0.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:342.1px;top:73.0px;width:8.0px;height:22.0px;background-image:url('../tex/ButtonPrimary.png');background-size:64.000px 29.333px;background-position:-56.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:288.1px;top:73.0px;width:54.0px;height:22.0px;background-image:url('../tex/ButtonPrimary.png');background-size:72.000px 29.333px;background-position:-9.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:280.1px;top:73.0px;width:8.0px;height:22.0px;background-image:url('../tex/ButtonGlow.png');background-size:64.000px 29.333px;background-position:-0.000px -0.000px;mix-blend-mode:plus-lighter;"></div>
+<div class="r tex" style="position:absolute;left:342.1px;top:73.0px;width:8.0px;height:22.0px;background-image:url('../tex/ButtonGlow.png');background-size:64.000px 29.333px;background-position:-56.000px -0.000px;mix-blend-mode:plus-lighter;"></div>
+<div class="r tex" style="position:absolute;left:288.1px;top:73.0px;width:54.0px;height:22.0px;background-image:url('../tex/ButtonGlow.png');background-size:72.000px 29.333px;background-position:-9.000px -0.000px;mix-blend-mode:plus-lighter;"></div>
+<div class="r fs" style="position:absolute;left:29.1px;top:84.0px;transform:translateY(-50%);font-family:'SQ Body Italic';font-size:12.0px;color:rgba(150,162,184,1.00);font-variant-numeric:tabular-nums;white-space:pre;overflow:visible;">Message</div>
+<div class="r fs" style="position:absolute;left:315.1px;top:83.0px;transform:translateX(-50%) translateY(-50%);font-family:'SQ Body';font-size:12.0px;color:rgba(242,239,233,1.00);font-variant-numeric:tabular-nums;white-space:pre;overflow:visible;text-shadow:1.0px 1.0px 0 rgba(0,0,0,0.85);">Send</div>
+<div class="r frame" style="position:absolute;left:112.4px;top:0.0px;width:155.4px;height:32.0px;"></div>
+<div class="r tex" style="position:absolute;left:112.4px;top:0.0px;width:20.0px;height:32.0px;background-image:url('../tex/Ribbon.png');background-size:128.000px 32.000px;background-position:-0.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:247.8px;top:0.0px;width:20.0px;height:32.0px;background-image:url('../tex/Ribbon.png');background-size:128.000px 32.000px;background-position:-108.000px -0.000px;"></div>
+<div class="r tex" style="position:absolute;left:132.4px;top:0.0px;width:115.4px;height:32.0px;background-image:url('../tex/Ribbon.png');background-size:167.796px 32.000px;background-position:-26.218px -0.000px;"></div>
+<div class="r fs" style="position:absolute;left:190.1px;top:15.0px;transform:translateX(-50%) translateY(-50%);font-family:'SQ Display';font-size:12.0px;color:rgba(242,239,233,1.00);font-variant-numeric:tabular-nums;white-space:pre;overflow:visible;text-shadow:1.0px 1.0px 0 rgba(0,0,0,0.85);">W H I S P E R</div>
+</div>
+<div class="footer">SideQuest layout preview -- whisper @ 380x112, UI scale 1. Layout check, not a pixel-identical
+render of the game: every SetAtlas-backed piece (native Forever chrome, the close button, tabs) draws real
+Blizzard "Camelot" art fetched by tests/preview/fetch_atlases.py (orange-striped boxes mean that element's art
+hasn't been fetched yet); stock UIPanelButtonTemplate/InputBoxTemplate/ScrollFrame chrome that ISN'T atlas-driven
+still isn't reproduced. Headings/body text use the shipped EB Garamond / Libertinus Serif Display TTFs (OFL);
+the game's default Friz Quadrata is proprietary and is not reproduced here.</div>
+</body></html>
