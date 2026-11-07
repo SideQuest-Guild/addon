@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.12.1 (2026-11-07)
+
+### Fixed
+
+- The Sync tab's calendar says when the site has no upcoming events, instead of waiting for an import that already came
+
 ## v0.12.0 (2026-11-07)
 
 ### New
