@@ -4007,6 +4007,57 @@ function UI.RefreshConsoleRaidNight()
     setScrollContentHeight(chamber.scroll, 330 + 18 * #whoLines + 18 * shown)
 end
 
+-- Council award: officers pick the winner, item, its kind (contract:
+-- chase, legendary = legendary/special/rare, tier = crafted tier) and a
+-- required one-line reason, independent of the ranked bid table above
+-- (council items are never auto-ranked -- Loot.GroupFor drops them).
+local COUNCIL_KINDS = { { "chase", "Chase" }, { "legendary", "Legendary" }, { "tier", "Tier" } }
+local COUNCIL_TIER_SLOTS = {
+    { "INVTYPE_HEAD", "Head" }, { "INVTYPE_SHOULDER", "Shoulder" }, { "INVTYPE_CHEST", "Chest" },
+    { "INVTYPE_HAND", "Hands" }, { "INVTYPE_LEGS", "Legs" },
+}
+
+--- Recompute the council-award form's GP preview and the Award button's
+-- enabled state from whatever is currently typed/selected. Called after
+-- every edit so Award stays disabled until item, winner, kind (and slot,
+-- for tier) and a 1-200 char reason are all present.
+local function refreshCouncilAward(chamber)
+    for _, kind in ipairs(COUNCIL_KINDS) do
+        chamber.councilKindButtons[kind[1]]:SetSelected(chamber.councilKind == kind[1])
+    end
+    local showSlots = chamber.councilKind == "tier"
+    for _, slot in ipairs(COUNCIL_TIER_SLOTS) do
+        local btn = chamber.councilSlotButtons[slot[1]]
+        btn:SetShown(showSlots)
+        btn:SetSelected(showSlots and chamber.councilSlot == slot[1])
+    end
+
+    local itemId = parseItemInput(chamber.councilItemBox)
+    local info = itemId and resolveItemInfo(tostring(itemId)) or nil
+    local reason = chamber.councilReasonBox:GetText():gsub("^%s+", ""):gsub("%s+$", "")
+    local winner = chamber.councilWinnerBox:GetText():gsub("^%s+", ""):gsub("%s+$", "")
+
+    local gp
+    if info and chamber.councilKind then
+        if chamber.councilKind == "chase" then
+            gp = SideQuest.Rules.ComputeGP(info.equipLoc, "council", { isChase = true })
+        elseif chamber.councilKind == "legendary" then
+            gp = SideQuest.Rules.ComputeGP(info.equipLoc, "council", { isLegendary = true })
+        elseif chamber.councilKind == "tier" and chamber.councilSlot then
+            gp = SideQuest.Rules.ComputeGP(info.equipLoc, "council",
+                { isTierToken = true, tierSlotInvType = chamber.councilSlot })
+        end
+    end
+    chamber.councilGpText:SetText(gp and ("GP " .. gp) or "")
+
+    local valid = itemId ~= nil and winner ~= "" and chamber.councilKind ~= nil
+        and (chamber.councilKind ~= "tier" or chamber.councilSlot ~= nil)
+        and reason ~= "" and #reason <= 200
+    chamber.councilAwardBtn:SetEnabled(valid,
+        "Pick the item, winner, kind (and slot for tier), and write a one-line reason.")
+    chamber.councilValid = valid
+end
+
 -- Loot sub-view: the item up for bid (icon, quality-colour name, slot, GP
 -- cost), each response ranked per contract order with PR/EP columns and
 -- a per-row Award button, plus Close bidding and the time left.
@@ -4068,10 +4119,128 @@ function UI.BuildConsoleLoot(panel)
     epHdr:SetText(trackedCaps("EP"))
 
     local scroll, content = buildScroll(chamber.inner, -140)
+    -- reserve the chamber's bottom strip for the council-award form below
+    scroll:SetPoint("BOTTOMRIGHT", -24, 172)
     chamber.scroll, chamber.content, chamber.bidRows = scroll, content, {}
     chamber.iconSwatch, chamber.icon, chamber.itemText, chamber.slotGpText, chamber.timeLeftText =
         iconSwatch, icon, itemText, slotGpText, timeLeftText
+
+    -- Council award: a self-contained form (not tied to the ranked bid
+    -- table, since council responses are never auto-ranked) pinned to the
+    -- chamber's bottom strip so it never collides with however tall the
+    -- bid list grows.
+    local councilHeading = createSubHeading(chamber.inner, "Council award")
+    councilHeading:SetPoint("BOTTOMLEFT", chamber.inner, "BOTTOMLEFT", 14, 148)
+    councilHeading:SetWidth(700)
+
+    local councilItemBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
+    councilItemBox:SetSize(150, 20)
+    councilItemBox:SetPoint("TOPLEFT", councilHeading, "BOTTOMLEFT", 0, -8)
+    councilItemBox:SetAutoFocus(false)
+    skinEditBox(councilItemBox, "Item name, link or ID")
+    acceptItemLinks(councilItemBox)
+
+    local councilWinnerBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
+    councilWinnerBox:SetSize(140, 20)
+    councilWinnerBox:SetPoint("LEFT", councilItemBox, "RIGHT", 8, 0)
+    councilWinnerBox:SetAutoFocus(false)
+    councilWinnerBox:SetMaxLetters(64)
+    skinEditBox(councilWinnerBox, "Winner's character name")
+
+    local councilKindButtons = {}
+    local prevKindBtn
+    for _, kind in ipairs(COUNCIL_KINDS) do
+        local btn = createButton(chamber.inner, "quiet", kind[2], 70, 20)
+        if prevKindBtn then
+            btn:SetPoint("LEFT", prevKindBtn, "RIGHT", 4, 0)
+        else
+            btn:SetPoint("LEFT", councilWinnerBox, "RIGHT", 8, 0)
+        end
+        councilKindButtons[kind[1]] = btn
+        prevKindBtn = btn
+    end
+
+    local councilSlotButtons = {}
+    local prevSlotBtn
+    for _, slot in ipairs(COUNCIL_TIER_SLOTS) do
+        local btn = createButton(chamber.inner, "quiet", slot[2], 62, 18)
+        if prevSlotBtn then
+            btn:SetPoint("LEFT", prevSlotBtn, "RIGHT", 4, 0)
+        else
+            btn:SetPoint("TOPLEFT", councilItemBox, "BOTTOMLEFT", 0, -8)
+        end
+        councilSlotButtons[slot[1]] = btn
+        prevSlotBtn = btn
+    end
+
+    local councilReasonBox = CreateFrame("EditBox", nil, chamber.inner, "InputBoxTemplate")
+    councilReasonBox:SetSize(280, 20)
+    councilReasonBox:SetPoint("TOPLEFT", councilItemBox, "BOTTOMLEFT", 0, -36)
+    councilReasonBox:SetAutoFocus(false)
+    councilReasonBox:SetMaxLetters(200)
+    skinEditBox(councilReasonBox, "Reason (required, posted to #loot-log)")
+
+    local councilGpText = makeFontString(chamber.inner, FONT_BODY, 11, C.mist, "LEFT")
+    councilGpText:SetPoint("LEFT", councilReasonBox, "RIGHT", 10, 0)
+
+    local councilAwardBtn = createButton(chamber.inner, "primary", "Award by council", 150, 22)
+    councilAwardBtn:SetPoint("LEFT", councilGpText, "RIGHT", 10, 0)
+
+    chamber.councilItemBox, chamber.councilWinnerBox, chamber.councilReasonBox = councilItemBox, councilWinnerBox, councilReasonBox
+    chamber.councilGpText, chamber.councilAwardBtn = councilGpText, councilAwardBtn
+    chamber.councilKindButtons, chamber.councilSlotButtons = councilKindButtons, councilSlotButtons
+
+    councilItemBox:SetScript("OnTextChanged", function() refreshCouncilAward(chamber) end)
+    councilWinnerBox:SetScript("OnTextChanged", function() refreshCouncilAward(chamber) end)
+    councilReasonBox:SetScript("OnTextChanged", function() refreshCouncilAward(chamber) end)
+    for _, kind in ipairs(COUNCIL_KINDS) do
+        councilKindButtons[kind[1]]:SetScript("OnClick", function()
+            chamber.councilKind = kind[1]
+            if kind[1] ~= "tier" then
+                chamber.councilSlot = nil
+            end
+            refreshCouncilAward(chamber)
+        end)
+    end
+    for _, slot in ipairs(COUNCIL_TIER_SLOTS) do
+        councilSlotButtons[slot[1]]:SetScript("OnClick", function()
+            chamber.councilSlot = slot[1]
+            refreshCouncilAward(chamber)
+        end)
+    end
+    councilAwardBtn:SetScript("OnClick", function()
+        if not chamber.councilValid then
+            return
+        end
+        local itemId = parseItemInput(councilItemBox)
+        local info = resolveItemInfo(tostring(itemId))
+        local trimmedWinner = councilWinnerBox:GetText():gsub("^%s+", ""):gsub("%s+$", "")
+        local winner = SideQuest.NormalizeName(trimmedWinner)
+        local reason = councilReasonBox:GetText():gsub("^%s+", ""):gsub("%s+$", "")
+        local gpOpts = { councilKind = chamber.councilKind, councilReason = reason }
+        if chamber.councilKind == "chase" then
+            gpOpts.isChase = true
+        elseif chamber.councilKind == "legendary" then
+            gpOpts.isLegendary = true
+        elseif chamber.councilKind == "tier" then
+            gpOpts.isTierToken = true
+            gpOpts.tierSlotInvType = chamber.councilSlot
+        end
+        local lootId = SideQuest.Loot.AwardLoot(
+            { item_id = itemId, item_name = info.name, quality = info.quality, inv_type = info.equipLoc },
+            winner, "council", nil, nil, gpOpts)
+        if lootId then
+            councilItemBox:SetText("")
+            councilWinnerBox:SetText("")
+            councilReasonBox:SetText("")
+            chamber.councilKind = nil
+            chamber.councilSlot = nil
+            refreshCouncilAward(chamber)
+        end
+    end)
+
     panel.lootChamber = chamber
+    refreshCouncilAward(chamber)
 end
 
 function UI.RefreshBidRanking(bid)
@@ -4080,6 +4249,7 @@ function UI.RefreshBidRanking(bid)
         return
     end
     local chamber = panel.lootChamber
+    refreshCouncilAward(chamber)
     bid = bid or SideQuest.Loot.activeBid
     for _, r in ipairs(chamber.bidRows) do
         r:Hide()
