@@ -102,16 +102,7 @@ end
 
 --- The site title cut to what the calendar keeps, never splitting a UTF-8 character.
 function Calendar.Title(title)
-    title = tostring(title or "Event")
-    if #title <= TITLE_MAX_BYTES then
-        return title
-    end
-    local cut = TITLE_MAX_BYTES
-    -- step back over continuation bytes (10xxxxxx) so the cut lands before a character's lead byte
-    while cut > 0 and title:byte(cut + 1) and title:byte(cut + 1) >= 128 and title:byte(cut + 1) < 192 do
-        cut = cut - 1
-    end
-    return title:sub(1, cut)
+    return SideQuest.Utf8Cut(title or "Event", TITLE_MAX_BYTES)
 end
 
 local function description(evt)

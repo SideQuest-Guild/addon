@@ -125,8 +125,8 @@ local function applyLimits(section, d)
         if d.requests then
             d.requests = capByAt(d.requests, 30)
             for _, r in ipairs(d.requests) do
-                if r.note and #r.note > 80 then
-                    r.note = r.note:sub(1, 80)
+                if r.note then
+                    r.note = SideQuest.Utf8Cut(r.note, 80)
                 end
             end
         end

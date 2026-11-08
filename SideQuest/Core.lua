@@ -501,6 +501,22 @@ function SQ.GameName(character)
     return character
 end
 
+--- `text` cut to at most `maxBytes` bytes without splitting a UTF-8
+-- character. A half character left in SavedVariables makes the file
+-- invalid UTF-8, which tools reading it (SideQuest Companion) choke on.
+function SQ.Utf8Cut(text, maxBytes)
+    text = tostring(text or "")
+    if #text <= maxBytes then
+        return text
+    end
+    local cut = maxBytes
+    -- step back over continuation bytes (10xxxxxx) so the cut lands before a character's lead byte
+    while cut > 0 and text:byte(cut + 1) >= 128 and text:byte(cut + 1) < 192 do
+        cut = cut - 1
+    end
+    return text:sub(1, cut)
+end
+
 --- Ask the UI to open SideQuest's own whisper box for `character`.
 -- Never ChatFrameUtil.SendTell / ChatFrame_SendTell: called from addon code
 -- they write the chat box's chatType/tellTarget attributes tainted, every

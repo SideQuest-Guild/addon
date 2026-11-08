@@ -542,4 +542,12 @@ return function(h)
         fh:write(str)
         fh:close()
     end)
+
+    h.test("Utf8Cut: a capped note never ends in half a character", function()
+        local note = "a" .. string.rep("\195\169", 45) -- "a" then 45 x "é", 91 bytes
+        local cut = SideQuest.Utf8Cut(note, 80)
+        h.assertEq(#cut, 79, "steps back off byte 80, the lead byte of a split 'é'")
+        h.assertTrue(cut:byte(#cut) == 169, "ends on a whole character")
+        h.assertEq(SideQuest.Utf8Cut("short", 80), "short", "short text untouched")
+    end)
 end
