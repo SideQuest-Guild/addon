@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.4 (2026-11-08)
+
+### Fixed
+
+- SideQuest no longer gets other addons' /tm macros blocked
+
 ## v0.13.3 (2026-11-08)
 
 ### Fixed
