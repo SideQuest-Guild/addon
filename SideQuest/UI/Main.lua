@@ -262,6 +262,15 @@ elseif hooksecurefunc and ChatEdit_InsertLink then
     hooksecurefunc("ChatEdit_InsertLink", onInsertLink)
 end
 
+--- Escape closes the window (classic WoW special-frame pattern). Only insert into UISpecialFrames: assigning
+-- the global itself (even `UISpecialFrames = UISpecialFrames or {}`) taints it, and Blizzard reads it on every
+-- Escape press.
+local function closeOnEscape(frameName)
+    if UISpecialFrames then
+        table.insert(UISpecialFrames, frameName)
+    end
+end
+
 --- Enter in a search field lets go of the keyboard (InputBoxTemplate only
 -- does that on Escape) and, given its button, presses it.
 local function submitOnEnter(box, btn)
@@ -726,9 +735,7 @@ function UI.BuildMainFrame()
     end
     main:Hide()
 
-    -- Escape closes the window (classic WoW special-frame pattern).
-    _G.UISpecialFrames = _G.UISpecialFrames or {}
-    table.insert(_G.UISpecialFrames, "SideQuestMainFrame")
+    closeOnEscape("SideQuestMainFrame")
 
     local resizeGrip = CreateFrame("Button", nil, main)
     resizeGrip:SetSize(16, 16)
@@ -872,8 +879,7 @@ function UI.BuildJoinFrame()
     end)
     frame:Hide()
 
-    _G.UISpecialFrames = _G.UISpecialFrames or {}
-    table.insert(_G.UISpecialFrames, "SideQuestJoinFrame")
+    closeOnEscape("SideQuestJoinFrame")
 
     local chamber = createChamber(frame, "SideQuestJoinChamber")
     chamber:SetPoint("TOPLEFT", 14, -(UI.WINDOW_TITLE_H + 14))
@@ -980,8 +986,7 @@ function UI.BuildWhisperFrame()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:Hide()
-    _G.UISpecialFrames = _G.UISpecialFrames or {}
-    table.insert(_G.UISpecialFrames, "SideQuestWhisperFrame")
+    closeOnEscape("SideQuestWhisperFrame")
     createRibbon(frame, "Whisper")
 
     local inner = frame.inner

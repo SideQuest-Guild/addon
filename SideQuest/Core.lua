@@ -840,9 +840,11 @@ end
 
 SQ.DispatchSlash = dispatchSlash
 
-if _G then
+-- Only add a key: never assign SlashCmdList itself (not even `SlashCmdList = SlashCmdList or {}`). That taints
+-- the global, and Blizzard reads it before running every non-secure slash command, so a macro's /tm then gets
+-- SetRaidTarget forbidden with SideQuest blamed.
+if SlashCmdList then
     SLASH_SIDEQUEST1 = "/sq"
-    SlashCmdList = SlashCmdList or {}
     SlashCmdList["SIDEQUEST"] = dispatchSlash
 end
 

@@ -914,6 +914,9 @@ C_Timer = {
 --------------------------------------------------------------------------
 
 StaticPopupDialogs = {}
+-- Blizzard defines these before any addon loads; the addon only adds keys (see run_tests.lua's guard).
+SlashCmdList = {}
+UISpecialFrames = {}
 
 function StaticPopup_Show(which, text_arg1, text_arg2, data)
     local info = StaticPopupDialogs[which]
