@@ -97,14 +97,33 @@ end
 
 --- Record a loot award: writes the loot row plus its GP ledger twin, per
 -- the contract (amount may be 0 for alt/de/bank but the row is still written).
+-- Council awards (response = "council") additionally require gpOpts.councilKind
+-- (chase|legendary|tier) and a trimmed, 1-200 char gpOpts.councilReason; the
+-- loot row then carries council_reason/council_kind (contract: addon.md).
 -- @param item table { item_id, item_name, quality, inv_type }
 -- @param character string normalized "Name-Realm"
 -- @param response string ms|os|alt|council|de|bank
 -- @param sessionId string|nil
 -- @param encounterRowId string|nil
--- @param gpOpts table forwarded to Rules.ComputeGP, plus optional `gpOverride`
+-- @param gpOpts table forwarded to Rules.ComputeGP, plus optional `gpOverride`,
+--   and for council awards `councilKind`/`councilReason`
 function Loot.AwardLoot(item, character, response, sessionId, encounterRowId, gpOpts)
     gpOpts = gpOpts or {}
+
+    local councilReason
+    if response == "council" then
+        local kind = gpOpts.councilKind
+        if kind ~= "chase" and kind ~= "legendary" and kind ~= "tier" then
+            SideQuest.Print("A council award needs a kind: chase, legendary or tier.")
+            return nil
+        end
+        councilReason = (gpOpts.councilReason or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if councilReason == "" or #councilReason > 200 then
+            SideQuest.Print("A council award needs a one-line reason (1-200 characters).")
+            return nil
+        end
+    end
+
     local gp
     if gpOpts.gpOverride ~= nil then
         gp = gpOpts.gpOverride
@@ -127,6 +146,10 @@ function Loot.AwardLoot(item, character, response, sessionId, encounterRowId, gp
         officer = SideQuest.NormalizeUnit("player"),
         voided = false,
     }
+    if response == "council" then
+        lootRow.council_reason = councilReason
+        lootRow.council_kind = gpOpts.councilKind
+    end
     table.insert(pending().loot, lootRow)
 
     local awardRow = {

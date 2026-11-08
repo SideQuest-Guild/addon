@@ -190,3 +190,11 @@ files["tests/test_updates.lua"] = {
 files["tests/test_events_sharing.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }
+
+files["tests/test_loot_council.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_ui_loot_council.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}

@@ -46,15 +46,16 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 | Tab | What it shows |
 |---|---|
 | You | Your PR and where it ranks, your last four weeks of points, your next event with Going, Maybe and Can't buttons, and who's online. |
-| Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. Whisper opens a small SideQuest box: replies come back in chat as usual. |
+| Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. Whisper opens a small SideQuest box: replies come back in chat as usual. Online guildmates show in green, offline in grey. |
 | Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill; and who has Transmute, Mooncloth and other craft cooldowns ready. |
-| Market | What guildmates sell and want to buy, open requests for materials, and who holds an item. Mine lists and edits your own. |
+| Market | What guildmates sell and want to buy, open requests for materials, and who holds an item, with the guild's lowest auction-house price next to each listing when one's known. Mine lists and edits your own. |
 | Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
 | News | Guild announcements and recent activity. |
 
 Click someone on the Guild tab to see their level, spec, item level, professions, Onyxia attunement, tracked
-reputations and cooldowns. Hover any item to see which guildmates craft, sell, buy or hold it.
+reputations and cooldowns. Hover any item to see which guildmates craft, sell, buy or hold it, and the guild's
+lowest auction-house price if a sync has priced it.
 
 Your event sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
 
@@ -124,7 +125,10 @@ Then follow the steps:
    hasn't killed gives 10 EP, once per boss per night.
 5. **Loot** opens bidding on each item in the loot window. Raiders get a popup with the item, its GP price, their PR and
    Main, Off and Pass buttons. The Loot tab lists the answers in the order the rules give: main spec by PR, then off
-   spec, alts and disenchant. Chase items, legendaries and crafted tier are left for the loot council to decide.
+   spec, alts and disenchant. Chase items (one per boss), legendaries/specials/rares and crafted tier are decided by
+   the loot council instead: pick the winner and the item in the Loot tab's **Council award** form, its kind (Chase,
+   Legendary or Tier -- Tier also asks which slot), and write a one-line reason, which is posted to #loot-log on the
+   site. The winner still pays full GP; Award stays disabled until every field is filled in.
 6. **End raid** gives 5 EP to everyone still there. It unlocks once you're recording, and doesn't stop recording by
    itself -- click **Stop recording** (or type `/sq record`) when the night is over.
 
@@ -136,7 +140,7 @@ The other Console tabs:
 |---|---|
 | Loot | Bidding and awards, as above. If you aren't master looter, `/sq bid <item link>` opens bidding on any item. |
 | Roster | Reads the guild roster for the website and lists inactive members. |
-| Recruits | Applicants and trials, with yes/no votes from officers. |
+| Recruits | An Add recruit form that fills in your target, plus applicants and trials with yes/no votes from officers. |
 | Bank | Saves the open guild bank tab's log for the website. |
 | Announce | Posts a message to guild chat and every member's News tab, and to Discord if you tick the box. |
 | Sync | Shows what hasn't been sent to the website yet, with Export and Import buttons. **Update calendar** puts the site's upcoming events on the in-game guild calendar. |
