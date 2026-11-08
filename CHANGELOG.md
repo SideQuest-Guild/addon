@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.0 (2026-11-08)
+
+### New
+
+- Officers record loot council picks with a one-line reason, and the site posts them in #loot-log
+
 ## v0.13.4 (2026-11-08)
 
 ### Fixed
