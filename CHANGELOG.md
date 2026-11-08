@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.3 (2026-11-08)
+
+### Fixed
+
+- Market request notes are cut on a whole character, so the save file stays readable for SideQuest Companion
+
 ## v0.13.2 (2026-11-07)
 
 ### Fixed
