@@ -8,6 +8,26 @@ local ROOT = SCRIPT_DIR .. "../"
 
 dofile(SCRIPT_DIR .. "wowstub.lua")
 
+-- In game, addon code that assigns one of Blizzard's own tables (even `SlashCmdList = SlashCmdList or {}`) taints
+-- that global for every Blizzard read: a tainted SlashCmdList got macros' /tm SetRaidTarget forbidden with
+-- SideQuest blamed. Move the tables behind a metatable so any such assignment fails the run.
+do
+    local blizzardTables = {}
+    for _, name in ipairs({ "SlashCmdList", "UISpecialFrames", "StaticPopupDialogs" }) do
+        blizzardTables[name] = rawget(_G, name)
+        rawset(_G, name, nil)
+    end
+    setmetatable(_G, {
+        __index = blizzardTables,
+        __newindex = function(t, k, v)
+            if blizzardTables[k] ~= nil then
+                error("assigns Blizzard's global " .. k .. ", which taints it in game; only add keys to it", 2)
+            end
+            rawset(t, k, v)
+        end,
+    })
+end
+
 for _, f in ipairs(dofile(SCRIPT_DIR .. "addon_files.lua")(ROOT)) do
     dofile(ROOT .. f)
 end

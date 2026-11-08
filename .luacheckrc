@@ -8,11 +8,18 @@ unused_args = false -- WoW event handler signatures are fixed; many args are unu
 -- few globals the addon itself defines and mutates across files.
 globals = {
     "SideQuestDB", "SideQuest", "SideQuestJSON", "SideQuestBase64",
-    "SLASH_SIDEQUEST1", "SlashCmdList", "SideQuest_OnAddonCompartmentClick",
-    "StaticPopupDialogs",
+    "SLASH_SIDEQUEST1", "SideQuest_OnAddonCompartmentClick",
 }
 
+-- Blizzard-owned tables: the addon may only set its own keys. Assigning the global itself (even `X = X or {}`)
+-- taints it for every Blizzard read: a tainted SlashCmdList got macros' /tm SetRaidTarget forbidden with
+-- SideQuest blamed. New keys need listing here.
+local writable = { read_only = false }
+
 read_globals = {
+    SlashCmdList = { fields = { SIDEQUEST = writable } },
+    StaticPopupDialogs = { fields = { SIDEQUEST_CALENDAR_PENDING = writable, SIDEQUEST_UPDATE_READY = writable } },
+    "UISpecialFrames",
     -- WoW client API used by the addon
     "CreateFrame", "UIParent", "GetServerTime", "GetTime", "GetNormalizedRealmName", "date",
     "UnitName", "UnitGUID", "UnitClass", "UnitLevel", "UnitRace", "UnitExists", "UnitIsPlayer", "IsInRaid", "IsInGroup",
@@ -95,13 +102,13 @@ files["tests/wowstub.lua"] = {
         "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide",
         "ChatFrame_SendTell", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_ID", "RegionalUniqueNamesEnabled",
         "Constants", "C_NameUtil", "C_PartyInfo", "ChatFrameUtil", "UnitIsGroupLeader",
-        "TooltipDataProcessor", "C_AddOns", "ReloadUI", "debugstack",
+        "TooltipDataProcessor", "C_AddOns", "ReloadUI", "debugstack", "SlashCmdList", "UISpecialFrames",
     },
 }
 
 
 files["tests/run_tests.lua"] = {
-    globals = { "WowStub", "SideQuestDB", "ROOT" },
+    globals = { "WowStub", "SideQuestDB", "ROOT", "SlashCmdList", "UISpecialFrames", "StaticPopupDialogs" },
 }
 
 files["tests/preview/record.lua"] = {
