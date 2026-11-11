@@ -47,15 +47,16 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 |---|---|
 | You | Your PR and where it ranks, your last four weeks of points, your next event with Going, Maybe and Can't buttons, and who's online. |
 | Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. Whisper opens a small SideQuest box: replies come back in chat as usual. Online guildmates show in green, offline in grey. |
-| Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill; and who has Transmute, Mooncloth and other craft cooldowns ready. |
+| Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill, including guildies who are offline or don't run the addon, from the site's last sync; and who has Transmute, Mooncloth and other craft cooldowns ready (addon-tracked members only). |
 | Market | What guildmates sell and want to buy, open requests for materials, and who holds an item, with the guild's lowest auction-house price next to each listing when one's known. Mine lists and edits your own. |
 | Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
 | News | Guild announcements and recent activity. |
 
 Click someone on the Guild tab to see their level, spec, item level, professions, Onyxia attunement, tracked
-reputations and cooldowns. Hover any item to see which guildmates craft, sell, buy or hold it, and the guild's
-lowest auction-house price if a sync has priced it.
+reputations and cooldowns; item level comes from the site's last sync when they haven't logged in with the addon
+running. Hover any item to see which guildmates craft, sell, buy or hold it, how many have it on their wishlist, and
+the guild's lowest auction-house price if a sync has priced it.
 
 Your event sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
 
@@ -67,8 +68,9 @@ were there.
 SideQuest keeps a record of your character and shares it with the guild automatically: your professions and skill,
 your level, class, spec and item level, your craft cooldowns, your Onyxia attunement and the few reputations the guild
 tracks, what you sell and want to buy, and the crafting materials in your bags and bank (never gold or gear). That's
-how the Crafters and Market tabs work for guildmates who are offline, and officers' syncs carry it to the website,
-where only signed-in guild members see it.
+how the Crafters and Market tabs work for guildmates who are offline but have run the addon recently; a site sync
+fills in the rest -- crafters, item level and wishlist counts -- for guildies who are offline or have never installed
+it, and officers' syncs carry it to the website, where only signed-in guild members see it.
 
 Turn any part off on the You tab, or with `/sq share <prof|char|cd|market|stock> on|off`. `/sq dir` shows what you
 share and how many guildmates the addon has heard from. Open each profession window once so the guild knows your

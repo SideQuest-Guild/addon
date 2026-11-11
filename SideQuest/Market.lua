@@ -60,7 +60,8 @@ end
 
 --- The guild's lowest auction-house price for itemId from the last game
 -- import ("Game import" contract: SideQuestDB.prices), or nil when none is
--- known. { p = unit_price copper, q = quantity, at = unix timestamp }.
+-- known. { p = unit_price copper, q = quantity, at = unix timestamp,
+-- w = distinct wishers (contract SQI1 `wanted`, additive; 0 on an old import) }.
 function Market.AuctionPrice(itemId)
     return SideQuestDB and SideQuestDB.prices and SideQuestDB.prices[itemId]
 end

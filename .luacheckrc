@@ -127,6 +127,22 @@ files["tests/test_auctions.lua"] = {
     globals = { "WowStub", "SideQuestDB", "TooltipDataProcessor", "Enum", "UIParent" },
 }
 
+files["tests/test_tooltip_offline_crafters.lua"] = {
+    globals = { "WowStub", "SideQuestDB", "TooltipDataProcessor", "Enum", "UIParent" },
+}
+
+files["tests/test_tooltip_wanted.lua"] = {
+    globals = { "WowStub", "SideQuestDB", "TooltipDataProcessor", "Enum", "UIParent" },
+}
+
+files["tests/test_crafters_professions_offline.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_guild_item_level_import.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
 files["tests/test_minimap.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }

@@ -1637,6 +1637,22 @@ local function buildGuildDetail(content)
     return block
 end
 
+--- A character's equipped item level from the last site import ("Game
+-- import" contract GameImportCharacter.item_level, additive): nil when
+-- the import has no entry for them, or when an import predating the
+-- field is all the addon has. Only consulted when the live directory
+-- hasn't scanned this character's gear yet.
+local function importItemLevel(character)
+    for _, member in ipairs((SideQuestDB.guild and SideQuestDB.guild.members) or {}) do
+        for _, char in ipairs(member.characters or {}) do
+            if char.name == character then
+                return char.item_level
+            end
+        end
+    end
+    return nil
+end
+
 --- Fills `block` with `character`'s directory record and returns the
 -- height it used, so the caller can offset rows below it.
 function UI.PaintGuildDetail(block, character)
@@ -1650,7 +1666,8 @@ function UI.PaintGuildDetail(block, character)
     local metaParts = {}
     if charData and charData.level then table.insert(metaParts, "Level " .. charData.level) end
     if charData and charData.spec then table.insert(metaParts, charData.spec) end
-    if charData and charData.item_level then table.insert(metaParts, "ilvl " .. string.format("%.1f", charData.item_level)) end
+    local ilvl = (charData and charData.item_level) or importItemLevel(character)
+    if ilvl then table.insert(metaParts, "ilvl " .. string.format("%.1f", ilvl)) end
     block.metaText:SetText(table.concat(metaParts, "  --  "))
     local freshness = recordFreshness(entry)
     setStateText(block.freshnessText, freshness and ("Record " .. ago(freshness)) or "No directory record yet", not freshness)
@@ -2425,6 +2442,22 @@ function UI.RefreshCraftersProfessions()
     end
 
     local members = SideQuest.Directory.ByProfession(chamber.profession) or {}
+    -- Offline/imported crafters (contract SQI1 on-demand "crafters",
+    -- additive): a character+profession the live directory already has
+    -- wins (fresher skill, recipe counts, online state); the import only
+    -- fills in characters/professions the directory hasn't seen at all.
+    -- Cooldowns stay live-only -- the import carries none.
+    local seenKey = {}
+    for _, m in ipairs(members) do
+        seenKey[m.character .. "\0" .. (m.profession or "")] = true
+    end
+    for _, row in ipairs((SideQuestDB.onDemand and SideQuestDB.onDemand.crafters) or {}) do
+        local key = row.character .. "\0" .. (row.profession or "")
+        if not seenKey[key] and (chamber.profession == nil or row.profession == chamber.profession) then
+            seenKey[key] = true
+            table.insert(members, { character = row.character, profession = row.profession, skill = row.skill, online = false })
+        end
+    end
     table.sort(members, function(a, b)
         local aOnline, bOnline = a.online and true or false, b.online and true or false
         if aOnline ~= bOnline then return aOnline end
