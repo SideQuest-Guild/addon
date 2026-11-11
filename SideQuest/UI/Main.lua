@@ -2425,6 +2425,22 @@ function UI.RefreshCraftersProfessions()
     end
 
     local members = SideQuest.Directory.ByProfession(chamber.profession) or {}
+    -- Offline/imported crafters (contract SQI1 on-demand "crafters",
+    -- additive): a character+profession the live directory already has
+    -- wins (fresher skill, recipe counts, online state); the import only
+    -- fills in characters/professions the directory hasn't seen at all.
+    -- Cooldowns stay live-only -- the import carries none.
+    local seenKey = {}
+    for _, m in ipairs(members) do
+        seenKey[m.character .. "\0" .. (m.profession or "")] = true
+    end
+    for _, row in ipairs((SideQuestDB.onDemand and SideQuestDB.onDemand.crafters) or {}) do
+        local key = row.character .. "\0" .. (row.profession or "")
+        if not seenKey[key] and (chamber.profession == nil or row.profession == chamber.profession) then
+            seenKey[key] = true
+            table.insert(members, { character = row.character, profession = row.profession, skill = row.skill, online = false })
+        end
+    end
     table.sort(members, function(a, b)
         local aOnline, bOnline = a.online and true or false, b.online and true or false
         if aOnline ~= bOnline then return aOnline end

@@ -47,7 +47,7 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 |---|---|
 | You | Your PR and where it ranks, your last four weeks of points, your next event with Going, Maybe and Can't buttons, and who's online. |
 | Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. Whisper opens a small SideQuest box: replies come back in chat as usual. Online guildmates show in green, offline in grey. |
-| Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill; and who has Transmute, Mooncloth and other craft cooldowns ready. |
+| Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill, including guildies who are offline or don't run the addon, from the site's last sync; and who has Transmute, Mooncloth and other craft cooldowns ready (addon-tracked members only). |
 | Market | What guildmates sell and want to buy, open requests for materials, and who holds an item, with the guild's lowest auction-house price next to each listing when one's known. Mine lists and edits your own. |
 | Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
