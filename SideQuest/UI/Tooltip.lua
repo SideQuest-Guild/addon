@@ -103,6 +103,24 @@ local function onItemTooltip(tooltip, data)
                     table.insert(crafters, hit)
                 end
             end
+            -- Offline/imported crafters (contract SQI1 on-demand "crafters" +
+            -- "recipe_names", additive): a guildie who is offline or doesn't
+            -- run the addon still shows up here. The import carries recipe
+            -- ids, not item ids, so this matches by recipe name exactly the
+            -- same way the live WhoCrafts hits above were filtered.
+            local onDemand = SideQuestDB.onDemand
+            for _, row in ipairs((onDemand and onDemand.crafters) or {}) do
+                if not seen[row.character] then
+                    for _, recipeId in ipairs(row.recipes or {}) do
+                        local name = onDemand.recipe_names[tostring(recipeId)]
+                        if name == itemName then
+                            seen[row.character] = true
+                            table.insert(crafters, { character = row.character })
+                            break
+                        end
+                    end
+                end
+            end
             if #crafters > 0 then
                 table.insert(lines, "Crafted by " .. joinCapped(crafters, function(c) return shortName(c.character) end))
             end
