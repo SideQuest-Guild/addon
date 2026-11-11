@@ -143,6 +143,10 @@ files["tests/test_guild_item_level_import.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }
 
+files["tests/test_guild_battlenet_fallback.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
 files["tests/test_minimap.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }

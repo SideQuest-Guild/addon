@@ -54,9 +54,10 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 | News | Guild announcements and recent activity. |
 
 Click someone on the Guild tab to see their level, spec, item level, professions, Onyxia attunement, tracked
-reputations and cooldowns; item level comes from the site's last sync when they haven't logged in with the addon
-running. Hover any item to see which guildmates craft, sell, buy or hold it, how many have it on their wishlist, and
-the guild's lowest auction-house price if a sync has priced it.
+reputations and cooldowns; whichever of item level, spec, professions and reputations the addon hasn't scanned live
+comes from the site's last sync instead, marked "(from Battle.net)" since it can be a few hours stale. Hover any item
+to see which guildmates craft, sell, buy or hold it, how many have it on their wishlist, and the guild's lowest
+auction-house price if a sync has priced it.
 
 Your event sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
 
@@ -69,8 +70,9 @@ SideQuest keeps a record of your character and shares it with the guild automati
 your level, class, spec and item level, your craft cooldowns, your Onyxia attunement and the few reputations the guild
 tracks, what you sell and want to buy, and the crafting materials in your bags and bank (never gold or gear). That's
 how the Crafters and Market tabs work for guildmates who are offline but have run the addon recently; a site sync
-fills in the rest -- crafters, item level and wishlist counts -- for guildies who are offline or have never installed
-it, and officers' syncs carry it to the website, where only signed-in guild members see it.
+fills in the rest -- crafters, item level, spec, professions, tracked reputations and wishlist counts -- for guildies
+who are offline or have never installed it, and officers' syncs carry it to the website, where only signed-in guild
+members see it.
 
 Turn any part off on the You tab, or with `/sq share <prof|char|cd|market|stock> on|off`. `/sq dir` shows what you
 share and how many guildmates the addon has heard from. Open each profession window once so the guild knows your
