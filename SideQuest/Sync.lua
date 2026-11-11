@@ -53,7 +53,7 @@ function Sync.ApplyImport(payload)
     if payload.prices ~= nil then
         local prices = {}
         for _, entry in ipairs(payload.prices) do
-            prices[entry.item_id] = { p = entry.unit_price, q = entry.quantity, at = entry.at }
+            prices[entry.item_id] = { p = entry.unit_price, q = entry.quantity, at = entry.at, w = entry.wanted or 0 }
         end
         SideQuestDB.prices = prices
     end

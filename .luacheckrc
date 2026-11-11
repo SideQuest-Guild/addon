@@ -131,6 +131,10 @@ files["tests/test_tooltip_offline_crafters.lua"] = {
     globals = { "WowStub", "SideQuestDB", "TooltipDataProcessor", "Enum", "UIParent" },
 }
 
+files["tests/test_tooltip_wanted.lua"] = {
+    globals = { "WowStub", "SideQuestDB", "TooltipDataProcessor", "Enum", "UIParent" },
+}
+
 files["tests/test_minimap.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }

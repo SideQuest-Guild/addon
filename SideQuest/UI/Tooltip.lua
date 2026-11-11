@@ -88,6 +88,12 @@ local function onItemTooltip(tooltip, data)
     if priceEntry then
         table.insert(lines, "Auction house: " .. moneyText(priceEntry.p)
             .. " (" .. (priceEntry.q or 0) .. " listed, " .. ago(priceEntry.at) .. ")")
+        -- Game import "prices" `wanted` (contract SQI1, additive): distinct
+        -- guild members with this item on their wishlist; absent/0 on an
+        -- old import or an unwished item, so this line just doesn't appear.
+        if (priceEntry.w or 0) > 0 then
+            table.insert(lines, "Wanted by " .. priceEntry.w .. (priceEntry.w == 1 and " guildie" or " guildies"))
+        end
     end
 
     -- Crafters: WhoCrafts matches by recipe name substring, so this only
