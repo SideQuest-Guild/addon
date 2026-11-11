@@ -1637,6 +1637,22 @@ local function buildGuildDetail(content)
     return block
 end
 
+--- A character's equipped item level from the last site import ("Game
+-- import" contract GameImportCharacter.item_level, additive): nil when
+-- the import has no entry for them, or when an import predating the
+-- field is all the addon has. Only consulted when the live directory
+-- hasn't scanned this character's gear yet.
+local function importItemLevel(character)
+    for _, member in ipairs((SideQuestDB.guild and SideQuestDB.guild.members) or {}) do
+        for _, char in ipairs(member.characters or {}) do
+            if char.name == character then
+                return char.item_level
+            end
+        end
+    end
+    return nil
+end
+
 --- Fills `block` with `character`'s directory record and returns the
 -- height it used, so the caller can offset rows below it.
 function UI.PaintGuildDetail(block, character)
@@ -1650,7 +1666,8 @@ function UI.PaintGuildDetail(block, character)
     local metaParts = {}
     if charData and charData.level then table.insert(metaParts, "Level " .. charData.level) end
     if charData and charData.spec then table.insert(metaParts, charData.spec) end
-    if charData and charData.item_level then table.insert(metaParts, "ilvl " .. string.format("%.1f", charData.item_level)) end
+    local ilvl = (charData and charData.item_level) or importItemLevel(character)
+    if ilvl then table.insert(metaParts, "ilvl " .. string.format("%.1f", ilvl)) end
     block.metaText:SetText(table.concat(metaParts, "  --  "))
     local freshness = recordFreshness(entry)
     setStateText(block.freshnessText, freshness and ("Record " .. ago(freshness)) or "No directory record yet", not freshness)

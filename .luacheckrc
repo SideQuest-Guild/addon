@@ -139,6 +139,10 @@ files["tests/test_crafters_professions_offline.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }
 
+files["tests/test_guild_item_level_import.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
 files["tests/test_minimap.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }
