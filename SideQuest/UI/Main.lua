@@ -1637,20 +1637,58 @@ local function buildGuildDetail(content)
     return block
 end
 
---- A character's equipped item level from the last site import ("Game
--- import" contract GameImportCharacter.item_level, additive): nil when
--- the import has no entry for them, or when an import predating the
--- field is all the addon has. Only consulted when the live directory
--- hasn't scanned this character's gear yet.
-local function importItemLevel(character)
+--- A character's entry from the last site import ("Game import" contract
+-- GameImportCharacter, additive fields all nil/empty when the import
+-- predates them or has no record for the character). Only consulted
+-- when the live directory hasn't supplied that section's data yet; a
+-- live scan always wins.
+local function importedCharacter(character)
     for _, member in ipairs((SideQuestDB.guild and SideQuestDB.guild.members) or {}) do
         for _, char in ipairs(member.characters or {}) do
             if char.name == character then
-                return char.item_level
+                return char
             end
         end
     end
     return nil
+end
+
+--- Imported reputations (GameImportReputation), filtered to
+-- SideQuest.Data.REPUTATIONS and ordered by that list, or nil when the
+-- import has nothing on the tracked list.
+local function importedTrackedReputations(imported)
+    local tracked = SideQuest.Data and SideQuest.Data.REPUTATIONS
+    if not (tracked and imported and imported.reputations and #imported.reputations > 0) then
+        return nil
+    end
+    local byFaction = {}
+    for _, rep in ipairs(imported.reputations) do
+        byFaction[rep.faction_id] = rep
+    end
+    local out = {}
+    for _, def in ipairs(tracked) do
+        local rep = byFaction[def.faction_id]
+        if rep then table.insert(out, rep) end
+    end
+    if #out == 0 then return nil end
+    return out
+end
+
+--- A live reputation row: "Label: Standing (value)".
+local function liveReputationLine(rep)
+    local label = reputationLabel(rep.faction_id)
+    return label .. ": " .. (STANDING_WORD[rep.standing] or "--") .. (rep.value and (" (" .. rep.value .. ")") or "")
+end
+
+--- An imported reputation row: "Label: Standing (value/max)", or just the
+-- standing word at Exalted or when the import has no max.
+local function importedReputationLine(rep)
+    local label = reputationLabel(rep.faction_id)
+    local word = STANDING_WORD[rep.standing] or "--"
+    if rep.standing == 8 or not rep.max or rep.max == 0 then
+        return label .. ": " .. word
+    end
+    return label .. ": " .. word .. " (" .. (rep.value or 0) .. "/" .. rep.max .. ")"
 end
 
 --- Fills `block` with `character`'s directory record and returns the
@@ -1661,12 +1699,17 @@ function UI.PaintGuildDetail(block, character)
     local charData = entry and entry.char and entry.char.d
     local profData = entry and entry.prof and entry.prof.d
     local cdData = entry and entry.cd and entry.cd.d
+    local imported = importedCharacter(character)
 
     setNameRow(block.nameRow, character, charData and charData.class)
     local metaParts = {}
     if charData and charData.level then table.insert(metaParts, "Level " .. charData.level) end
-    if charData and charData.spec then table.insert(metaParts, charData.spec) end
-    local ilvl = (charData and charData.item_level) or importItemLevel(character)
+    local spec, specFromImport = charData and charData.spec, false
+    if not spec and imported and imported.spec then
+        spec, specFromImport = imported.spec, true
+    end
+    if spec then table.insert(metaParts, spec .. (specFromImport and " (from Battle.net)" or "")) end
+    local ilvl = (charData and charData.item_level) or (imported and imported.item_level)
     if ilvl then table.insert(metaParts, "ilvl " .. string.format("%.1f", ilvl)) end
     block.metaText:SetText(table.concat(metaParts, "  --  "))
     local freshness = recordFreshness(entry)
@@ -1705,7 +1748,12 @@ function UI.PaintGuildDetail(block, character)
         y = y + 6
     end
 
-    listOrEmpty(block.profHeading, profData and profData.professions, block.profRows, "profEmptyText",
+    local profList, profFromImport = profData and profData.professions, false
+    if not (profList and #profList > 0) and imported and imported.professions and #imported.professions > 0 then
+        profList, profFromImport = imported.professions, true
+    end
+    block.profHeading.label:SetText(trackedCaps(profFromImport and "Professions (from Battle.net)" or "Professions"))
+    listOrEmpty(block.profHeading, profList, block.profRows, "profEmptyText",
         "No professions on record.", function(p)
             return p.name .. ": " .. (p.skill or 0) .. " / " .. (p.max_skill or "--")
         end)
@@ -1726,11 +1774,16 @@ function UI.PaintGuildDetail(block, character)
     end
     y = y + GUILD_DETAIL_LINE + 6
 
-    listOrEmpty(block.repHeading, charData and charData.reputations, block.repRows, "repEmptyText",
-        "No tracked reputations on record.", function(rep)
-            local label = reputationLabel(rep.faction_id)
-            return label .. ": " .. (STANDING_WORD[rep.standing] or "--") .. (rep.value and (" (" .. rep.value .. ")") or "")
-        end)
+    local repList, repFromImport = charData and charData.reputations, false
+    if not (repList and #repList > 0) then
+        local trackedImported = importedTrackedReputations(imported)
+        if trackedImported then
+            repList, repFromImport = trackedImported, true
+        end
+    end
+    block.repHeading.label:SetText(trackedCaps(repFromImport and "Reputations (from Battle.net)" or "Reputations"))
+    listOrEmpty(block.repHeading, repList, block.repRows, "repEmptyText",
+        "No tracked reputations on record.", repFromImport and importedReputationLine or liveReputationLine)
 
     listOrEmpty(block.cdHeading, cdData and cdData.cooldowns, block.cdRows, "cdEmptyText",
         "No tracked cooldowns on record.", function(cd)
