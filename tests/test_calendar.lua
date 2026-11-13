@@ -340,4 +340,33 @@ return function(h)
         h.assertEq(byTitle["Spring Recruitment"].hour, 19, "start announcement untouched")
         h.assertEq(byTitle["Ends: Spring Recruitment"].hour, 20, "end announcement moved")
     end)
+
+    h.test("calendar: a refused add says so once, names it, and doesn't claim it was added", function()
+        reset()
+        SideQuestDB.events = { { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+            starts_at = WowStub.time - DAY, ends_at = utcAt(4, 19) } }
+        -- as the game did: three refusals raised while AddEvent runs
+        WowStub.calendar.refuseWith = {
+            "CALENDAR_ERROR_INVALID_DATE", "CALENDAR_ERROR_INVALID_TIME", "CALENDAR_ERROR_NEEDS_TITLE",
+        }
+        local before = #WowStub.chatLog
+        Calendar.Step()
+        h.assertEq(#WowStub.chatLog - before, 1, "one line for the whole refusal")
+        local line = lastLine()
+        h.assertTrue(line:find("refused Ends: Spring Recruitment", 1, true) ~= nil, "names what was refused: " .. line)
+        h.assertTrue(line:find("Added", 1, true) == nil, "doesn't claim success")
+        h.assertEq(next(SideQuestDB.calendarLinks), nil, "nothing linked")
+        h.assertEq(SideQuestDB.debug.log[1].kind, "calendar", "what was sent is in the debug log")
+        h.assertEq(#Calendar.Plan(), 1, "still to do on the next click")
+    end)
+
+    h.test("calendar: an add is reported once the game confirms it", function()
+        reset()
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        Calendar.Step()
+        h.assertTrue(lastLine():find("Added", 1, true) == nil, "not claimed before the game answers")
+        SideQuest.Fire("CALENDAR_NEW_EVENT", false)
+        h.assertTrue(lastLine():find("Added Molten Core", 1, true) ~= nil, "added once confirmed")
+        h.assertTrue(SideQuestDB.calendarLinks["evt-1"] ~= nil, "linked once confirmed")
+    end)
 end

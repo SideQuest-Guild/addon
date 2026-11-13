@@ -320,8 +320,36 @@ local function remove(action)
     SideQuest.Print("Removed " .. describePlace(action.place) .. " from the guild calendar.")
 end
 
+-- The add waiting on the game's answer: { linkKey, place, sent, errors }. "Added" is only said, and the link only
+-- kept, once the game confirms; refusals (CALENDAR_UPDATE_ERROR, which can fire during AddEvent itself) are
+-- gathered into one line naming what was refused.
+Calendar.pendingAdd = nil
+
+local function finishAdd(ok)
+    local p = Calendar.pendingAdd
+    if not p then
+        return
+    end
+    Calendar.pendingAdd = nil
+    if ok then
+        links()[p.linkKey] = p.place
+        SideQuest.Print("Added " .. describePlace(p.place) .. " to the guild calendar.")
+    else
+        C_Calendar.CloseEvent()
+        Calendar.busyUntil = 0
+        SideQuest.Print("The calendar refused " .. describePlace(p.place) .. ": " .. table.concat(p.errors, " "))
+        -- what was sent, so the Debug tab shows whether the game dropped it or disliked it
+        SideQuest.LogDebug({ kind = "calendar", event = "AddEvent", message = table.concat(p.errors, " ")
+            .. " | sent " .. p.sent })
+    end
+    SideQuest.Fire("SQ_CALENDAR_CHANGED")
+end
+
 local function add(action)
     local evt, place = action.event, action.place
+    -- as Blizzard's calendar does before creating one: drop any event still open, so these settings land on the
+    -- new announcement
+    C_Calendar.CloseEvent()
     C_Calendar.CreateGuildAnnouncementEvent()
     C_Calendar.EventSetTitle(place.title)
     C_Calendar.EventSetDescription(description(evt))
@@ -333,10 +361,19 @@ local function add(action)
         SideQuest.Print("Your guild rank can't add guild calendar events. A rank with calendar rights has to do this.")
         return
     end
+    Calendar.pendingAdd = {
+        linkKey = action.linkKey, place = place, errors = {},
+        sent = string.format("%q %04d-%02d-%02d %02d:%02d", place.title, place.year, place.month, place.day,
+            place.hour, place.minute),
+    }
+    Calendar.addingNow = true -- refusals raised inside AddEvent itself are handled right below
     C_Calendar.AddEvent()
-    links()[action.linkKey] = place
+    Calendar.addingNow = false
+    if Calendar.pendingAdd and #Calendar.pendingAdd.errors > 0 then
+        finishAdd(false) -- refused on the spot
+        return
+    end
     markBusy()
-    SideQuest.Print("Added " .. describePlace(place) .. " to the guild calendar.")
 end
 
 --- Make the next change the plan calls for. Must run inside a click or key press: the game refuses
@@ -424,18 +461,42 @@ SideQuest.RegisterSlash("calendar", function()
     Calendar.Step()
 end, "calendar - put the next site event on the guild calendar (officers; run it again for each change)")
 
+-- The game's "your new event was created" answer.
+SideQuest.On("CALENDAR_NEW_EVENT", function()
+    finishAdd(true)
+end)
+SideQuest.RegisterGameEvent("CALENDAR_NEW_EVENT")
+
 SideQuest.On("CALENDAR_UPDATE_EVENT_LIST", function()
     Calendar.loaded = true
     Calendar.busyUntil = 0
+    -- the list came back after an add with no refusal: it went on
+    if Calendar.pendingAdd and #Calendar.pendingAdd.errors == 0 then
+        finishAdd(true)
+        return
+    end
     SideQuest.Fire("SQ_CALENDAR_CHANGED")
 end)
 SideQuest.RegisterGameEvent("CALENDAR_UPDATE_EVENT_LIST")
 
 SideQuest.On("CALENDAR_UPDATE_ERROR", function(reason)
     Calendar.busyUntil = 0
-    local text = reason and _G[reason] or reason
-    SideQuest.Print("The calendar refused the change: " .. tostring(text))
-    SideQuest.Fire("SQ_CALENDAR_CHANGED")
+    local text = tostring(reason and _G[reason] or reason)
+    local p = Calendar.pendingAdd
+    if not p then
+        SideQuest.Print("The calendar refused the change: " .. text)
+        SideQuest.Fire("SQ_CALENDAR_CHANGED")
+        return
+    end
+    -- one refusal often comes as several errors in a row: gather them into one line
+    table.insert(p.errors, text)
+    if #p.errors == 1 and not Calendar.addingNow and C_Timer and C_Timer.After then
+        C_Timer.After(0.5, function()
+            if Calendar.pendingAdd == p then
+                finishAdd(false)
+            end
+        end)
+    end
 end)
 SideQuest.RegisterGameEvent("CALENDAR_UPDATE_ERROR")
 

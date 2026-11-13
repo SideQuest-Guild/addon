@@ -787,6 +787,7 @@ function WowStub.ResetCalendar()
         selected = nil,
         addCalls = 0,
         openCalendarCalls = 0,
+        refuseWith = nil, -- list of CALENDAR_ERROR_* names AddEvent raises (as CALENDAR_UPDATE_ERROR) instead of adding
     }
 end
 WowStub.ResetCalendar()
@@ -874,6 +875,12 @@ C_Calendar = {
     end,
     AddEvent = function()
         WowStub.calendar.addCalls = WowStub.calendar.addCalls + 1
+        if WowStub.calendar.refuseWith then
+            for _, reason in ipairs(WowStub.calendar.refuseWith) do
+                SideQuest.Fire("CALENDAR_UPDATE_ERROR", reason)
+            end
+            return
+        end
         table.insert(WowStub.calendar.events, WowStub.calendar.candidate)
         WowStub.calendar.candidate = nil
     end,
