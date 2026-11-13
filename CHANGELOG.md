@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.4 (2026-11-13)
+
+### Fixed
+
+- Update calendar edits a moved or wrong-type event in place over two clicks, since WoW: Forever doesn't let an addon delete a guild event, and names a cancelled one for you to delete by hand
+
+
 ## v0.17.3 (2026-11-13)
 
 ### Fixed
