@@ -73,4 +73,23 @@ return function(h)
         h.assertTrue(row.inviteBtn:IsShown(), "invite button shown for a raid event")
         h.assertTrue(row.placeBtn:IsShown(), "place-groups button shown for a raid event")
     end)
+
+    h.test("events tab: a recruitment drive shows its dates and the rules line, no sign-up controls", function()
+        local chamber = open()
+        SideQuestDB.standings.generated_at = 1793500000
+        SideQuestDB.events = {
+            { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+                starts_at = WowStub.time + 3600, ends_at = WowStub.time + 15 * 86400, signups = {} },
+        }
+        SideQuest.UI.RefreshRaids()
+        local row = chamber.rows[1]
+        h.assertTrue(row.meta:GetText():find("Recruitment Drive", 1, true) ~= nil, "shows the drive label")
+        h.assertTrue(row.roleCounts:GetText():find("stays 7 days", 1, true) ~= nil,
+            "shows the rules line: " .. row.roleCounts:GetText())
+        for _, btn in pairs(row.answers) do
+            h.assertTrue(not btn:IsShown(), "no going/maybe/can't button for a drive")
+        end
+        h.assertTrue(not row.inviteBtn:IsShown(), "no invite button for a drive")
+        h.assertTrue(not row.placeBtn:IsShown(), "no place-groups button for a drive")
+    end)
 end

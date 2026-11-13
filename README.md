@@ -49,7 +49,7 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 | Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. Whisper opens a small SideQuest box: replies come back in chat as usual. Online guildmates show in green, offline in grey. |
 | Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill, including guildies who are offline or don't run the addon, from the site's last sync; and who has Transmute, Mooncloth and other craft cooldowns ready (addon-tracked members only). |
 | Market | What guildmates sell and want to buy, open requests for materials, and who holds an item, with the guild's lowest auction-house price next to each listing when one's known. Mine lists and edits your own. |
-| Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. |
+| Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. A recruitment drive shows its dates and how recruiting pays instead of a sign-up. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
 | News | Guild announcements and recent activity. |
 
@@ -60,6 +60,10 @@ to see which guildmates craft, sell, buy or hold it, how many have it on their w
 auction-house price if a sync has priced it.
 
 Your event sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
+
+During a recruitment drive, invite new players to the guild as usual. You earn 1g for each recruit who stays 7
+days and reaches level 10; who invited whom comes straight from the guild's own event log, so you don't need the
+addon to get paid. Payouts go out a week after the drive ends, see the site for your drive's progress.
 
 If you can come to a raid but the group is full, type `/sq standby`. An officer approves it and you earn EP as if you
 were there.
@@ -145,6 +149,7 @@ The other Console tabs:
 | Loot | Bidding and awards, as above. If you aren't master looter, `/sq bid <item link>` opens bidding on any item. |
 | Roster | Reads the guild roster for the website and lists inactive members. |
 | Recruits | An Add recruit form that fills in your target, plus applicants and trials with yes/no votes from officers. |
+| Payouts | Recruitment drive gold owed to inviters, settled a week after each drive ends. Stand at a mailbox and click Mail to send it; nothing sends until then, and a row disappears once it's paid. |
 | Bank | Saves the open guild bank tab's log for the website. |
 | Announce | Posts a message to guild chat and every member's News tab, and to Discord if you tick the box. |
 | Sync | Shows what hasn't been sent to the website yet, with Export and Import buttons. **Update calendar** puts the site's upcoming events on the in-game guild calendar. |
@@ -155,9 +160,9 @@ The other Console tabs:
 After an import, the Sync tab says how many of the site's upcoming events aren't on the in-game calendar yet. Click
 **Update calendar** (or type `/sq calendar`) once for each: the game only lets an addon add a calendar event when you
 click, so it's one event per click. Each goes on as a guild announcement at the realm's time, with a link to its
-sign-up page; sign-ups still happen on the site and in the addon, not in the calendar. When the site moves or cancels
-an event, the next clicks take the old one off and put the new one on. Your guild rank needs the right to add guild
-events.
+sign-up page; sign-ups still happen on the site and in the addon, not in the calendar. A recruitment drive gets two
+announcements: its title when it starts, and "Ends: <title>" when it ends. When the site moves or cancels an event,
+the next clicks take the old one off and put the new one on. Your guild rank needs the right to add guild events.
 
 ### Commands
 
@@ -238,8 +243,9 @@ luacheck SideQuest tests             # lint
 uv run --directory uploader pytest   # uploader tests
 ```
 
-The tests also write `tests/fixtures/export_v1.txt`, `export_v2.txt` and `export_v2_directory.txt`, sample raid and
-directory records that the website's tests import. Copy them to the website repo when they change.
+The tests also write `tests/fixtures/export_v1.txt`, `export_v2.txt`, `export_v2_directory.txt` and
+`export_v2_guild_log.txt`, sample raid, directory and recruitment records that the website's tests import. Copy
+them to the website repo when they change.
 
 The minimap button is drawn by LibDBIcon-1.0 (Ace3-style BSD licence), which needs LibStub (public domain),
 CallbackHandler-1.0 (BSD) and LibDataBroker-1.1 (public domain). They're copied unchanged into `SideQuest/Libs/` from

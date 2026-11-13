@@ -132,11 +132,17 @@ local NEWS_KIND_WORD = {
 -- to each event's date/time on the Events tab.
 local EVENT_KIND_LABELS = {
     raid = "Raid", dungeon = "Dungeon", world_boss = "World Boss", leveling = "Leveling",
-    pvp = "PvP", social = "Social", transmog = "Transmog", other = "Other",
+    pvp = "PvP", social = "Social", transmog = "Transmog", other = "Other", recruitment = "Recruitment Drive",
 }
 -- Site ROLE_KINDS (events.py): only these events carry tank/healer/dps sign-ups and can be
 -- raid-invited or placed into groups; the rest take a bare going/maybe/can't RSVP.
 local ROLE_KINDS = { raid = true, dungeon = true, world_boss = true }
+-- Site NO_SIGNUP_KINDS (events.py): recruitment drives take no sign-up at all (the site rejects one); the Events
+-- tab shows the drive's dates and the recruiting rules line instead of answer buttons.
+local NO_SIGNUP_KINDS = { recruitment = true }
+-- Copy.md "Rules line", shown in place of sign-up controls for a drive.
+local RECRUITMENT_RULES_LINE = "Invite new players to the guild. You earn 1g for each recruit who stays 7 days "
+    .. "and reaches level 10. Payouts go out a week after the drive ends."
 
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
@@ -164,7 +170,7 @@ local TAB_LABELS = { Raids = "Events" }
 local OFFICER_TAB = "Console"
 -- "Debug" is appended to every sub-tab list/button but shown only for the
 -- Guild Master (UI.RefreshOfficerVisibility); see UI.BuildConsoleDebug.
-local CONSOLE_SUBTABS = { "Raid Night", "Loot", "Roster", "Recruits", "Bank", "Announce", "Sync", "Debug" }
+local CONSOLE_SUBTABS = { "Raid Night", "Loot", "Roster", "Recruits", "Payouts", "Bank", "Announce", "Sync", "Debug" }
 local CRAFTERS_SUBTABS = { "Search", "Professions", "Cooldowns" }
 local MARKET_SUBTABS = { "Browse", "Mine" }
 
@@ -3203,6 +3209,8 @@ function UI.RefreshRaids()
             row.mark:SetPoint("TOPLEFT", 2, -10)
             row.roleCounts = makeFontString(row, FONT_BODY, 11, C.mist, "LEFT")
             row.roleCounts:SetPoint("TOPLEFT", row.meta, "BOTTOMLEFT", 0, -4)
+            row.roleCounts:SetWidth(500)
+            row.roleCounts:SetWordWrap(true)
             row.answers = {}
             for j, a in ipairs({ { "going", "Going" }, { "maybe", "Maybe" }, { "cant", "Can't" } }) do
                 local btn = createButton(row, "quiet", a[2], 60, 20)
@@ -3218,9 +3226,11 @@ function UI.RefreshRaids()
             chamber.rows[i] = row
         end
         local isRoleKind = ROLE_KINDS[evt.kind] == true
+        local isNoSignup = NO_SIGNUP_KINDS[evt.kind] == true
         local showsOfficerActions = isOfficer and isRoleKind
-        -- title..answer buttons end at 73, the officer reason line at 111
-        local rowHeight = showsOfficerActions and 112 or 76
+        -- title..answer buttons end at 73, the officer reason line at 111; a no-signup drive just needs room
+        -- for the wrapped rules line under its dates.
+        local rowHeight = showsOfficerActions and 112 or (isNoSignup and 96 or 76)
         row:SetHeight(rowHeight)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
@@ -3228,37 +3238,48 @@ function UI.RefreshRaids()
         local isOpen = (evt.starts_at or 0) > now()
         row.mark:SetAtlas(isOpen and "QuestNormal" or "QuestTurnin")
         row.title:SetText(evt.title or "Event")
-        row.meta:SetText((EVENT_KIND_LABELS[evt.kind] or "Event") .. "  --  " .. date("%A %b %d, %H:%M", evt.starts_at or now()))
-
-        if isRoleKind then
-            local roleCounts = { tank = 0, healer = 0, dps = 0 }
-            for _, s in ipairs(evt.signups or {}) do
-                if s.status == "signed" and roleCounts[s.role] ~= nil then
-                    roleCounts[s.role] = roleCounts[s.role] + 1
-                end
+        if isNoSignup then
+            local dates = date("%A %b %d, %H:%M", evt.starts_at or now())
+            if evt.ends_at then
+                dates = dates .. " to " .. date("%A %b %d, %H:%M", evt.ends_at)
             end
-            row.roleCounts:SetText(string.format("Signed: Tank %d  --  Healer %d  --  DPS %d  (%d total)",
-                roleCounts.tank, roleCounts.healer, roleCounts.dps, #(evt.signups or {})))
+            row.meta:SetText((EVENT_KIND_LABELS[evt.kind] or "Event") .. "  --  " .. dates)
+            row.roleCounts:SetText(RECRUITMENT_RULES_LINE)
         else
-            local answerCounts = { signed = 0, tentative = 0, absent = 0 }
-            for _, s in ipairs(evt.signups or {}) do
-                if answerCounts[s.status] ~= nil then
-                    answerCounts[s.status] = answerCounts[s.status] + 1
+            row.meta:SetText((EVENT_KIND_LABELS[evt.kind] or "Event") .. "  --  " .. date("%A %b %d, %H:%M", evt.starts_at or now()))
+            if isRoleKind then
+                local roleCounts = { tank = 0, healer = 0, dps = 0 }
+                for _, s in ipairs(evt.signups or {}) do
+                    if s.status == "signed" and roleCounts[s.role] ~= nil then
+                        roleCounts[s.role] = roleCounts[s.role] + 1
+                    end
                 end
+                row.roleCounts:SetText(string.format("Signed: Tank %d  --  Healer %d  --  DPS %d  (%d total)",
+                    roleCounts.tank, roleCounts.healer, roleCounts.dps, #(evt.signups or {})))
+            else
+                local answerCounts = { signed = 0, tentative = 0, absent = 0 }
+                for _, s in ipairs(evt.signups or {}) do
+                    if answerCounts[s.status] ~= nil then
+                        answerCounts[s.status] = answerCounts[s.status] + 1
+                    end
+                end
+                row.roleCounts:SetText(string.format("Going %d  --  Maybe %d  --  Can't %d",
+                    answerCounts.signed, answerCounts.tentative, answerCounts.absent))
             end
-            row.roleCounts:SetText(string.format("Going %d  --  Maybe %d  --  Can't %d",
-                answerCounts.signed, answerCounts.tentative, answerCounts.absent))
         end
 
         local _, status = SideQuest.Signups.MyState(evt.id)
         local statusToAnswer = { signed = "going", tentative = "maybe", absent = "cant" }
         local currentAnswer = statusToAnswer[status]
         for answer, btn in pairs(row.answers) do
-            btn:SetScript("OnClick", function()
-                SideQuest.Signups.Answer(evt.id, answer)
-                UI.RefreshRaids()
-            end)
-            btn:SetSelected(answer == currentAnswer)
+            btn:SetShown(not isNoSignup)
+            if not isNoSignup then
+                btn:SetScript("OnClick", function()
+                    SideQuest.Signups.Answer(evt.id, answer)
+                    UI.RefreshRaids()
+                end)
+                btn:SetSelected(answer == currentAnswer)
+            end
         end
 
         row.inviteBtn:SetShown(showsOfficerActions)
@@ -3657,6 +3678,7 @@ function UI.BuildConsolePanel(body)
     UI.BuildConsoleLoot(panel)
     UI.BuildConsoleRoster(panel)
     UI.BuildConsoleRecruits(panel)
+    UI.BuildConsolePayouts(panel)
     UI.BuildConsoleBank(panel)
     UI.BuildConsoleAnnounce(panel)
     UI.BuildConsoleSync(panel)
@@ -3685,6 +3707,8 @@ function UI.ShowConsoleSub(name)
         UI.RefreshConsoleRoster()
     elseif name == "Recruits" then
         UI.RefreshConsoleRecruits()
+    elseif name == "Payouts" then
+        UI.RefreshConsolePayouts()
     elseif name == "Bank" then
         UI.RefreshConsoleBank()
     elseif name == "Sync" then
@@ -4738,6 +4762,91 @@ function UI.RefreshConsoleRecruits()
     setScrollContentHeight(chamber.scroll, 58 * #recruits)
 end
 
+-- Payouts sub-view: recruitment drive gold owed per inviter (contract GameImportRecruitPayout), each mailed in
+-- one click while standing at an open mailbox. A row disappears once mailed (Payouts.List() already excludes
+-- anything this client has paid).
+function UI.BuildConsolePayouts(panel)
+    local sub = makeConsoleSub(panel, "Payouts")
+    local chamber = createChamber(sub, "SideQuestConsolePayoutsChamber")
+    chamber:SetAllPoints(sub)
+
+    local introLine = makeFontString(chamber.inner, FONT_BODY, 11, C.mist, "LEFT")
+    introLine:SetPoint("TOPLEFT", 14, -10)
+    introLine:SetWidth(540)
+    introLine:SetWordWrap(true)
+    introLine:SetText("Recruitment drive gold owed to inviters, settled a week after each drive ends. Stand at a "
+        .. "mailbox, then click Mail to send it; nothing sends until then.")
+    chamber.introLine = introLine
+
+    local scroll, content = buildScroll(chamber.inner, -46)
+    chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
+    panel.payoutsChamber = chamber
+end
+
+function UI.RefreshConsolePayouts()
+    local panel = UI.panels[OFFICER_TAB]
+    if not panel or not panel.payoutsChamber then
+        return
+    end
+    local chamber = panel.payoutsChamber
+    local rows = SideQuest.Payouts.List()
+    for _, r in ipairs(chamber.rows) do
+        r:Hide()
+    end
+    if #rows == 0 then
+        if not chamber.emptyText then
+            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+            chamber.emptyText:SetPoint("TOPLEFT")
+        end
+        setStateText(chamber.emptyText, "No recruitment payouts owed right now.", true)
+        setScrollContentHeight(chamber.scroll, 0)
+        return
+    elseif chamber.emptyText then
+        chamber.emptyText:SetText("")
+    end
+    local isOfficer = SideQuest.DisplayIsOfficer()
+    for i, row in ipairs(rows) do
+        local r = chamber.rows[i]
+        if not r then
+            r = CreateFrame("Frame", nil, chamber.content)
+            r:SetSize(560, 40)
+            r.titleText = makeFontString(r, FONT_BODY, 13, C.ink, "LEFT")
+            r.titleText:SetPoint("TOPLEFT")
+            r.metaText = makeFontString(r, FONT_BODY, 11, C.mist2, "LEFT")
+            r.metaText:SetPoint("TOPLEFT", r.titleText, "BOTTOMLEFT", 0, -2)
+            r.metaText:SetWidth(540)
+            r.metaText:SetWordWrap(true)
+            r.mailBtn = createButton(r, "primary", "Mail", 100, 20)
+            r.mailBtn:SetPoint("LEFT", r.titleText, "RIGHT", 16, -2)
+            chamber.rows[i] = r
+        end
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", 0, -46 * (i - 1))
+        r.titleText:SetText(tostring(row.title or "Recruitment drive") .. "  --  " .. displayName(row.inviter))
+        r.metaText:SetText((row.recruits and #row.recruits or 0) .. " recruit(s): "
+            .. table.concat(row.recruits or {}, ", "))
+        r.mailBtn:SetText("Mail " .. money(row.copper))
+        local enabled, reason = true, nil
+        if not isOfficer then
+            enabled, reason = false, "Only officers can send recruitment payouts."
+        elseif not SideQuest.Payouts.mailboxOpen then
+            enabled, reason = false, "Open a mailbox first."
+        elseif SideQuest.Payouts.pendingSend then
+            enabled, reason = false, "A payout mail is already sending."
+        end
+        r.mailBtn:SetEnabled(enabled, reason)
+        r.mailBtn:SetScript("OnClick", function()
+            local ok, err = SideQuest.Payouts.Send(row)
+            if not ok then
+                SideQuest.Print(err)
+            end
+            UI.RefreshConsolePayouts()
+        end)
+        r:Show()
+    end
+    setScrollContentHeight(chamber.scroll, 46 * #rows)
+end
+
 -- Bank ledger sub-view
 function UI.BuildConsoleBank(panel)
     local sub = makeConsoleSub(panel, "Bank")
@@ -5246,6 +5355,19 @@ end)
 
 SideQuest.On("SQ_BANK_CAPTURED", function()
     if UI.activeTab == OFFICER_TAB then UI.RefreshConsoleBank() end
+end)
+
+SideQuest.On("MAIL_SHOW", function()
+    if UI.activeTab == OFFICER_TAB then UI.RefreshConsolePayouts() end
+end)
+SideQuest.On("MAIL_CLOSED", function()
+    if UI.activeTab == OFFICER_TAB then UI.RefreshConsolePayouts() end
+end)
+SideQuest.On("SQ_PAYOUT_SENT", function()
+    if UI.activeTab == OFFICER_TAB then UI.RefreshConsolePayouts() end
+end)
+SideQuest.On("SQ_PAYOUT_FAILED", function()
+    if UI.activeTab == OFFICER_TAB then UI.RefreshConsolePayouts() end
 end)
 
 local function refreshCalendarRow()

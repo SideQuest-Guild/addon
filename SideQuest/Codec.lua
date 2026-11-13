@@ -215,6 +215,8 @@ function Codec.BuildExportPayload(recorderName, guildName, realmName)
         recruits = arr(exportRecruits(pending.recruits or {})),
         member_notes = arr(pending.member_notes or {}),
         battlegrounds = arr(exportBattlegrounds(pending.battlegrounds or {})),
+        guild_log = arr(pending.guild_log or {}),
+        recruit_payouts_paid = arr(pending.recruit_payouts_paid or {}),
         directory = arr(exportDirectory(db.directory or {})),
     }
     if pending.roster then

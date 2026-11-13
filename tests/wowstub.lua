@@ -326,6 +326,24 @@ function GetGuildRosterLastOnline(index)
     return lo.years or 0, lo.months or 0, lo.days or 0, lo.hours or 0
 end
 
+-- WowStub.guildEvents: list of { kind, player1, player2, rank, years, months, days, hours } in
+-- GetGuildEventInfo's own order (index 1 = most recent, matching the real log).
+function QueryGuildEventLog()
+    WowStub.queryGuildEventLogCalls = (WowStub.queryGuildEventLogCalls or 0) + 1
+end
+
+function GetNumGuildEvents()
+    return #(WowStub.guildEvents or {})
+end
+
+function GetGuildEventInfo(index)
+    local e = (WowStub.guildEvents or {})[index]
+    if not e then
+        return nil
+    end
+    return e.kind, e.player1, e.player2, e.rank, e.years or 0, e.months or 0, e.days or 0, e.hours or 0
+end
+
 --------------------------------------------------------------------------
 -- Instances
 --------------------------------------------------------------------------
@@ -905,6 +923,41 @@ C_Timer = {
         fn()
     end,
 }
+
+--------------------------------------------------------------------------
+-- Mailbox + gold: GetMoney reads WowStub.money; SendMail/SetSendMailMoney/
+-- ClearSendMail just record their calls in WowStub.mail -- MAIL_SEND_SUCCESS
+-- or MAIL_FAILED never fires on its own (the real server confirms it);
+-- tests fire one or the other directly, as the client receiving it would.
+--------------------------------------------------------------------------
+
+WowStub.money = 0
+
+function GetMoney()
+    return WowStub.money or 0
+end
+
+function WowStub.ResetMail()
+    WowStub.mail = { sent = {}, pendingMoney = 0, clearCalls = 0 }
+end
+WowStub.ResetMail()
+
+function ClearSendMail()
+    WowStub.mail.clearCalls = WowStub.mail.clearCalls + 1
+    WowStub.mail.pendingMoney = 0
+end
+
+function SetSendMailMoney(copper)
+    WowStub.mail.pendingMoney = copper or 0
+end
+
+function GetSendMailMoney()
+    return WowStub.mail.pendingMoney or 0
+end
+
+function SendMail(target, subject, body)
+    table.insert(WowStub.mail.sent, { target = target, subject = subject, body = body, money = WowStub.mail.pendingMoney })
+end
 
 --------------------------------------------------------------------------
 -- StaticPopup: enough of Blizzard_StaticPopup (DefaultState: enabled, so it's always loaded) for addon code that

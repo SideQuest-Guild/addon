@@ -285,4 +285,59 @@ return function(h)
         h.assertTrue(WowStub.activePopup ~= nil, "re-shows while changes remain")
         h.assertTrue(WowStub.activePopup.text:find("1 site event") ~= nil, "one change left")
     end)
+
+    h.test("calendar: a recruitment drive gets two guild announcements: its title at starts_at, 'Ends: <title>' at ends_at", function()
+        reset()
+        SideQuestDB.events = {
+            { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+                starts_at = utcAt(1, 19), ends_at = utcAt(15, 19) },
+        }
+        step()
+        step()
+        h.assertEq(#WowStub.calendar.events, 2, "both announcements added")
+        local byTitle = {}
+        for _, e in ipairs(WowStub.calendar.events) do
+            byTitle[e.title] = e
+        end
+        h.assertTrue(byTitle["Spring Recruitment"] ~= nil, "start announcement present")
+        h.assertTrue(byTitle["Ends: Spring Recruitment"] ~= nil, "end announcement present")
+        h.assertEq(byTitle["Spring Recruitment"].eventType, Enum.CalendarEventType.Meeting, "recruitment shows as Meeting")
+        h.assertEq(SideQuestDB.calendarLinks["drive-1"].at, utcAt(1, 19), "start linked under the plain id")
+        h.assertEq(SideQuestDB.calendarLinks["drive-1:end"].at, utcAt(15, 19), "end linked under its own key")
+        h.assertEq(#Calendar.Plan(), 0, "both in sync; nothing left to do")
+    end)
+
+    h.test("calendar: a drive's end announcement is still planned even once its start has already passed", function()
+        reset()
+        SideQuestDB.events = {
+            { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+                starts_at = WowStub.time - 10 * DAY, ends_at = utcAt(4, 19) },
+        }
+        step()
+        h.assertEq(#WowStub.calendar.events, 1, "only the end announcement is plannable")
+        h.assertEq(WowStub.calendar.events[1].title, "Ends: Spring Recruitment", "the end announcement")
+        h.assertEq(next(SideQuestDB.calendarLinks), "drive-1:end", "linked under the end key only")
+    end)
+
+    h.test("calendar: moving a drive's end time only touches its own announcement, not the start one", function()
+        reset()
+        local evt = { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+            starts_at = utcAt(1, 19), ends_at = utcAt(15, 19) }
+        SideQuestDB.events = { evt }
+        step()
+        step()
+        evt.ends_at = utcAt(16, 20)
+
+        local plan = Calendar.Plan()
+        h.assertEq(#plan, 2, "remove then add, for the end announcement only")
+        h.assertEq(plan[1].linkKey, "drive-1:end", "only the end link is touched")
+        step()
+        step()
+        local byTitle = {}
+        for _, e in ipairs(WowStub.calendar.events) do
+            byTitle[e.title] = e
+        end
+        h.assertEq(byTitle["Spring Recruitment"].hour, 19, "start announcement untouched")
+        h.assertEq(byTitle["Ends: Spring Recruitment"].hour, 20, "end announcement moved")
+    end)
 end

@@ -34,6 +34,8 @@ local function defaultDB()
             recruits = {}, -- officer recruit records
             member_notes = {}, -- officer member notes
             battlegrounds = {}, -- recorded battleground scoreboards awaiting export
+            guild_log = {}, -- invite/join/quit/remove rows (GuildLog.lua) awaiting export, contract max 500
+            recruit_payouts_paid = {}, -- officer-mailed recruitment payouts (Payouts.lua) awaiting export
         },
         standings = {
             generated_at = 0,
@@ -45,6 +47,9 @@ local function defaultDB()
         pastEvents = {}, -- the site's recent past events, newest first, as answer counts (Events.Load)
         eventsAt = 0, -- generated_at of the import/broadcast the events came from; 0 = never received any
         calendarLinks = {}, -- site event id -> where Calendar.lua last saw its guild announcement (title, at, realm date/time)
+        -- GuildLog.lua: every invite/join/quit/remove row this client has ever captured (kind, actor, target, at),
+        -- used only to dedupe a repeat QueryGuildEventLog capture against; pruned past 60 days.
+        guildLogHistory = {},
         -- directory.md: every member's shared record, keyed by normalized "Name-Realm".
         directory = {},
         -- directory.md: this character's own sell/buy/requests and bag/bank stock, independent of
@@ -83,7 +88,12 @@ local function defaultDB()
             member_notes = {},
             inactive = {},
             unseen = {}, -- guild members with no roster sweep, Battle.net login, or raid presence on record at all
+            recruit_payouts = {}, -- officer import "recruit_payouts": owed inviters, replaced wholesale each import
         },
+        -- Payouts.lua: "<event_id>|<inviter>" -> true once this client has mailed that payout, so the same row
+        -- never fires SendMail twice even if the site hasn't processed the export (and so dropped it from the
+        -- next import's recruit_payouts) yet. Never cleared by `/sq export clear`.
+        paidPayouts = {},
         roster = { taken_at = 0, members = {} }, -- this character's own latest GuildRoster sweep
         professions = {}, -- this character's own latest profession scans, keyed "Character|Profession"
         mySignups = {}, -- event_id -> { status, sentAt, acked }

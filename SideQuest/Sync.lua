@@ -30,6 +30,7 @@ function Sync.ClearPending()
         sessions = {}, encounters = {}, loot = {}, awards = {},
         roster = nil, professions = {}, signups = {}, bank = {},
         announcements = {}, recruits = {}, member_notes = {}, battlegrounds = {},
+        guild_log = {}, recruit_payouts_paid = {},
     }
     SideQuestDB.lastExport = ""
 end
@@ -76,6 +77,7 @@ function Sync.ApplyImport(payload)
             SideQuestDB.officerData.member_notes = payload.officer.member_notes or {}
             SideQuestDB.officerData.inactive = payload.officer.inactive or {}
             SideQuestDB.officerData.unseen = payload.officer.unseen or {}
+            SideQuestDB.officerData.recruit_payouts = payload.officer.recruit_payouts or {}
         end
     end
 
@@ -154,6 +156,7 @@ SideQuest.On("SQ_COMM_MESSAGE", function(msgType, payload, _sender)
         SideQuestDB.officerData.member_notes = off.member_notes or SideQuestDB.officerData.member_notes
         SideQuestDB.officerData.inactive = off.inactive or SideQuestDB.officerData.inactive
         SideQuestDB.officerData.unseen = off.unseen or SideQuestDB.officerData.unseen
+        SideQuestDB.officerData.recruit_payouts = off.recruit_payouts or SideQuestDB.officerData.recruit_payouts
         SideQuest.Fire("SQ_OFFICER_DATA_UPDATED")
     end
 end)

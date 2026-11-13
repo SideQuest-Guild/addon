@@ -120,6 +120,13 @@ local function resetAddon()
     WowStub.SetForever(false)
     WowStub.invites = {}
     WowStub.whispers = {}
+    WowStub.guildEvents = {}
+    WowStub.queryGuildEventLogCalls = 0
+    WowStub.money = 0
+    WowStub.ResetMail()
+    SideQuest.GuildLog.lastRequestAt = nil
+    SideQuest.Payouts.mailboxOpen = false
+    SideQuest.Payouts.pendingSend = nil
 end
 
 --------------------------------------------------------------------------

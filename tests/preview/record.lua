@@ -302,6 +302,10 @@ SideQuestDB.officerData.recruits = {
       checklist = { talked = true, gear_check = true, first_raid = false, vouched = false },
       votes = { { officer = "Demo1-Whitemane", vote = "yes", at = WowStub.time } }, at = WowStub.time },
 }
+SideQuestDB.officerData.recruit_payouts = {
+    { event_id = "drive-demo-1", title = "Spring Recruitment Drive", inviter = "Demo5-Whitemane", copper = 10000,
+      recruits = { "DemoRecruit2-Whitemane" }, settles_at = WowStub.time - 86400 },
+}
 SideQuestDB.pending.bank = {
     { id = "b1", at = WowStub.time, character = "Demo5-Whitemane", kind = "deposit", item_id = 1, item_name = "Demo Linen Cloth", count = 20, money = 0, tab = 1 },
 }
@@ -1225,6 +1229,7 @@ local VIEWS = {
     { name = "console-loot", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Loot") end },
     { name = "console-roster", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Roster") end },
     { name = "console-recruits", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Recruits") end },
+    { name = "console-payouts", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Payouts") end },
     { name = "console-bank", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Bank") end },
     { name = "console-announce", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Announce") end },
     { name = "console-sync", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Sync") end },

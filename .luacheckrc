@@ -38,6 +38,9 @@ read_globals = {
     "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName",
     "C_TradeSkillUI", "GetProfessions", "GetProfessionInfo",
     "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo", "QueryGuildRecipes",
+    -- recruitment drives: guild event log (invite/join/quit/remove) + mailbox payouts
+    "GetNumGuildEvents", "GetGuildEventInfo", "QueryGuildEventLog",
+    "SendMail", "SetSendMailMoney", "GetSendMailMoney", "ClearSendMail", "GetMoney",
     "C_GuildBank", "GetCurrentGuildBankTab", "QueryGuildBankLog",
     "GetNumGuildBankTransactions", "GetGuildBankTransaction",
     "GetNumGuildBankMoneyTransactions", "GetGuildBankMoneyTransaction", "MAX_GUILDBANK_TABS",
@@ -88,6 +91,8 @@ files["tests/wowstub.lua"] = {
         "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName",
         "GetProfessions", "GetProfessionInfo", "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo",
         "QueryGuildRecipes", "GetAverageItemLevel",
+        "GetNumGuildEvents", "GetGuildEventInfo", "QueryGuildEventLog",
+        "SendMail", "SetSendMailMoney", "GetSendMailMoney", "ClearSendMail", "GetMoney",
         "C_SkillInfo", "C_SpecializationInfo", "C_Spell", "C_SpellBook", "C_QuestLog", "C_Reputation",
         "C_Container", "Minimap", "GetCursorPosition", "C_Calendar", "C_DateAndTime",
         "C_GuildBank", "GetCurrentGuildBankTab", "QueryGuildBankLog",
@@ -155,6 +160,13 @@ files["tests/test_calendar.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }
 
+files["tests/test_guild_log.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_payouts.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
 files["tests/test_roster.lua"] = {
     globals = { "WowStub", "SideQuestDB", "GetGuildRosterLastOnline" },
 }

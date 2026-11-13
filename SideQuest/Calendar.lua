@@ -30,7 +30,12 @@ local KINDS = {
     social = { label = "Social", type = "Meeting" },
     transmog = { label = "Transmog", type = "Meeting" },
     other = { label = "Other" },
+    recruitment = { label = "Recruitment", type = "Meeting" },
 }
+
+-- Copy.md "Rules line": shown on the Events tab and in both calendar announcements for a drive.
+local RECRUITMENT_RULES_LINE = "Invite new players to the guild. You earn 1g for each recruit who stays 7 days "
+    .. "and reaches level 10. Payouts go out a week after the drive ends."
 
 -- Enum.CalendarEventType values, for clients where the Enum table isn't filled in.
 local EVENT_TYPE_FALLBACK = { Raid = 0, Dungeon = 1, PvP = 2, Meeting = 3, Other = 4 }
@@ -106,15 +111,36 @@ function Calendar.Title(title)
 end
 
 local function description(evt)
+    if evt.kind == "recruitment" then
+        return RECRUITMENT_RULES_LINE .. " " .. EVENT_URL .. tostring(evt.id)
+    end
     local kind = KINDS[evt.kind]
     return (kind and kind.label or "Guild event") .. " from sidequest-guild.com. Sign up in the SideQuest addon (/sq) or at "
         .. EVENT_URL .. tostring(evt.id)
 end
 
-local function desired(evt, offset)
-    local place = Calendar.ToRealmTime(evt.starts_at, offset)
-    return { title = Calendar.Title(evt.title), at = evt.starts_at, year = place.year, month = place.month,
-        day = place.day, hour = place.hour, minute = place.minute }
+-- One placement is { linkKey, event, place }; `linkKey` is what SideQuestDB.calendarLinks keys the announcement
+-- under, so a moved or cancelled one is found and removed by the right key later. Every event wants one placement
+-- (its title at starts_at); a recruitment drive wants a second, independent one ("Ends: <title>" at ends_at,
+-- contract: two guild announcements per drive), still planned even once starts_at itself is in the past.
+local function placementsFor(evt, offset, cutoff, maxKey)
+    local out = {}
+    local function addPlacement(linkKey, text, at)
+        if not (at and at >= cutoff) then
+            return
+        end
+        local place = Calendar.ToRealmTime(at, offset)
+        place.title, place.at = Calendar.Title(text), at
+        if maxKey and placeKey(place) > maxKey then
+            return
+        end
+        out[#out + 1] = { linkKey = linkKey, event = evt, place = place }
+    end
+    addPlacement(evt.id, evt.title or "Event", evt.starts_at)
+    if evt.kind == "recruitment" and evt.ends_at then
+        addPlacement(evt.id .. ":end", "Ends: " .. tostring(evt.title or "Event"), evt.ends_at)
+    end
+    return out
 end
 
 --------------------------------------------------------------------------
@@ -148,7 +174,7 @@ local function samePlace(a, b)
 end
 
 --- The changes that would make the guild calendar match the imported events, removals first, then additions by
--- start time. Each action is { op = "add", event, place } or { op = "remove", siteId, place, slot }.
+-- start time. Each action is { op = "add", event, place } or { op = "remove", linkKey, place, slot }.
 -- Also records the calendar position of every site event already on it, so a later move can be cleaned up even when
 -- another officer added it. Returns nil and a reason when the calendar can't be planned against.
 function Calendar.Plan()
@@ -167,30 +193,29 @@ function Calendar.Plan()
 
     local wanted = {}
     for _, evt in ipairs(SideQuest.Events.Get()) do
-        if evt.id and evt.starts_at and evt.starts_at >= cutoff then
-            local place = desired(evt, offset)
-            if not maxKey or placeKey(place) <= maxKey then
-                wanted[#wanted + 1] = { event = evt, place = place }
+        if evt.id then
+            for _, p in ipairs(placementsFor(evt, offset, cutoff, maxKey)) do
+                wanted[#wanted + 1] = p
             end
         end
     end
     table.sort(wanted, function(a, b)
-        return a.event.starts_at < b.event.starts_at
+        return a.place.at < b.place.at
     end)
 
     local removes, adds = {}, {}
     local seen = {}
     for _, w in ipairs(wanted) do
-        local siteId = w.event.id
-        seen[siteId] = true
-        local link = linked[siteId]
+        local linkKey = w.linkKey
+        seen[linkKey] = true
+        local link = linked[linkKey]
         local moving = false
         if link and not samePlace(link, w.place) and link.at and link.at >= cutoff then
             local slot = findAnnouncement(link)
             if slot == unreadable then
                 return nil, "The calendar can't be read right now. Try again out of combat."
             elseif slot then
-                removes[#removes + 1] = { op = "remove", siteId = siteId, place = link, slot = slot }
+                removes[#removes + 1] = { op = "remove", linkKey = linkKey, place = link, slot = slot }
                 moving = true
             end
         end
@@ -198,21 +223,21 @@ function Calendar.Plan()
         if found == unreadable then
             return nil, "The calendar can't be read right now. Try again out of combat."
         elseif not found then
-            adds[#adds + 1] = { op = "add", event = w.event, place = w.place }
+            adds[#adds + 1] = { op = "add", event = w.event, place = w.place, linkKey = linkKey }
         elseif not moving then
-            linked[siteId] = w.place -- keep the old position until its announcement is removed
+            linked[linkKey] = w.place -- keep the old position until its announcement is removed
         end
     end
 
-    for siteId, link in pairs(linked) do
-        if not seen[siteId] then
+    for linkKey, link in pairs(linked) do
+        if not seen[linkKey] then
             local slot = link.at and link.at >= cutoff and findAnnouncement(link)
             if slot == unreadable then
                 return nil, "The calendar can't be read right now. Try again out of combat."
             elseif slot then
-                removes[#removes + 1] = { op = "remove", siteId = siteId, place = link, slot = slot }
+                removes[#removes + 1] = { op = "remove", linkKey = linkKey, place = link, slot = slot }
             else
-                linked[siteId] = nil -- gone already, or in the past: nothing left to clean up
+                linked[linkKey] = nil -- gone already, or in the past: nothing left to clean up
             end
         end
     end
@@ -284,7 +309,7 @@ local function remove(action)
     local s = action.slot
     C_Calendar.ContextMenuSelectEvent(s.monthOffset, s.day, s.index)
     -- Either way the link is done: removed, or left to the officers whose rank can remove it.
-    links()[action.siteId] = nil
+    links()[action.linkKey] = nil
     if not C_Calendar.ContextMenuEventCanRemove(s.monthOffset, s.day, s.index) then
         SideQuest.Print("Your guild rank can't remove " .. describePlace(action.place) .. " from the calendar.")
         return
@@ -308,7 +333,7 @@ local function add(action)
         return
     end
     C_Calendar.AddEvent()
-    links()[evt.id] = place
+    links()[action.linkKey] = place
     markBusy()
     SideQuest.Print("Added " .. describePlace(place) .. " to the guild calendar.")
 end

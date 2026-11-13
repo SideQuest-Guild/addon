@@ -28,6 +28,7 @@ Standings.lua
 Events.lua
 Calendar.lua
 Roster.lua
+GuildLog.lua
 Professions.lua
 Character.lua
 Market.lua
@@ -38,6 +39,7 @@ Sheet.lua
 Crafters.lua
 Announce.lua
 Recruits.lua
+Payouts.lua
 Bank.lua
 Battlegrounds.lua
 Prep.lua
