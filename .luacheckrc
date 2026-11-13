@@ -9,6 +9,8 @@ unused_args = false -- WoW event handler signatures are fixed; many args are unu
 globals = {
     "SideQuestDB", "SideQuest", "SideQuestJSON", "SideQuestBase64",
     "SLASH_SIDEQUEST1", "SideQuest_OnAddonCompartmentClick",
+    -- set by SideQuest Companion's own SideQuest_Inbox addon (Inbox.lua); tests set it too
+    "SideQuestCompanionInbox",
 }
 
 -- Blizzard-owned tables: the addon may only set its own keys. Assigning the global itself (even `X = X or {}`)

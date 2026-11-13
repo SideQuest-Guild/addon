@@ -192,8 +192,9 @@ After the raid, the record has to reach the website. Pick whichever is easiest:
 
 1. Run [SideQuest Companion](https://github.com/SideQuest-Guild/companion/releases), a tray app for Windows, macOS
    and Linux. It watches the save file and uploads a new export the moment WoW writes it, so there's nothing to copy
-   or paste. While WoW is closed it also checks the website for a new import and leaves it ready for an officer, so
-   the next login picks up the new points on its own.
+   or paste. It also keeps the website's newest import ready in its own small `SideQuest_Inbox` addon, so an
+   officer's next `/reload` or login picks up the new points and events on its own. The first time, restart WoW once
+   so the game notices `SideQuest_Inbox`.
 2. Type `/sq export`, copy the text and paste it on the [sync page](https://sidequest-guild.com/officers/sync/).
 3. Upload the addon's save file on the same page. It is at
    `_forever_/WTF/Account/<your account>/SavedVariables/SideQuest.lua`, and WoW writes it when you log out or type

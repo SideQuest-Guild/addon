@@ -8,7 +8,7 @@ local SQ = SideQuest
 
 SQ.ADDON_NAME = "SideQuest"
 SQ.ADDON_VERSION = "1.0.0" -- stamped literally; packager replaces @project-version@ in the .toc, not here
-SQ.CURRENT_DB_VERSION = 3
+SQ.CURRENT_DB_VERSION = 4
 
 --------------------------------------------------------------------------
 -- SavedVariables defaults + migrations
@@ -227,6 +227,12 @@ local MIGRATIONS = {
                 db.professions[old] = nil
             end
         end
+    end,
+
+    -- 3 -> 4: SideQuest Companion stopped staging imports inside this save file (SideQuestDB.inbox); it keeps
+    -- them in its own SideQuest_Inbox addon now, so drop a leftover one.
+    [3] = function(db)
+        db.inbox = nil
     end,
 }
 

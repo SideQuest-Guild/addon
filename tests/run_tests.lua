@@ -96,6 +96,7 @@ local function resetAddon()
     SideQuest.Directory.ResetState()
     SideQuest.Professions.ResetState()
     SideQuest.Sync.ResetInboxState()
+    SideQuestCompanionInbox = nil
     WowStub.isOfficer = false
     WowStub.inGuild = true
     WowStub.guildRanks = nil
@@ -786,7 +787,7 @@ test("console: switching sub-tabs shows only the chosen sub-view (regression for
 end)
 
 --------------------------------------------------------------------------
--- 9. Staged import ("inbox") from SideQuest Companion
+-- 9. Companion inbox (SideQuest_Inbox addon's SideQuestCompanionInbox)
 --------------------------------------------------------------------------
 
 local function buildInboxPayload(generatedAt)
@@ -804,61 +805,75 @@ local function lastChatLine()
     return WowStub.chatLog[#WowStub.chatLog]
 end
 
-test("inbox: officer applies the staged import and it is cleared", function()
+test("inbox: officer loads the companion's newer site data", function()
     resetAddon()
     WowStub.isOfficer = true
     SideQuestDB.standings.generated_at = 100
-    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuestCompanionInbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
     SideQuest.Fire("PLAYER_ENTERING_WORLD")
-    assertEq(SideQuestDB.inbox, nil, "inbox cleared")
-    assertEq(SideQuestDB.standings.generated_at, 200, "standings updated from the staged import")
-    assertTrue(lastChatLine():find("Applied the import SideQuest Companion staged") ~= nil, "prints an applied line")
+    assertEq(SideQuestDB.standings.generated_at, 200, "standings updated from the inbox")
+    assertTrue(lastChatLine():find("Loaded the site data SideQuest Companion fetched") ~= nil, "prints a loaded line")
 end)
 
-test("inbox: an import older than current standings is skipped and cleared", function()
+test("inbox: the same file on the next /reload is not applied again", function()
+    resetAddon()
+    WowStub.isOfficer = true
+    SideQuestDB.standings.generated_at = 100
+    SideQuestCompanionInbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    -- a /reload keeps SideQuestDB and re-reads the unchanged Inbox.lua
+    SideQuest.Sync.ResetInboxState()
+    local lines = #WowStub.chatLog
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    assertEq(#WowStub.chatLog, lines, "nothing applied or printed for data the addon already has")
+end)
+
+test("inbox: data older than what the addon has (e.g. a pasted /sq import) is left alone", function()
     resetAddon()
     WowStub.isOfficer = true
     SideQuestDB.standings.generated_at = 500
-    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuestCompanionInbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
     SideQuest.Fire("PLAYER_ENTERING_WORLD")
-    assertEq(SideQuestDB.inbox, nil, "inbox cleared")
-    assertEq(SideQuestDB.standings.generated_at, 500, "standings untouched: the staged import was older")
-    assertTrue(lastChatLine():find("older than what the addon already has") ~= nil, "explains why it was skipped")
+    assertEq(SideQuestDB.standings.generated_at, 500, "standings untouched: the inbox was older")
 end)
 
-test("inbox: a non-officer never applies it and leaves it for an officer alt", function()
+test("inbox: a non-officer never applies it", function()
     resetAddon()
     WowStub.isOfficer = false
     SideQuestDB.standings.generated_at = 100
-    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuestCompanionInbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
     SideQuest.Fire("PLAYER_ENTERING_WORLD")
-    assertTrue(SideQuestDB.inbox ~= nil, "inbox kept for an officer on the same account")
+    SideQuest.Fire("GUILD_ROSTER_UPDATE")
     assertEq(SideQuestDB.standings.generated_at, 100, "standings untouched: never applied")
-    assertTrue(lastChatLine():find("Log in on an officer") ~= nil, "says an officer has to apply it")
+end)
+
+test("inbox: a malformed payload is reported once and not applied", function()
+    resetAddon()
+    WowStub.isOfficer = true
+    SideQuestCompanionInbox = { payload = "not an import string", generated_at = 200, staged_at = 250 }
+    SideQuest.Fire("PLAYER_ENTERING_WORLD")
+    assertTrue(lastChatLine():find("could not be read") ~= nil, "explains it could not be read")
     local lines = #WowStub.chatLog
     SideQuest.Fire("GUILD_ROSTER_UPDATE")
     assertEq(#WowStub.chatLog, lines, "doesn't repeat itself on later roster updates")
 end)
 
-test("inbox: a malformed payload is discarded with a message", function()
-    resetAddon()
-    WowStub.isOfficer = true
-    SideQuestDB.inbox = { payload = "not an import string", generated_at = 200, staged_at = 250 }
-    SideQuest.Fire("PLAYER_ENTERING_WORLD")
-    assertEq(SideQuestDB.inbox, nil, "inbox cleared")
-    assertTrue(lastChatLine():find("could not be read") ~= nil, "explains it could not be read")
-end)
-
 test("inbox: officer status unknown at first, then known on retry", function()
     resetAddon()
     SideQuestDB.standings.generated_at = 100
-    SideQuestDB.inbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
+    SideQuestCompanionInbox = { payload = buildInboxPayload(200), generated_at = 200, staged_at = 250 }
     -- guild roster/officer-note perms take a couple of ticks to load after login
     WowStub.officerKnownAfterCalls = 3
     SideQuest.Fire("PLAYER_ENTERING_WORLD")
-    assertEq(SideQuestDB.inbox, nil, "inbox cleared once officer status resolves")
-    assertEq(SideQuestDB.standings.generated_at, 200, "staged import applied once officer status was known")
+    assertEq(SideQuestDB.standings.generated_at, 200, "inbox applied once officer status was known")
     assertTrue(WowStub.officerNoteCalls >= 3, "retried until officer status was known")
+end)
+
+test("db migration: a leftover SavedVariables inbox from an older companion is dropped", function()
+    SideQuestDB = { version = 3, inbox = { payload = "SQI1:x", generated_at = 1 } }
+    SideQuest.InitDB()
+    assertEq(SideQuestDB.inbox, nil, "old inbox removed")
+    assertEq(SideQuestDB.version, SideQuest.CURRENT_DB_VERSION, "migrated to the current version")
 end)
 
 --------------------------------------------------------------------------

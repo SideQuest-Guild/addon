@@ -3255,7 +3255,7 @@ function UI.RefreshRaids()
         if SideQuest.Events.EverReceived() then
             text = "No events scheduled right now."
         elseif isOfficer then
-            text = "No event data yet -- SideQuest Companion brings it in when you close WoW, for your next login, "
+            text = "No event data yet -- with SideQuest Companion running, /reload brings it in, "
                 .. "or paste the site's import with /sq import."
         else
             text = "No event data yet -- it comes from an officer's SideQuest while one is online."
@@ -5236,9 +5236,9 @@ function UI.RefreshConsoleCalendar()
         if #SideQuest.Events.Upcoming() == 0 then
             chamber.calendarBtn:SetEnabled(false, "No upcoming site events.")
             setStateText(chamber.calendarText, SideQuest.Events.EverReceived()
-                and "The site has no events in the next 14 days. Schedule one there and SideQuest Companion "
-                    .. "brings it in after you next close WoW."
-                or "No site data yet. SideQuest Companion brings it in when you close WoW, for your next login.",
+                and "The site has no events in the next 14 days. Schedule one there and, with SideQuest Companion "
+                    .. "running, /reload brings it in."
+                or "No site data yet. With SideQuest Companion running, /reload brings it in.",
                 true)
         else
             chamber.calendarBtn:SetEnabled(false, "Nothing to change.")
