@@ -59,7 +59,9 @@ comes from the site's last sync instead, marked "(from Battle.net)" since it can
 to see which guildmates craft, sell, buy or hold it, how many have it on their wishlist, and the guild's lowest
 auction-house price if a sync has priced it.
 
-Your event sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
+Your event sign-ups are saved to your own export every time you log out, reload, or quit the game. SideQuest
+Companion uploads them straight away. Without it, your sign-ups still reach the website the next time an officer
+syncs.
 
 During a recruitment drive, invite new players to the guild as usual. Whoever brings in the most recruits who stay 7
 days and reach level 10 wins 1g, and ties each win 1g. Who invited whom comes straight from the guild's own event

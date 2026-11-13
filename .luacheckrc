@@ -213,6 +213,10 @@ files["tests/test_ui_guild_rows.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
 }
 
+
+files["tests/test_member_export.lua"] = {
+    globals = { "WowStub", "SideQuestDB" },
+}
 files["tests/test_identity.lua"] = {
     globals = { "WowStub", "SideQuestDB", "GetNumGuildMembers" },
 }

@@ -233,6 +233,55 @@ function Codec.BuildExportPayload(recorderName, guildName, realmName)
     return payload
 end
 
+--- Build a non-officer's export payload: same v2 envelope shape as
+-- Codec.BuildExportPayload, with every officer section forced empty and
+-- only the current character's own directory entry and own queued
+-- sign-ups included.
+-- @param recorderName string normalized "Name-Realm" of the recorder
+-- @param guildName string
+-- @param realmName string
+function Codec.BuildMemberExportPayload(recorderName, guildName, realmName)
+    local db = SideQuestDB
+    local ownSignups = {}
+    for _, row in pairs(db.mySignups or {}) do
+        if row.payload then
+            table.insert(ownSignups, row.payload)
+        end
+    end
+    local ownDirectory = {}
+    if recorderName and db.directory and db.directory[recorderName] then
+        ownDirectory[recorderName] = db.directory[recorderName]
+    end
+    local payload = {
+        v = 2,
+        addon_version = SideQuest.ADDON_VERSION,
+        exported_at = GetServerTime and GetServerTime() or 0,
+        guild = guildName or "",
+        realm = realmName or "",
+        recorder = recorderName or "",
+        sessions = arr({}),
+        encounters = arr({}),
+        loot = arr({}),
+        awards = arr({}),
+        professions = arr({}),
+        signups = arr(ownSignups),
+        bank = arr({}),
+        announcements = arr({}),
+        recruits = arr({}),
+        member_notes = arr({}),
+        battlegrounds = arr({}),
+        guild_log = arr({}),
+        recruit_payouts_paid = arr({}),
+        directory = arr(exportDirectory(ownDirectory)),
+    }
+    do
+        local itemIds, recipeIds = collectDirectoryIds(ownDirectory)
+        payload.item_names = exportItemNames(itemIds)
+        payload.recipe_names = exportRecipeNames(recipeIds)
+    end
+    return payload
+end
+
 function Codec.EncodeExport(payload)
     local json = SideQuestJSON.encode(payload)
     return EXPORT_PREFIX .. SideQuestBase64.encode(json)

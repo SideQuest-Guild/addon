@@ -25,6 +25,18 @@ function Sync.BuildExport()
     return str, payload
 end
 
+--- Non-officers also rebuild lastExport on logout, so a member's own
+-- directory entry and sign-ups upload even with no officer online.
+function Sync.BuildMemberExport()
+    local recorder = SideQuest.NormalizeUnit("player") or "Unknown-Unknown"
+    local guildName = GetGuildInfo and select(1, GetGuildInfo("player")) or ""
+    local realmName = GetNormalizedRealmName and GetNormalizedRealmName() or ""
+    local payload = SideQuest.Codec.BuildMemberExportPayload(recorder, guildName, realmName)
+    local str = SideQuest.Codec.EncodeExport(payload)
+    SideQuestDB.lastExport = str
+    return str, payload
+end
+
 function Sync.ClearPending()
     SideQuestDB.pending = {
         sessions = {}, encounters = {}, loot = {}, awards = {},
@@ -238,13 +250,16 @@ SideQuest.On("GUILD_ROSTER_UPDATE", function()
 end)
 SideQuest.RegisterGameEvent("GUILD_ROSTER_UPDATE")
 
--- Officers sweep the roster and rebuild lastExport on logout, so SideQuest Companion always finds a current
--- export in the save file to upload, including the roster and the directory's latest hashes, even if nobody ran
--- /sq export that session.
+-- Every character sweeps/rebuilds lastExport on logout, so SideQuest Companion always finds a current export in
+-- the save file to upload, including the roster and the directory's latest hashes, even if nobody ran /sq
+-- export that session. Officers build the full officer export; everyone else builds a member export carrying
+-- only their own directory entry and own sign-ups.
 SideQuest.On("PLAYER_LOGOUT", function()
     if SideQuest.IsOfficer() then
         SideQuest.Roster.Sweep(true)
         Sync.BuildExport()
+    else
+        Sync.BuildMemberExport()
     end
 end)
 SideQuest.RegisterGameEvent("PLAYER_LOGOUT")
