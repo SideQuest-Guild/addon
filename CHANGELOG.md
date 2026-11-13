@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.0 (2026-11-13)
+
+### New
+
+- Tooltips and the Crafters tab show offline guild crafters, item tooltips show how many guildies want an item, and the Guild tab shows item level from the site (#12)
+- The Guild tab shows spec, professions and reputations from the site when a member hasn't logged in (#13)
+- Recruitment drives: officers' addons read the guild log so the site knows who invited whom, a drive's start and end go on the in-game calendar, and a new Payouts tab mails inviters their gold
+
 ## v0.14.0 (2026-11-08)
 
 ### New
