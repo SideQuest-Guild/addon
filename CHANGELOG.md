@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.2 (2026-11-13)
+
+### New
+
+- The Events tab shows a recruitment drive's leaderboard with each inviter's potential recruits and every recruit's status, and keeps the drive listed until it ends
+
+
 ## v0.15.1 (2026-11-13)
 
 ### Fixed
