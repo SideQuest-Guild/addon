@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.2 (2026-11-13)
+
+### Fixed
+
+- Update calendar puts site events on the guild calendar as guild events, since WoW: Forever has no guild announcements and refused every one
+
+
 ## v0.17.1 (2026-11-13)
 
 ### Fixed
