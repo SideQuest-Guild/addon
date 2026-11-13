@@ -154,4 +154,49 @@ return function(h)
         SideQuest.UI.OnClickRecordButton()
         h.assertTrue(SideQuest.Recorder.current ~= nil, "second click starts recording anyway")
     end)
+
+    h.test("console tabs: a crowded tab row narrows to fit, a roomy one keeps its padding", function()
+        local function tab(textWidth, shown)
+            local t = { width = 0, extraPadding = 12, label = { GetStringWidth = function() return textWidth end } }
+            t.IsShown = function() return shown ~= false end
+            t.Refit = function() t.width = textWidth + (t.sidePadding or 20) + t.extraPadding end
+            t.Refit()
+            return t
+        end
+        -- Roughly the Console's nine labels; Debug hidden for everyone but the Guild Master.
+        local widths = { 114, 34, 66, 92, 70, 43, 92, 42, 52 }
+        local function row(debugShown)
+            local tabs = {}
+            for i, w in ipairs(widths) do
+                tabs[i] = tab(w, i < #widths or debugShown)
+            end
+            return tabs
+        end
+        local function used(tabs)
+            local total, n = 0, 0
+            for _, t in ipairs(tabs) do
+                if t.IsShown() then
+                    total, n = total + t.width, n + 1
+                end
+            end
+            return total + (n - 1) * 3
+        end
+
+        local roomy = row(true)
+        SideQuest.UI.FitTabRow(roomy, 2000, 3)
+        h.assertEq(roomy[2].width, 34 + 20 + 12, "room to spare keeps the normal padding")
+
+        local crowded = row(true)
+        SideQuest.UI.FitTabRow(crowded, 778, 3)
+        h.assertTrue(used(crowded) <= 778, "all nine fit: " .. used(crowded))
+        h.assertTrue(crowded[2].width < 34 + 20 + 12, "padding shrank")
+
+        local tiny = row(true)
+        SideQuest.UI.FitTabRow(tiny, 100, 3)
+        h.assertEq(tiny[2].width, 34 + 4 + 12, "padding never goes below the minimum")
+
+        local noDebug = row(false)
+        SideQuest.UI.FitTabRow(noDebug, 778, 3)
+        h.assertTrue(noDebug[2].width > crowded[2].width, "a hidden tab leaves more room for the rest")
+    end)
 end

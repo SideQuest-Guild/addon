@@ -734,10 +734,40 @@ local function createPanelTab(parent, text, isTop, isOfficer)
         mark:SetPoint("RIGHT", label, "LEFT", -5, 0)
         tab.mark = mark
     end
-    fitToText(tab, label, function(w)
-        tab:SetWidth(w + TAB_SIDES_PADDING + (isOfficer and 22 or 12))
+    -- tab.sidePadding lets a crowded row (UI.FitTabRow) narrow its tabs; tab.Refit re-applies it.
+    tab.extraPadding = isOfficer and 22 or 12
+    tab.Refit = fitToText(tab, label, function(w)
+        tab:SetWidth(w + (tab.sidePadding or TAB_SIDES_PADDING) + tab.extraPadding)
     end)
     return tab
+end
+
+local TAB_MIN_SIDES_PADDING = 4
+
+--- Narrows a row of tabs laid out left to right, `gap` apart, so the shown ones fit in `width`. Each shown tab's
+-- side padding shrinks evenly from TAB_SIDES_PADDING down to TAB_MIN_SIDES_PADDING (never below), so a row that
+-- already fits keeps its normal look. Does nothing until the labels have been measured.
+local function fitTabRow(tabs, width, gap)
+    local shown, textWidth = {}, 0
+    for _, tab in ipairs(tabs) do
+        if tab:IsShown() then
+            shown[#shown + 1] = tab
+            textWidth = textWidth + (tab.label:GetStringWidth() or 0)
+        end
+    end
+    if #shown == 0 or textWidth <= 0 or width <= 0 then
+        return
+    end
+    local fixed = (#shown - 1) * gap
+    for _, tab in ipairs(shown) do
+        fixed = fixed + tab.extraPadding
+    end
+    local pad = math.floor((width - textWidth - fixed) / #shown)
+    pad = math.max(TAB_MIN_SIDES_PADDING, math.min(TAB_SIDES_PADDING, pad))
+    for _, tab in ipairs(shown) do
+        tab.sidePadding = pad
+        tab.Refit()
+    end
 end
 
 --- PanelTemplates_SelectTab / _DeselectTab, including their text offsets.
@@ -904,6 +934,7 @@ UI.SetScrollContentHeight = setScrollContentHeight
 UI.ApplyWindowChrome = applyWindowChrome
 UI.CreatePanelTab = createPanelTab
 UI.SetPanelTabSelected = setPanelTabSelected
+UI.FitTabRow = fitTabRow
 
 UI.PlayOpenAnim = playOpenAnim
 UI.PlayCrossfade = playCrossfade

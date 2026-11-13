@@ -1067,6 +1067,7 @@ function UI.RefreshOfficerVisibility()
                 UI.ShowConsoleSub("Raid Night")
             end
         end
+        consolePanel.FitSubTabs()
     end
 end
 
@@ -3652,14 +3653,16 @@ function UI.BuildConsolePanel(body)
     -- Forever's profession frames carry theirs. The selected tab names the
     -- view, so Console chambers carry no ribbon of their own.
     local CONSOLE_TAB_TOP = 30
+    local CONSOLE_TAB_INSET, CONSOLE_TAB_GAP = 26, 3
     panel.subButtons = {}
+    local ordered = {}
     local prev
     for _, name in ipairs(CONSOLE_SUBTABS) do
         local btn = UI.CreatePanelTab(panel, name, true)
         if prev then
-            btn:SetPoint("LEFT", prev, "RIGHT", 3, 0)
+            btn:SetPoint("LEFT", prev, "RIGHT", CONSOLE_TAB_GAP, 0)
         else
-            btn:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 26, -CONSOLE_TAB_TOP)
+            btn:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", CONSOLE_TAB_INSET, -CONSOLE_TAB_TOP)
         end
         prev = btn
         UI.SetPanelTabSelected(btn, false)
@@ -3670,7 +3673,15 @@ function UI.BuildConsolePanel(body)
             btn:Hide() -- shown only for the Guild Master, see UI.RefreshOfficerVisibility
         end
         panel.subButtons[name] = btn
+        ordered[#ordered + 1] = btn
     end
+    -- Nine tabs don't fit the window at their full padding: narrow them to the panel's width, again whenever the
+    -- window is resized or the Guild Master's Debug tab comes or goes.
+    function panel.FitSubTabs()
+        UI.FitTabRow(ordered, (panel:GetWidth() or 0) - 2 * CONSOLE_TAB_INSET, CONSOLE_TAB_GAP)
+    end
+    panel:HookScript("OnShow", panel.FitSubTabs)
+    panel:HookScript("OnSizeChanged", panel.FitSubTabs)
     panel.tabTop = CONSOLE_TAB_TOP
 
     panel.subPanels = {}

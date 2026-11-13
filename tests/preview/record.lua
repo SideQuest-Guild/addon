@@ -1157,6 +1157,10 @@ end
 
 local UI = SideQuest.UI
 UI.Show() -- out of combat, builds + shows
+-- In game the Console panel takes its width from its anchors; the stub only knows explicit sizes, so give it the
+-- width it has inside the 860-wide window, letting its tab row fit the way it does in game.
+UI.panels.Console:SetWidth(816)
+UI.panels.Console.FitSubTabs()
 
 -- an open bid, responses ranked per contract order (ms raider/trial > os > alt)
 SideQuest.Loot.activeBid = {
