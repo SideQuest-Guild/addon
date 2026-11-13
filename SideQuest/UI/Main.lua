@@ -161,7 +161,7 @@ local function driveRecruitState(r, t)
         local days = math.max(0, math.ceil((r.qualifies_at - t) / 86400))
         return string.format("potential, %d day%s left", days, days == 1 and "" or "s")
     elseif r.status == "disqualified" then
-        return "doesn't count: " .. (DRIVE_REASON_TEXT[r.reason] or "left")
+        return "doesn't count: " .. (DRIVE_REASON_TEXT[r.reason] or DRIVE_REASON_TEXT.left)
     end
     return "invited, not joined yet"
 end
