@@ -779,7 +779,8 @@ end
 function WowStub.ResetCalendar()
     WowStub.calendar = {
         realmOffset = 0, -- seconds the realm clock runs ahead of UTC
-        events = {}, -- list of { calendarType, title, description, eventType, textureIndex, year, month, day, hour, minute }
+        events = {}, -- list of { calendarType, title, description, eventType, textureIndex, isLocked, year, month, day,
+        -- hour, minute }
         textures = {}, -- eventType -> list of { title }
         canAdd = true,
         canRemove = true,
@@ -848,7 +849,7 @@ C_Calendar = {
             return nil
         end
         return {
-            title = e.title, calendarType = e.calendarType, eventType = e.eventType,
+            title = e.title, calendarType = e.calendarType, eventType = e.eventType, isLocked = e.isLocked == true,
             startTime = { year = e.year, month = e.month, monthDay = e.day, hour = e.hour, minute = e.minute },
         }
     end,
@@ -864,6 +865,7 @@ C_Calendar = {
     EventSetDescription = function(text) WowStub.calendar.candidate.description = text end,
     EventSetType = function(eventType) WowStub.calendar.candidate.eventType = eventType end,
     EventSetTextureID = function(index) WowStub.calendar.candidate.textureIndex = index end,
+    EventSetLocked = function() WowStub.calendar.candidate.isLocked = true end,
     EventSetDate = function(month, day, year)
         local c = WowStub.calendar.candidate
         c.year, c.month, c.day = year, month, day

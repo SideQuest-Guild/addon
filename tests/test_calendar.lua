@@ -291,7 +291,7 @@ return function(h)
         h.assertTrue(WowStub.activePopup.text:find("1 site event") ~= nil, "one change left")
     end)
 
-    h.test("calendar: a recruitment drive gets two guild announcements: its title at starts_at, 'Ends: <title>' at ends_at", function()
+    h.test("calendar: a recruitment drive gets two locked Other events: its title at starts_at, 'Ends: <title>' at ends_at", function()
         reset()
         SideQuestDB.events = {
             { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
@@ -299,14 +299,17 @@ return function(h)
         }
         step()
         step()
-        h.assertEq(#WowStub.calendar.events, 2, "both announcements added")
+        h.assertEq(#WowStub.calendar.events, 2, "both events added")
         local byTitle = {}
         for _, e in ipairs(WowStub.calendar.events) do
             byTitle[e.title] = e
         end
-        h.assertTrue(byTitle["Spring Recruitment"] ~= nil, "start announcement present")
-        h.assertTrue(byTitle["Ends: Spring Recruitment"] ~= nil, "end announcement present")
-        h.assertEq(byTitle["Spring Recruitment"].eventType, Enum.CalendarEventType.Meeting, "recruitment shows as Meeting")
+        h.assertTrue(byTitle["Spring Recruitment"] ~= nil, "start event present")
+        h.assertTrue(byTitle["Ends: Spring Recruitment"] ~= nil, "end event present")
+        for title, e in pairs(byTitle) do
+            h.assertEq(e.eventType, Enum.CalendarEventType.Other, title .. ": a drive shows as Other")
+            h.assertTrue(e.isLocked, title .. ": locked, since a drive takes no sign-ups")
+        end
         h.assertEq(SideQuestDB.calendarLinks["drive-1"].at, utcAt(1, 19), "start linked under the plain id")
         h.assertEq(SideQuestDB.calendarLinks["drive-1:end"].at, utcAt(15, 19), "end linked under its own key")
         h.assertEq(#Calendar.Plan(), 0, "both in sync; nothing left to do")
@@ -322,6 +325,36 @@ return function(h)
         h.assertEq(#WowStub.calendar.events, 1, "only the end announcement is plannable")
         h.assertEq(WowStub.calendar.events[1].title, "Ends: Spring Recruitment", "the end announcement")
         h.assertEq(next(SideQuestDB.calendarLinks), "drive-1:end", "linked under the end key only")
+    end)
+
+    h.test("calendar: a drive event put on as Meeting and unlocked comes off, then goes back on locked as Other", function()
+        reset()
+        local endsAt = utcAt(4, 19)
+        local p = realmDate(endsAt)
+        -- what v0.17.2 left: right title and time, wrong type, open to sign-ups
+        WowStub.calendar.events[1] = { calendarType = "GUILD_EVENT", title = "Ends: Spring Recruitment",
+            eventType = Enum.CalendarEventType.Meeting, year = p.year, month = p.month, day = p.day, hour = 19, minute = 0 }
+        SideQuestDB.events = { { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+            starts_at = WowStub.time - DAY, ends_at = endsAt } }
+
+        step()
+        h.assertEq(#WowStub.calendar.events, 0, "the old one is off")
+        h.assertTrue(lastLine():find("locked Other event", 1, true) ~= nil, "says why it came off")
+        WowStub.time = WowStub.time + 10 -- past the busy wait
+        step()
+        h.assertEq(#WowStub.calendar.events, 1, "back on")
+        h.assertEq(WowStub.calendar.events[1].eventType, Enum.CalendarEventType.Other, "as Other")
+        h.assertTrue(WowStub.calendar.events[1].isLocked, "locked")
+        h.assertEq(#Calendar.Plan(), 0, "nothing left to do")
+    end)
+
+    h.test("calendar: a raid someone made by hand as another type or unlocked is left alone", function()
+        reset()
+        local p = realmDate(utcAt(2, 19))
+        WowStub.calendar.events[1] = { calendarType = "GUILD_EVENT", title = "Molten Core",
+            eventType = Enum.CalendarEventType.Meeting, year = p.year, month = p.month, day = p.day, hour = 19, minute = 0 }
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        h.assertEq(#Calendar.Plan(), 0, "only drives are redone")
     end)
 
     h.test("calendar: moving a drive's end time only touches its own announcement, not the start one", function()

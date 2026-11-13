@@ -22,7 +22,8 @@ local REQUEST_THROTTLE = 10 -- seconds between C_Calendar.OpenCalendar requests
 local SETTLE_SECONDS = 10
 local EVENT_URL = "https://sidequest-guild.com/events/detail/?id="
 
--- Site EventKind -> label and calendar event type, for every kind the import can carry.
+-- Site EventKind -> label and calendar event type, for every kind the import can carry. `locked` kinds take no
+-- sign-ups anywhere, so their calendar event is locked against the game's own sign-up too.
 local KINDS = {
     raid = { label = "Raid", type = "Raid" },
     dungeon = { label = "Dungeon", type = "Dungeon" },
@@ -32,7 +33,7 @@ local KINDS = {
     social = { label = "Social", type = "Meeting" },
     transmog = { label = "Transmog", type = "Meeting" },
     other = { label = "Other" },
-    recruitment = { label = "Recruitment", type = "Meeting" },
+    recruitment = { label = "Recruitment", type = "Other", locked = true },
 }
 
 -- The drive's rules, shortened from the site's rules line: the calendar's description holds 255 letters
@@ -169,11 +170,22 @@ local function findOnCalendar(place)
                 return unreadable
             end
             if title == place.title and e.startTime.hour == place.hour and e.startTime.minute == place.minute then
-                return { monthOffset = monthOffset, day = place.day, index = index }
+                return { monthOffset = monthOffset, day = place.day, index = index, eventType = e.eventType,
+                    isLocked = e.isLocked }
             end
         end
     end
     return nil
+end
+
+-- Whether a locked kind's entry went on unlocked or as another type (made by hand, or by an older version), so it
+-- has to come off and go back on: the game only changes those through the event window.
+local function needsRedo(evt, slot)
+    local kind = KINDS[evt.kind]
+    if not (kind and kind.locked) then
+        return false
+    end
+    return slot.isLocked == false or (slot.eventType ~= nil and slot.eventType ~= eventType(kind.type))
 end
 
 local function samePlace(a, b)
@@ -231,6 +243,8 @@ function Calendar.Plan()
             return nil, "The calendar can't be read right now. Try again out of combat."
         elseif not found then
             adds[#adds + 1] = { op = "add", event = w.event, place = w.place, linkKey = linkKey }
+        elseif not moving and needsRedo(w.event, found) then
+            removes[#removes + 1] = { op = "remove", linkKey = linkKey, place = w.place, slot = found, redo = true }
         elseif not moving then
             linked[linkKey] = w.place -- keep the old position until its entry is removed
         end
@@ -323,7 +337,12 @@ local function remove(action)
     end
     C_Calendar.ContextMenuEventRemove()
     markBusy()
-    SideQuest.Print("Removed " .. describePlace(action.place) .. " from the guild calendar.")
+    if action.redo then
+        SideQuest.Print("Removed " .. describePlace(action.place) .. " to put it back as a locked Other event. "
+            .. "Click Update calendar again to add it.")
+    else
+        SideQuest.Print("Removed " .. describePlace(action.place) .. " from the guild calendar.")
+    end
 end
 
 -- The add waiting on the game's answer: { linkKey, place, sent, errors }. "Added" is only said, and the link only
@@ -360,6 +379,10 @@ local function add(action)
     C_Calendar.EventSetTitle(place.title)
     C_Calendar.EventSetDescription(description(evt))
     setEventType(evt)
+    local kind = KINDS[evt.kind]
+    if kind and kind.locked and C_Calendar.EventSetLocked then
+        C_Calendar.EventSetLocked()
+    end
     C_Calendar.EventSetDate(place.month, place.day, place.year)
     C_Calendar.EventSetTime(place.hour, place.minute)
     if not C_Calendar.CanAddEvent() then
