@@ -165,9 +165,10 @@ After an import, the Sync tab says how many of the site's upcoming events aren't
 click, so it's one event per click. Each goes on as a guild event at the realm's time, with a link to its sign-up
 page (WoW: Forever has no guild announcements). Sign-ups still happen on the site and in the addon; signing up on the
 calendar itself doesn't reach the site. A recruitment drive gets two locked "Other" events, since it takes no
-sign-ups: its title when it starts, and "Ends: <title>" when it ends. A drive event already there unlocked or as
-another type comes off and goes back on right. When the site moves or cancels an event,
-the next clicks take the old one off and put the new one on. Your guild rank needs the right to add guild events.
+sign-ups: its title when it starts, and "Ends: <title>" when it ends. When the site moves an event, or a drive event
+is there unlocked or as another type, it takes two clicks: one opens the event, the next saves it. WoW: Forever
+doesn't let an addon delete a guild event, so a cancelled one is named in chat for you to delete by hand (right-click
+it, Delete). Your guild rank needs the right to add guild events.
 
 ### Commands
 

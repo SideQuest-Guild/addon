@@ -179,7 +179,7 @@ local function findOnCalendar(place)
 end
 
 -- Whether a locked kind's entry went on unlocked or as another type (made by hand, or by an older version), so it
--- has to come off and go back on: the game only changes those through the event window.
+-- has to be opened and saved again with the right settings.
 local function needsRedo(evt, slot)
     local kind = KINDS[evt.kind]
     if not (kind and kind.locked) then
@@ -192,10 +192,12 @@ local function samePlace(a, b)
     return a.title == b.title and placeKey(a) == placeKey(b)
 end
 
---- The changes that would make the guild calendar match the imported events, removals first, then additions by
--- start time. Each action is { op = "add", event, place } or { op = "remove", linkKey, place, slot }.
--- Also records the calendar position of every site event already on it, so a later move can be cleaned up even when
--- another officer added it. Returns nil and a reason when the calendar can't be planned against.
+--- The changes that would make the guild calendar match the imported events: removals, then edits, then additions
+-- by start time. Each action is { op = "add", event, place }, { op = "edit", linkKey, event, place, slot, from }
+-- (the entry at `slot`, now at `from`, saved again at `place`) or { op = "remove", linkKey, place, slot }. A moved
+-- event is edited in place rather than removed and added, since WoW: Forever doesn't let an addon delete a guild
+-- event. Also records the calendar position of every site event already on it, so a later move can be followed even
+-- when another officer added it. Returns nil and a reason when the calendar can't be planned against.
 function Calendar.Plan()
     if not Calendar.IsAvailable() then
         return nil, "This client has no guild calendar."
@@ -222,31 +224,35 @@ function Calendar.Plan()
         return a.place.at < b.place.at
     end)
 
-    local removes, adds = {}, {}
+    local removes, edits, adds = {}, {}, {}
     local seen = {}
     for _, w in ipairs(wanted) do
         local linkKey = w.linkKey
         seen[linkKey] = true
         local link = linked[linkKey]
-        local moving = false
+        local old = nil
         if link and not samePlace(link, w.place) and link.at and link.at >= cutoff then
-            local slot = findOnCalendar(link)
-            if slot == unreadable then
+            old = findOnCalendar(link)
+            if old == unreadable then
                 return nil, "The calendar can't be read right now. Try again out of combat."
-            elseif slot then
-                removes[#removes + 1] = { op = "remove", linkKey = linkKey, place = link, slot = slot }
-                moving = true
             end
         end
         local found = findOnCalendar(w.place)
         if found == unreadable then
             return nil, "The calendar can't be read right now. Try again out of combat."
+        elseif found and old then
+            -- on at both times: the old one has to go, by hand if the game won't let the addon delete it
+            removes[#removes + 1] = { op = "remove", linkKey = linkKey, place = link, slot = old }
+        elseif old then
+            edits[#edits + 1] = { op = "edit", linkKey = linkKey, event = w.event, place = w.place, slot = old,
+                from = link }
         elseif not found then
             adds[#adds + 1] = { op = "add", event = w.event, place = w.place, linkKey = linkKey }
-        elseif not moving and needsRedo(w.event, found) then
-            removes[#removes + 1] = { op = "remove", linkKey = linkKey, place = w.place, slot = found, redo = true }
-        elseif not moving then
-            linked[linkKey] = w.place -- keep the old position until its entry is removed
+        elseif needsRedo(w.event, found) then
+            edits[#edits + 1] = { op = "edit", linkKey = linkKey, event = w.event, place = w.place, slot = found,
+                from = w.place }
+        else
+            linked[linkKey] = w.place
         end
     end
 
@@ -264,6 +270,9 @@ function Calendar.Plan()
     end
 
     local actions = removes
+    for _, a in ipairs(edits) do
+        actions[#actions + 1] = a
+    end
     for _, a in ipairs(adds) do
         actions[#actions + 1] = a
     end
@@ -326,28 +335,26 @@ local function describePlace(place)
     return place.title .. " (" .. placeKey(place) .. ")"
 end
 
+-- WoW: Forever doesn't let an addon delete a guild event (ContextMenuEventCanRemove answers false even for the guild
+-- master), so this mostly tells the officer to delete it by hand; it still deletes where a client allows it.
 local function remove(action)
     local s = action.slot
     C_Calendar.ContextMenuSelectEvent(s.monthOffset, s.day, s.index)
-    -- Either way the link is done: removed, or left to the officers whose rank can remove it.
+    -- Either way the link is done: removed, or left for an officer to delete by hand.
     links()[action.linkKey] = nil
     if not C_Calendar.ContextMenuEventCanRemove(s.monthOffset, s.day, s.index) then
-        SideQuest.Print("Your guild rank can't remove " .. describePlace(action.place) .. " from the calendar.")
+        SideQuest.Print("The game doesn't let addons delete guild events. Delete " .. describePlace(action.place)
+            .. " by hand: right-click it on the calendar and choose Delete.")
         return
     end
     C_Calendar.ContextMenuEventRemove()
     markBusy()
-    if action.redo then
-        SideQuest.Print("Removed " .. describePlace(action.place) .. " to put it back as a locked Other event. "
-            .. "Click Update calendar again to add it.")
-    else
-        SideQuest.Print("Removed " .. describePlace(action.place) .. " from the guild calendar.")
-    end
+    SideQuest.Print("Removed " .. describePlace(action.place) .. " from the guild calendar.")
 end
 
--- The add waiting on the game's answer: { linkKey, place, sent, errors }. "Added" is only said, and the link only
--- kept, once the game confirms; refusals (CALENDAR_UPDATE_ERROR, which can fire during AddEvent itself) are
--- gathered into one line naming what was refused.
+-- The add or edit waiting on the game's answer: { linkKey, place, verb, sent, errors }. "Added"/"Updated" is only
+-- said, and the link only kept, once the game confirms; refusals (CALENDAR_UPDATE_ERROR, which can fire during
+-- AddEvent itself) are gathered into one line naming what was refused.
 Calendar.pendingAdd = nil
 
 local function finishAdd(ok)
@@ -358,24 +365,21 @@ local function finishAdd(ok)
     Calendar.pendingAdd = nil
     if ok then
         links()[p.linkKey] = p.place
-        SideQuest.Print("Added " .. describePlace(p.place) .. " to the guild calendar.")
+        SideQuest.Print(p.verb .. " " .. describePlace(p.place) .. (p.verb == "Added" and " to" or " on")
+            .. " the guild calendar.")
     else
         C_Calendar.CloseEvent()
         Calendar.busyUntil = 0
         SideQuest.Print("The calendar refused " .. describePlace(p.place) .. ": " .. table.concat(p.errors, " "))
         -- what was sent, so the Debug tab shows whether the game dropped it or disliked it
-        SideQuest.LogDebug({ kind = "calendar", event = "AddEvent", message = table.concat(p.errors, " ")
-            .. " | sent " .. p.sent })
+        SideQuest.LogDebug({ kind = "calendar", event = p.verb == "Added" and "AddEvent" or "UpdateEvent",
+            message = table.concat(p.errors, " ") .. " | sent " .. p.sent })
     end
     SideQuest.Fire("SQ_CALENDAR_CHANGED")
 end
 
-local function add(action)
-    local evt, place = action.event, action.place
-    -- as Blizzard's calendar does before creating one: drop any event still open, so these settings land on the
-    -- new one. A guild event with sign-up: the only guild kind WoW: Forever has.
-    C_Calendar.CloseEvent()
-    C_Calendar.CreateGuildSignUpEvent()
+-- Everything the site decides about a calendar event, onto the one the game has open (new or being edited).
+local function fill(evt, place)
     C_Calendar.EventSetTitle(place.title)
     C_Calendar.EventSetDescription(description(evt))
     setEventType(evt)
@@ -385,24 +389,77 @@ local function add(action)
     end
     C_Calendar.EventSetDate(place.month, place.day, place.year)
     C_Calendar.EventSetTime(place.hour, place.minute)
-    if not C_Calendar.CanAddEvent() then
-        C_Calendar.CloseEvent()
-        SideQuest.Print("Your guild rank can't add guild calendar events. A rank with calendar rights has to do this.")
-        return
-    end
+end
+
+-- Send the open event with `send` (AddEvent or UpdateEvent) and wait for the game's answer.
+local function submit(action, verb, send)
+    local place = action.place
     Calendar.pendingAdd = {
-        linkKey = action.linkKey, place = place, errors = {},
+        linkKey = action.linkKey, place = place, verb = verb, errors = {},
         sent = string.format("%q %04d-%02d-%02d %02d:%02d", place.title, place.year, place.month, place.day,
             place.hour, place.minute),
     }
-    Calendar.addingNow = true -- refusals raised inside AddEvent itself are handled right below
-    C_Calendar.AddEvent()
+    Calendar.addingNow = true -- refusals raised inside the send itself are handled right below
+    send()
     Calendar.addingNow = false
     if Calendar.pendingAdd and #Calendar.pendingAdd.errors > 0 then
         finishAdd(false) -- refused on the spot
         return
     end
     markBusy()
+end
+
+local function add(action)
+    -- as Blizzard's calendar does before creating one: drop any event still open, so these settings land on the
+    -- new one. A guild event with sign-up: the only guild kind WoW: Forever has.
+    C_Calendar.CloseEvent()
+    C_Calendar.CreateGuildSignUpEvent()
+    fill(action.event, action.place)
+    if not C_Calendar.CanAddEvent() then
+        C_Calendar.CloseEvent()
+        SideQuest.Print("Your guild rank can't add guild calendar events. A rank with calendar rights has to do this.")
+        return
+    end
+    submit(action, "Added", C_Calendar.AddEvent)
+end
+
+-- The event the last click opened for editing: { linkKey, title, place }, saved by the next click.
+Calendar.openEdit = nil
+
+-- Whether the event the game has open is still the one `o` opened (another may have been opened since).
+local function stillOpen(o)
+    local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo()
+    local t = info and info.time
+    if not t or SideQuest.Unsecret(info.title) ~= o.place.title then
+        return false
+    end
+    return t.year == o.place.year and t.month == o.place.month and t.monthDay == o.place.day
+        and t.hour == o.place.hour and t.minute == o.place.minute
+end
+
+-- Editing takes two clicks, as in the game's own event window: the first opens the event (the game loads it and
+-- answers CALENDAR_OPEN_EVENT), the second saves the site's settings onto it.
+local function edit(action)
+    local o = Calendar.openEdit
+    Calendar.openEdit = nil
+    if o and o.linkKey == action.linkKey and samePlace(o.place, action.from) and stillOpen(o) then
+        if C_Calendar.EventCanEdit and not C_Calendar.EventCanEdit() then
+            C_Calendar.CloseEvent()
+            SideQuest.Print("Your guild rank can't edit " .. describePlace(action.from) .. ".")
+            return
+        end
+        fill(action.event, action.place)
+        submit(action, "Updated", function()
+            C_Calendar.UpdateEvent()
+            C_Calendar.CloseEvent()
+        end)
+        return
+    end
+    C_Calendar.CloseEvent()
+    local s = action.slot
+    C_Calendar.OpenEvent(s.monthOffset, s.day, s.index)
+    Calendar.openEdit = { linkKey = action.linkKey, place = action.from }
+    SideQuest.Print("Opened " .. describePlace(action.from) .. " to update it. Click Update calendar again to save it.")
 end
 
 --- Make the next change the plan calls for. Must run inside a click or key press: the game refuses
@@ -432,6 +489,8 @@ function Calendar.Step()
     end
     if action.op == "remove" then
         remove(action)
+    elseif action.op == "edit" then
+        edit(action)
     else
         add(action)
     end

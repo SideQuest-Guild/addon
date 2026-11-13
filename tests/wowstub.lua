@@ -783,9 +783,11 @@ function WowStub.ResetCalendar()
         -- hour, minute }
         textures = {}, -- eventType -> list of { title }
         canAdd = true,
-        canRemove = true,
+        canRemove = false, -- WoW: Forever: an addon can't delete a guild event, even the guild master's
+        canEdit = true,
         candidate = nil,
         selected = nil,
+        editing = nil, -- the calendar entry OpenEvent opened; `candidate` holds its unsaved settings
         addCalls = 0,
         openCalendarCalls = 0,
         refuseWith = nil, -- list of CALENDAR_ERROR_* names AddEvent raises (as CALENDAR_UPDATE_ERROR) instead of adding
@@ -891,8 +893,39 @@ C_Calendar = {
         table.insert(WowStub.calendar.events, WowStub.calendar.candidate)
         WowStub.calendar.candidate = nil
     end,
+    OpenEvent = function(offset, day, index)
+        local e = dayEvents(offset, day)[index]
+        WowStub.calendar.editing = e
+        WowStub.calendar.candidate = {}
+        for k, v in pairs(e) do
+            WowStub.calendar.candidate[k] = v
+        end
+    end,
+    GetEventInfo = function()
+        local c = WowStub.calendar.candidate
+        if not c then
+            return nil
+        end
+        return { title = c.title, time = { year = c.year, month = c.month, monthDay = c.day, hour = c.hour,
+            minute = c.minute } }
+    end,
+    EventCanEdit = function()
+        return WowStub.calendar.canEdit
+    end,
+    UpdateEvent = function()
+        if WowStub.calendar.refuseWith then
+            for _, reason in ipairs(WowStub.calendar.refuseWith) do
+                SideQuest.Fire("CALENDAR_UPDATE_ERROR", reason)
+            end
+            return
+        end
+        for k, v in pairs(WowStub.calendar.candidate) do
+            WowStub.calendar.editing[k] = v
+        end
+    end,
     CloseEvent = function()
         WowStub.calendar.candidate = nil
+        WowStub.calendar.editing = nil
     end,
     IsActionPending = function()
         return false

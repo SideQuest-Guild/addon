@@ -143,7 +143,7 @@ return function(h)
         h.assertEq(byTitle["Azuregos hunt"].textureIndex, nil, "no texture set")
     end)
 
-    h.test("calendar: a moved event's old announcement comes off and the new one goes on", function()
+    h.test("calendar: a moved event is edited in place over two clicks, not deleted and added", function()
         reset()
         local evt = { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) }
         SideQuestDB.events = { evt }
@@ -151,16 +151,35 @@ return function(h)
         evt.starts_at = utcAt(3, 20)
 
         local plan = Calendar.Plan()
-        h.assertEq(#plan, 2, "remove then add")
-        h.assertEq(plan[1].op, "remove", "removal first")
+        h.assertEq(#plan, 1, "one change")
+        h.assertEq(plan[1].op, "edit", "an edit")
         step()
+        h.assertTrue(lastLine():find("Opened Molten Core", 1, true) ~= nil, "the first click opens it")
+        h.assertEq(WowStub.calendar.events[1].hour, 19, "nothing saved yet")
         step()
-        h.assertEq(#WowStub.calendar.events, 1, "only the moved announcement is left")
+        h.assertEq(#WowStub.calendar.events, 1, "still one event")
         h.assertEq(WowStub.calendar.events[1].hour, 20, "at the new time")
+        h.assertTrue(lastLine():find("Updated Molten Core", 1, true) ~= nil, "the second click saves it")
         h.assertEq(#Calendar.Plan(), 0, "in sync")
     end)
 
-    h.test("calendar: a cancelled event comes off; a past one stays as history", function()
+    h.test("calendar: an edit whose open event was swapped out opens it again instead of saving onto the wrong one", function()
+        reset()
+        local evt = { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) }
+        SideQuestDB.events = { evt }
+        step()
+        evt.starts_at = utcAt(3, 20)
+        step() -- opens Molten Core
+        WowStub.calendar.candidate = { title = "Someone's alt run", year = 2000, month = 1, day = 1, hour = 1,
+            minute = 0 } -- an officer opened another event in the game's window
+        step()
+        h.assertEq(WowStub.calendar.events[1].hour, 19, "nothing saved onto the other event or this one")
+        h.assertTrue(lastLine():find("Opened Molten Core", 1, true) ~= nil, "opened again")
+        step()
+        h.assertEq(WowStub.calendar.events[1].hour, 20, "then saved")
+    end)
+
+    h.test("calendar: a cancelled event is left for an officer to delete by hand; a past one stays as history", function()
         reset()
         SideQuestDB.events = {
             { id = "cancelled", title = "Onyxia", kind = "raid", starts_at = utcAt(2, 19) },
@@ -173,14 +192,23 @@ return function(h)
         WowStub.Advance(2 * HOUR) -- Zul'Gurub has started; the next import drops it, and Onyxia was cancelled
         SideQuestDB.events = {}
         step()
-        h.assertEq(#WowStub.calendar.events, 1, "one removed")
-        h.assertEq(WowStub.calendar.events[1].title, "Zul'Gurub", "the past event stays on the calendar")
+        h.assertTrue(lastLine():find("Delete Onyxia", 1, true) ~= nil, "says to delete it by hand: " .. lastLine())
         h.assertEq(next(SideQuestDB.calendarLinks), nil, "no links left")
         step()
-        h.assertTrue(lastLine():find("already matches") ~= nil, "nothing more to do")
+        h.assertTrue(lastLine():find("already matches") ~= nil, "said once, then nothing more to do")
     end)
 
-    h.test("calendar: adopts another officer's announcement, then still cleans it up when the event moves", function()
+    h.test("calendar: a cancelled event comes off where the client lets an addon delete it", function()
+        reset()
+        WowStub.calendar.canRemove = true
+        SideQuestDB.events = { { id = "cancelled", title = "Onyxia", kind = "raid", starts_at = utcAt(2, 19) } }
+        step()
+        SideQuestDB.events = {}
+        step()
+        h.assertEq(#WowStub.calendar.events, 0, "removed")
+    end)
+
+    h.test("calendar: adopts another officer's announcement, then still moves it when the event moves", function()
         reset()
         local startsAt = utcAt(2, 19)
         local p = realmDate(startsAt)
@@ -327,7 +355,7 @@ return function(h)
         h.assertEq(next(SideQuestDB.calendarLinks), "drive-1:end", "linked under the end key only")
     end)
 
-    h.test("calendar: a drive event put on as Meeting and unlocked comes off, then goes back on locked as Other", function()
+    h.test("calendar: a drive event put on as Meeting and unlocked is edited in place to a locked Other event", function()
         reset()
         local endsAt = utcAt(4, 19)
         local p = realmDate(endsAt)
@@ -338,11 +366,9 @@ return function(h)
             starts_at = WowStub.time - DAY, ends_at = endsAt } }
 
         step()
-        h.assertEq(#WowStub.calendar.events, 0, "the old one is off")
-        h.assertTrue(lastLine():find("locked Other event", 1, true) ~= nil, "says why it came off")
-        WowStub.time = WowStub.time + 10 -- past the busy wait
+        h.assertTrue(lastLine():find("Opened Ends: Spring Recruitment", 1, true) ~= nil, "opened to fix it")
         step()
-        h.assertEq(#WowStub.calendar.events, 1, "back on")
+        h.assertEq(#WowStub.calendar.events, 1, "the same event, not a second one")
         h.assertEq(WowStub.calendar.events[1].eventType, Enum.CalendarEventType.Other, "as Other")
         h.assertTrue(WowStub.calendar.events[1].isLocked, "locked")
         h.assertEq(#Calendar.Plan(), 0, "nothing left to do")
@@ -367,7 +393,7 @@ return function(h)
         evt.ends_at = utcAt(16, 20)
 
         local plan = Calendar.Plan()
-        h.assertEq(#plan, 2, "remove then add, for the end announcement only")
+        h.assertEq(#plan, 1, "one edit, for the end event only")
         h.assertEq(plan[1].linkKey, "drive-1:end", "only the end link is touched")
         step()
         step()
