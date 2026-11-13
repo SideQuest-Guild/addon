@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.0 (2026-11-13)
+
+### New
+
+- Every member's save file carries their own export, so SideQuest Companion uploads their sign-ups and directory entry on each /reload or logout, with no officer online
+
+
 ## v0.16.0 (2026-11-13)
 
 ### New
