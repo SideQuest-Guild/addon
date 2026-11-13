@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.1 (2026-11-13)
+
+### Fixed
+
+- The Console's tabs narrow to fit the window, so Debug no longer falls off the end
+- Recruitment drives are a contest: whoever brings in the most recruits who stay 7 days wins 1g, and ties each win 1g
+
 ## v0.15.0 (2026-11-13)
 
 ### New
