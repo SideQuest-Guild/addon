@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.1 (2026-11-13)
+
+### Fixed
+
+- Update calendar says Added only once the game confirms it, a refusal shows as one line naming the event, and each add starts from a clean slate like the game's own calendar
+
+
 ## v0.17.0 (2026-11-13)
 
 ### New
