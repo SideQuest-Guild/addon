@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.17.3 (2026-11-13)
+
+### Fixed
+
+- Recruitment drives go on the guild calendar as locked Other events, and a drive event already there as Meeting or unlocked is put back right
+
+
 ## v0.17.2 (2026-11-13)
 
 ### Fixed
