@@ -1238,6 +1238,32 @@ local VIEWS = {
     { name = "console-announce", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Announce") end },
     { name = "console-sync", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Sync") end },
     { name = "console-debug", setup = function() UI.ShowTab("Console"); UI.ShowConsoleSub("Debug") end },
+    -- last: it swaps the imported events for a running recruitment drive (leaderboard, potential recruits)
+    { name = "raids-drive", setup = function()
+        SideQuestDB.events = {
+            { id = "6f708192-a3b4-4a1b-9c2d-3e4f5a6b7c92", title = "Recruitment Drive", kind = "recruitment",
+                starts_at = WowStub.time - 2 * 86400, ends_at = WowStub.time + 12 * 86400, signups = {},
+                recruitment = {
+                    leaders = {
+                        { inviter = "Demo2-Whitemane", invited = 4, counting = 1, qualified = 2 },
+                        { inviter = "Demo3-Whitemane", invited = 3, counting = 2, qualified = 2 },
+                        { inviter = "Demo4-Whitemane", invited = 2, counting = 2, qualified = 0 },
+                    },
+                    recruits = {
+                        { recruit = "Demo9-Whitemane", inviter = "Demo4-Whitemane", status = "counting",
+                            qualifies_at = WowStub.time + 86400 },
+                        { recruit = "Demo10-Whitemane", inviter = "Demo3-Whitemane", status = "counting",
+                            qualifies_at = WowStub.time + 4 * 86400 },
+                        { recruit = "Demo11-Whitemane", inviter = "Demo2-Whitemane", status = "invited" },
+                        { recruit = "Demo12-Whitemane", inviter = "Demo2-Whitemane", status = "qualified" },
+                        { recruit = "Demo13-Whitemane", inviter = "Demo3-Whitemane", status = "disqualified",
+                            reason = "returning" },
+                    },
+                } },
+        }
+        UI.ShowTab("Raids")
+        UI.RefreshRaids()
+    end },
 }
 
 local ALL_NAMES = {}
@@ -1247,6 +1273,7 @@ local function emit(name, root, w, h, scale)
     table.insert(ALL_NAMES, name)
 end
 
+local seededEvents = SideQuestDB.events
 for _, view in ipairs(VIEWS) do
     view.setup()
     if view.name == "console-raid-night" then
@@ -1293,6 +1320,11 @@ for _, view in ipairs(VIEWS) do
     emit(view.name, UI.main, 860, 560, 1)
     emit(view.name .. "-064", UI.main, 860, 560, 0.64)
 end
+-- "raids-drive" swapped the events and the tab; the views below render as after "console-debug" again
+SideQuestDB.events = seededEvents
+UI.RefreshRaids()
+UI.ShowTab("Console")
+UI.ShowConsoleSub("Debug")
 
 -- bid popup (own top-level frame, not a main-window tab)
 UI.ShowBidPopup("item:30896:Demo Glory of the Defender", 30)

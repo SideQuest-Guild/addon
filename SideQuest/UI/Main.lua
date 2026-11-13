@@ -143,6 +143,71 @@ local NO_SIGNUP_KINDS = { recruitment = true }
 -- The site's rules line, shown in place of sign-up controls for a drive.
 local RECRUITMENT_RULES_LINE = "Invite new players to the guild. Whoever brings in the most recruits who stay 7 days "
     .. "and reach level 10 wins 1g, and ties each win 1g. Payouts go out a week after the drive ends."
+-- Why a drive recruit doesn't count (site DriveRecruitReason), as the site's drive page words it.
+local DRIVE_REASON_TEXT = {
+    returning = "was in the guild before", own_alt = "inviter's own alt", left = "left during the week",
+    low_level = "below level 10", never_joined = "never joined",
+}
+local DRIVE_SHOWN_LEADERS, DRIVE_SHOWN_RECRUITS = 5, 8
+local DRIVE_LINE_HEIGHT = 14
+
+local function driveRecruitState(r, t)
+    if r.status == "qualified" then
+        return "qualified"
+    elseif r.status == "counting" then
+        if not r.qualifies_at then
+            return "potential"
+        end
+        local days = math.max(0, math.ceil((r.qualifies_at - t) / 86400))
+        return string.format("potential, %d day%s left", days, days == 1 and "" or "s")
+    elseif r.status == "disqualified" then
+        return "doesn't count: " .. (DRIVE_REASON_TEXT[r.reason] or "left")
+    end
+    return "invited, not joined yet"
+end
+
+--- A drive's leaderboard and recruits as text lines, from the import's `recruitment` block. "Potential" recruits
+-- joined and are still inside their 7 days; the leader(s) with the most qualified recruits are marked.
+local function driveLines(evt, t)
+    local drive = evt.recruitment
+    if type(drive) ~= "table" then
+        return { "The leaderboard comes with the next site import." }
+    end
+    local lines = { "Leaderboard" }
+    local leaders = drive.leaders or {}
+    if #leaders == 0 then
+        lines[#lines + 1] = "   No invites yet."
+    end
+    local top = 0
+    for _, l in ipairs(leaders) do
+        top = math.max(top, l.qualified or 0)
+    end
+    for i = 1, math.min(#leaders, DRIVE_SHOWN_LEADERS) do
+        local l = leaders[i]
+        lines[#lines + 1] = string.format("   %d. %s: %d qualified, %d potential, %d invited%s", i,
+            tostring(l.inviter), l.qualified or 0, l.counting or 0, l.invited or 0,
+            (top > 0 and l.qualified == top) and "  (leading)" or "")
+    end
+    if #leaders > DRIVE_SHOWN_LEADERS then
+        lines[#lines + 1] = string.format("   +%d more", #leaders - DRIVE_SHOWN_LEADERS)
+    end
+    local recruits = drive.recruits or {}
+    if #recruits > 0 then
+        lines[#lines + 1] = "Recruits"
+        for i = 1, math.min(#recruits, DRIVE_SHOWN_RECRUITS) do
+            local r = recruits[i]
+            lines[#lines + 1] = string.format("   %s (invited by %s): %s", tostring(r.recruit), tostring(r.inviter),
+                driveRecruitState(r, t))
+        end
+        if #recruits > DRIVE_SHOWN_RECRUITS then
+            lines[#lines + 1] = string.format("   +%d more at sidequest-guild.com", #recruits - DRIVE_SHOWN_RECRUITS)
+        end
+    end
+    if (SideQuestDB.eventsAt or 0) > 0 then
+        lines[#lines + 1] = "As of " .. date("%a %b %d, %H:%M", SideQuestDB.eventsAt)
+    end
+    return lines
+end
 
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
@@ -3224,19 +3289,36 @@ function UI.RefreshRaids()
             row.placeBtn:SetPoint("LEFT", row.inviteBtn, "RIGHT", 8, 0)
             row.officerReason = makeFontString(row, FONT_BODY, 10, C.errorC, "LEFT")
             row.officerReason:SetPoint("TOPLEFT", row.inviteBtn, "BOTTOMLEFT", 0, -2)
+            -- a drive's leaderboard and recruits, under its rules line
+            row.drive = makeFontString(row, FONT_BODY, 11, C.mist, "LEFT")
+            row.drive:SetPoint("TOPLEFT", row.roleCounts, "BOTTOMLEFT", 0, -8)
+            row.drive:SetWidth(500)
+            row.drive:SetWordWrap(true)
             chamber.rows[i] = row
         end
         local isRoleKind = ROLE_KINDS[evt.kind] == true
         local isNoSignup = NO_SIGNUP_KINDS[evt.kind] == true
         local showsOfficerActions = isOfficer and isRoleKind
-        -- title..answer buttons end at 73, the officer reason line at 111; a no-signup drive just needs room
-        -- for the wrapped rules line under its dates.
-        local rowHeight = showsOfficerActions and 112 or (isNoSignup and 96 or 76)
+        local driveLineCount = 0
+        if isNoSignup then
+            local lines = driveLines(evt, now())
+            driveLineCount = #lines
+            row.drive:SetText(table.concat(lines, "\n"))
+            row.drive:SetHeight(driveLineCount * DRIVE_LINE_HEIGHT)
+        end
+        row.drive:SetShown(isNoSignup)
+        -- title..answer buttons end at 73, the officer reason line at 111; a drive's wrapped rules line ends near
+        -- 72, then its leaderboard/recruit lines follow 8 below.
+        local rowHeight = showsOfficerActions and 112 or 76
+        if isNoSignup then
+            rowHeight = 88 + driveLineCount * DRIVE_LINE_HEIGHT
+        end
         row:SetHeight(rowHeight)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", 0, -y)
         y = y + rowHeight + 10
-        local isOpen = (evt.starts_at or 0) > now()
+        -- a running drive is still open: invites count until it ends
+        local isOpen = (evt.starts_at or 0) > now() or (isNoSignup and (evt.ends_at or 0) > now())
         row.mark:SetAtlas(isOpen and "QuestNormal" or "QuestTurnin")
         row.title:SetText(evt.title or "Event")
         if isNoSignup then
@@ -3323,9 +3405,14 @@ function UI.RefreshRaids()
             row:SetPoint("TOPLEFT", 0, -y)
             y = y + 40
             row.title:SetText(evt.title or "Event")
-            row.meta:SetText(string.format("%s  --  %s  --  Going %d, Maybe %d, Can't %d",
-                EVENT_KIND_LABELS[evt.kind] or "Event", date("%a %b %d, %H:%M", evt.starts_at or now()),
-                evt.going or 0, evt.maybe or 0, evt.cant or 0))
+            if NO_SIGNUP_KINDS[evt.kind] then
+                row.meta:SetText(string.format("%s  --  %s to %s", EVENT_KIND_LABELS[evt.kind] or "Event",
+                    date("%a %b %d", evt.starts_at or now()), date("%a %b %d", evt.ends_at or evt.starts_at or now())))
+            else
+                row.meta:SetText(string.format("%s  --  %s  --  Going %d, Maybe %d, Can't %d",
+                    EVENT_KIND_LABELS[evt.kind] or "Event", date("%a %b %d, %H:%M", evt.starts_at or now()),
+                    evt.going or 0, evt.maybe or 0, evt.cant or 0))
+            end
             row:Show()
         end
     elseif chamber.pastHeading then

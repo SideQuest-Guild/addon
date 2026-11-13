@@ -25,13 +25,19 @@ function Events.EverReceived()
     return (SideQuestDB.eventsAt or 0) > 0 or #Events.Get() > 0
 end
 
+-- An event is still upcoming until 6h after it starts, or until it ends when that is later (a recruitment drive
+-- runs for weeks).
+local function isUpcoming(evt, t)
+    return (evt.starts_at or 0) >= t - Events.UPCOMING_GRACE or (evt.ends_at or 0) > t
+end
+
 --- Imported events that haven't passed yet, soonest first. The stored list
--- only changes on an import, so events that started since then drop out here.
+-- only changes on an import, so events that ended since then drop out here.
 function Events.Upcoming()
-    local cutoff = now() - Events.UPCOMING_GRACE
+    local t = now()
     local out = {}
     for _, evt in ipairs(Events.Get()) do
-        if (evt.starts_at or 0) >= cutoff then
+        if isUpcoming(evt, t) then
             out[#out + 1] = evt
         end
     end
@@ -46,7 +52,7 @@ local function compactPast(evt)
         end
     end
     return {
-        id = evt.id, title = evt.title, kind = evt.kind, starts_at = evt.starts_at, size = evt.size,
+        id = evt.id, title = evt.title, kind = evt.kind, starts_at = evt.starts_at, ends_at = evt.ends_at, size = evt.size,
         going = evt.going or counts.signed, maybe = evt.maybe or counts.tentative, cant = evt.cant or counts.absent,
     }
 end
@@ -54,10 +60,10 @@ end
 --- Events that already happened, newest first: the site's recent past events
 -- plus imported ones that have passed since the import.
 function Events.Past()
-    local cutoff = now() - Events.UPCOMING_GRACE
+    local t = now()
     local out, seen = {}, {}
     for _, evt in ipairs(Events.Get()) do
-        if (evt.starts_at or 0) < cutoff and evt.id and not seen[evt.id] then
+        if not isUpcoming(evt, t) and evt.id and not seen[evt.id] then
             seen[evt.id] = true
             out[#out + 1] = compactPast(evt)
         end

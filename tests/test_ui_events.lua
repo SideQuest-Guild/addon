@@ -93,4 +93,53 @@ return function(h)
         h.assertTrue(not row.inviteBtn:IsShown(), "no invite button for a drive")
         h.assertTrue(not row.placeBtn:IsShown(), "no place-groups button for a drive")
     end)
+
+    h.test("events tab: a running drive stays listed until it ends, with its leaderboard and potential recruits", function()
+        local chamber = open()
+        SideQuestDB.standings.generated_at = 1793500000
+        SideQuestDB.eventsAt = WowStub.time - 3600
+        SideQuestDB.events = {
+            { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+                starts_at = WowStub.time - 2 * 86400, ends_at = WowStub.time + 12 * 86400, signups = {},
+                recruitment = {
+                    leaders = {
+                        { inviter = "Thrall-Doomhammer", invited = 3, counting = 1, qualified = 2 },
+                        { inviter = "Jaina-Proudmoore", invited = 4, counting = 3, qualified = 0 },
+                    },
+                    recruits = {
+                        { recruit = "Newbie-Fresh", inviter = "Jaina-Proudmoore", status = "counting",
+                            qualifies_at = WowStub.time + 3 * 86400 - 60 },
+                        { recruit = "Leaver-Gone", inviter = "Thrall-Doomhammer", status = "disqualified",
+                            reason = "left" },
+                    },
+                } },
+        }
+        h.assertEq(#SideQuest.Events.Upcoming(), 1, "a drive past its 6h start grace is still upcoming")
+        h.assertEq(#SideQuest.Events.Past(), 0, "and not past")
+        SideQuest.UI.RefreshRaids()
+        local text = chamber.rows[1].drive:GetText()
+        h.assertTrue(chamber.rows[1].drive:IsShown(), "drive lines shown")
+        h.assertTrue(text:find("1. Thrall-Doomhammer: 2 qualified, 1 potential, 3 invited  (leading)", 1, true) ~= nil,
+            "leader with the most qualified is marked: " .. text)
+        h.assertTrue(text:find("2. Jaina-Proudmoore: 0 qualified, 3 potential, 4 invited\n", 1, true) ~= nil,
+            "others are not marked: " .. text)
+        h.assertTrue(text:find("Newbie-Fresh (invited by Jaina-Proudmoore): potential, 3 days left", 1, true) ~= nil,
+            "potential recruit with days left: " .. text)
+        h.assertTrue(text:find("Leaver-Gone (invited by Thrall-Doomhammer): doesn't count: left during the week", 1,
+            true) ~= nil, "disqualified recruit with reason: " .. text)
+    end)
+
+    h.test("events tab: an ended drive moves to past events without sign-up counts", function()
+        local chamber = open()
+        SideQuestDB.standings.generated_at = 1793500000
+        SideQuestDB.events = {
+            { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+                starts_at = WowStub.time - 15 * 86400, ends_at = WowStub.time - 86400, signups = {} },
+        }
+        h.assertEq(#SideQuest.Events.Upcoming(), 0, "an ended drive is not upcoming")
+        SideQuest.UI.RefreshRaids()
+        local meta = chamber.pastRows[1].meta:GetText()
+        h.assertTrue(meta:find("Going", 1, true) == nil and meta:find("Recruitment Drive", 1, true) ~= nil,
+            "past drive shows its dates only: " .. meta)
+    end)
 end

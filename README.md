@@ -49,7 +49,7 @@ The full rules and prices are on the [Ledger page](https://sidequest-guild.com/l
 | Guild | The roster, with alts under their main. Search it, filter by class, rank or online, and whisper or invite from it. Whisper opens a small SideQuest box: replies come back in chat as usual. Online guildmates show in green, offline in grey. |
 | Crafters | Search a recipe or profession to see who can make it, online people first; every member with a profession and their skill, including guildies who are offline or don't run the addon, from the site's last sync; and who has Transmute, Mooncloth and other craft cooldowns ready (addon-tracked members only). |
 | Market | What guildmates sell and want to buy, open requests for materials, and who holds an item, with the guild's lowest auction-house price next to each listing when one's known. Mine lists and edits your own. |
-| Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. A recruitment drive shows its dates and how recruiting pays instead of a sign-up. |
+| Events | Upcoming events, how many have signed up for each role, and your own answer, then the last 30 days' past events with how many went. A recruitment drive stays listed until it ends and shows its rules, its leaderboard (qualified, potential and invited recruits per inviter) and each recruit's status instead of a sign-up. |
 | Ledger | Everyone's EP, GP and PR, then your own points history and loot. |
 | News | Guild announcements and recent activity. |
 
@@ -63,8 +63,8 @@ Your event sign-ups reach the website the next time an officer syncs. You don't 
 
 During a recruitment drive, invite new players to the guild as usual. Whoever brings in the most recruits who stay 7
 days and reach level 10 wins 1g, and ties each win 1g. Who invited whom comes straight from the guild's own event
-log, so you don't need the addon to win. Payouts go out a week after the drive ends; see the site for your drive's
-progress.
+log, so you don't need the addon to win. Payouts go out a week after the drive ends. The Events tab shows the drive's
+leaderboard as of the last site data; "potential" recruits joined and are still inside their 7 days.
 
 If you can come to a raid but the group is full, type `/sq standby`. An officer approves it and you earn EP as if you
 were there.
