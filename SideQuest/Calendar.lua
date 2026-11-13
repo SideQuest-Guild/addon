@@ -1,11 +1,13 @@
 -- SideQuest/Calendar.lua
 -- Puts the site's upcoming events (SideQuestDB.events, from the last import) on the in-game guild calendar as
--- guild announcements, and takes them off again when the site moves or cancels them.
+-- guild events, and takes them off again when the site moves or cancels them. WoW: Forever has no guild
+-- announcements: C_Calendar.CreateGuildAnnouncementEvent creates nothing there, so every setter after it fails
+-- ("Enter a valid date/time", "Enter a title"); a guild event with sign-up is the only guild kind it has.
 --
 -- The game only lets C_Calendar.AddEvent run inside a click or key press, so an officer applies the plan one change
--- per click (Console > Sync, or /sq calendar). Calendar events carry no site id, so an announcement matches a site
+-- per click (Console > Sync, or /sq calendar). Calendar events carry no site id, so a calendar event matches a site
 -- event by its title and its start in realm time. SideQuestDB.calendarLinks remembers where each site event was last
--- seen on the calendar, which is how a moved or cancelled event's old announcement is found and removed.
+-- seen on the calendar, which is how a moved or cancelled event's old entry is found and removed.
 
 SideQuest = SideQuest or {}
 SideQuest.Calendar = {}
@@ -117,13 +119,13 @@ local function description(evt)
     end
     local kind = KINDS[evt.kind]
     return (kind and kind.label or "Guild event") .. " from sidequest-guild.com. Sign up in the SideQuest addon (/sq) or at "
-        .. EVENT_URL .. tostring(evt.id)
+        .. EVENT_URL .. tostring(evt.id) .. " (sign-ups here on the calendar don't reach the site)."
 end
 
--- One placement is { linkKey, event, place }; `linkKey` is what SideQuestDB.calendarLinks keys the announcement
+-- One placement is { linkKey, event, place }; `linkKey` is what SideQuestDB.calendarLinks keys the calendar event
 -- under, so a moved or cancelled one is found and removed by the right key later. Every event wants one placement
 -- (its title at starts_at); a recruitment drive wants a second, independent one ("Ends: <title>" at ends_at,
--- contract: two guild announcements per drive), still planned even once starts_at itself is in the past.
+-- contract: two calendar entries per drive), still planned even once starts_at itself is in the past.
 local function placementsFor(evt, offset, cutoff, maxKey)
     local out = {}
     local function addPlacement(linkKey, text, at)
@@ -150,14 +152,18 @@ end
 
 local unreadable = {} -- sentinel: the calendar holds secret values right now
 
--- Where a guild announcement with this title and start sits on the calendar: (monthOffset, day, index), nil when
--- it isn't there, or `unreadable` when the calendar can't be read right now.
-local function findAnnouncement(place)
+-- The guild calendar kinds a site event can sit on the calendar as: guild events (all Forever has), and guild
+-- announcements left by older versions or other clients.
+local GUILD_KINDS = { GUILD_EVENT = true, GUILD_ANNOUNCEMENT = true }
+
+-- Where a guild entry with this title and start sits on the calendar: (monthOffset, day, index), nil when it isn't
+-- there, or `unreadable` when the calendar can't be read right now.
+local function findOnCalendar(place)
     local shown = C_Calendar.GetMonthInfo(0)
     local monthOffset = (place.year * 12 + place.month) - (shown.year * 12 + shown.month)
     for index = 1, C_Calendar.GetNumDayEvents(monthOffset, place.day) do
         local e = C_Calendar.GetDayEvent(monthOffset, place.day, index)
-        if e and e.calendarType == "GUILD_ANNOUNCEMENT" then
+        if e and GUILD_KINDS[e.calendarType] then
             local title = SideQuest.Unsecret(e.title)
             if title == nil then
                 return unreadable
@@ -212,7 +218,7 @@ function Calendar.Plan()
         local link = linked[linkKey]
         local moving = false
         if link and not samePlace(link, w.place) and link.at and link.at >= cutoff then
-            local slot = findAnnouncement(link)
+            local slot = findOnCalendar(link)
             if slot == unreadable then
                 return nil, "The calendar can't be read right now. Try again out of combat."
             elseif slot then
@@ -220,19 +226,19 @@ function Calendar.Plan()
                 moving = true
             end
         end
-        local found = findAnnouncement(w.place)
+        local found = findOnCalendar(w.place)
         if found == unreadable then
             return nil, "The calendar can't be read right now. Try again out of combat."
         elseif not found then
             adds[#adds + 1] = { op = "add", event = w.event, place = w.place, linkKey = linkKey }
         elseif not moving then
-            linked[linkKey] = w.place -- keep the old position until its announcement is removed
+            linked[linkKey] = w.place -- keep the old position until its entry is removed
         end
     end
 
     for linkKey, link in pairs(linked) do
         if not seen[linkKey] then
-            local slot = link.at and link.at >= cutoff and findAnnouncement(link)
+            local slot = link.at and link.at >= cutoff and findOnCalendar(link)
             if slot == unreadable then
                 return nil, "The calendar can't be read right now. Try again out of combat."
             elseif slot then
@@ -348,9 +354,9 @@ end
 local function add(action)
     local evt, place = action.event, action.place
     -- as Blizzard's calendar does before creating one: drop any event still open, so these settings land on the
-    -- new announcement
+    -- new one. A guild event with sign-up: the only guild kind WoW: Forever has.
     C_Calendar.CloseEvent()
-    C_Calendar.CreateGuildAnnouncementEvent()
+    C_Calendar.CreateGuildSignUpEvent()
     C_Calendar.EventSetTitle(place.title)
     C_Calendar.EventSetDescription(description(evt))
     setEventType(evt)

@@ -852,8 +852,13 @@ C_Calendar = {
             startTime = { year = e.year, month = e.month, monthDay = e.day, hour = e.hour, minute = e.minute },
         }
     end,
+    -- WoW: Forever has no guild announcements: the call exists but creates nothing, so the setters after it have
+    -- no event to fill (measured on 1.60.1)
     CreateGuildAnnouncementEvent = function()
-        WowStub.calendar.candidate = { calendarType = "GUILD_ANNOUNCEMENT" }
+        WowStub.calendar.candidate = nil
+    end,
+    CreateGuildSignUpEvent = function()
+        WowStub.calendar.candidate = { calendarType = "GUILD_EVENT" }
     end,
     EventSetTitle = function(title) WowStub.calendar.candidate.title = title end,
     EventSetDescription = function(text) WowStub.calendar.candidate.description = text end,

@@ -162,9 +162,10 @@ The other Console tabs:
 
 After an import, the Sync tab says how many of the site's upcoming events aren't on the in-game calendar yet. Click
 **Update calendar** (or type `/sq calendar`) once for each: the game only lets an addon add a calendar event when you
-click, so it's one event per click. Each goes on as a guild announcement at the realm's time, with a link to its
-sign-up page; sign-ups still happen on the site and in the addon, not in the calendar. A recruitment drive gets two
-announcements: its title when it starts, and "Ends: <title>" when it ends. When the site moves or cancels an event,
+click, so it's one event per click. Each goes on as a guild event at the realm's time, with a link to its sign-up
+page (WoW: Forever has no guild announcements). Sign-ups still happen on the site and in the addon; signing up on the
+calendar itself doesn't reach the site. A recruitment drive gets two events: its title when it starts, and
+"Ends: <title>" when it ends. When the site moves or cancels an event,
 the next clicks take the old one off and put the new one on. Your guild rank needs the right to add guild events.
 
 ### Commands

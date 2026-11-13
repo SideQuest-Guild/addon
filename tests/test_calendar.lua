@@ -1,6 +1,6 @@
 -- tests/test_calendar.lua
--- Calendar.lua: putting the site's events on the in-game guild calendar as guild announcements, in realm time, one
--- change per Step, and taking moved or cancelled events back off.
+-- Calendar.lua: putting the site's events on the in-game guild calendar as guild events (WoW: Forever has no guild
+-- announcements), in realm time, one change per Step, and taking moved or cancelled events back off.
 
 return function(h)
     local Calendar = SideQuest.Calendar
@@ -76,7 +76,7 @@ return function(h)
         h.assertEq(#WowStub.calendar.events, 2, "the site event goes on without waiting")
     end)
 
-    h.test("calendar: a site event goes on as a guild announcement at the realm's local time", function()
+    h.test("calendar: a site event goes on as a guild event at the realm's local time", function()
         reset()
         WowStub.calendar.realmOffset = -6 * HOUR -- realm six hours behind UTC
         local startsAt = utcAt(3, 1, 30) -- 01:30 UTC is 19:30 the evening before on the realm
@@ -87,13 +87,14 @@ return function(h)
         h.assertEq(#WowStub.calendar.events, 1, "one announcement added")
         local e = WowStub.calendar.events[1]
         local want = realmDate(startsAt)
-        h.assertEq(e.calendarType, "GUILD_ANNOUNCEMENT", "a guild announcement, not a sign-up event")
+        h.assertEq(e.calendarType, "GUILD_EVENT", "a guild event: Forever has no guild announcements")
         h.assertEq(e.title, "Molten Core", "title")
         h.assertEq(e.year * 10000 + e.month * 100 + e.day, want.year * 10000 + want.month * 100 + want.day,
             "dated on the realm's calendar day, the day before the UTC date")
         h.assertEq(e.hour, 19, "realm hour")
         h.assertEq(e.minute, 30, "realm minute")
         h.assertTrue(e.description:find("events/detail/?id=evt-1", 1, true) ~= nil, "description links the sign-up page")
+        h.assertTrue(#e.description <= 255, "fits the calendar's 255-letter description box")
     end)
 
     h.test("calendar: once on the calendar, the next step changes nothing", function()
@@ -196,17 +197,21 @@ return function(h)
         h.assertEq(WowStub.calendar.events[1].hour, 21, "at the new time")
     end)
 
-    h.test("calendar: leaves other guild announcements and same-titled events at other times alone", function()
+    h.test("calendar: a guild event someone already made for it is adopted; other entries are left alone", function()
         reset()
         local p = realmDate(utcAt(2, 19))
-        WowStub.calendar.events[1] = { calendarType = "GUILD_ANNOUNCEMENT", title = "Bank day",
+        WowStub.calendar.events[1] = { calendarType = "GUILD_EVENT", title = "Bank day",
             year = p.year, month = p.month, day = p.day, hour = 19, minute = 0 }
         WowStub.calendar.events[2] = { calendarType = "GUILD_EVENT", title = "Molten Core",
-            year = p.year, month = p.month, day = p.day, hour = 19, minute = 0 }
+            year = p.year, month = p.month, day = p.day, hour = 20, minute = 0 }
         SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
         local plan = Calendar.Plan()
-        h.assertEq(#plan, 1, "a sign-up event with the same title doesn't count as ours")
-        h.assertEq(plan[1].op, "add", "adds its own announcement")
+        h.assertEq(#plan, 1, "a same-titled event at another time isn't ours")
+        h.assertEq(plan[1].op, "add", "adds its own")
+
+        WowStub.calendar.events[2].hour = 19 -- an officer made it by hand at the right time
+        h.assertEq(#Calendar.Plan(), 0, "adopted: no duplicate")
+        h.assertEq(#WowStub.calendar.events, 2, "nothing removed")
     end)
 
     h.test("calendar: a rank without calendar rights gets told, and nothing is half-made", function()
