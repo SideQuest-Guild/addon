@@ -84,8 +84,9 @@ return function(h)
         SideQuest.UI.RefreshRaids()
         local row = chamber.rows[1]
         h.assertTrue(row.meta:GetText():find("Recruitment Drive", 1, true) ~= nil, "shows the drive label")
-        h.assertTrue(row.roleCounts:GetText():find("stays 7 days", 1, true) ~= nil,
-            "shows the rules line: " .. row.roleCounts:GetText())
+        local rules = row.roleCounts:GetText() or ""
+        h.assertTrue(rules ~= "" and rules:lower():find("going", 1, true) == nil,
+            "shows the drive's rules, not sign-up counts: " .. rules)
         for _, btn in pairs(row.answers) do
             h.assertTrue(not btn:IsShown(), "no going/maybe/can't button for a drive")
         end

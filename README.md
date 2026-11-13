@@ -61,9 +61,10 @@ auction-house price if a sync has priced it.
 
 Your event sign-ups reach the website the next time an officer syncs. You don't need to do anything else.
 
-During a recruitment drive, invite new players to the guild as usual. You earn 1g for each recruit who stays 7
-days and reaches level 10; who invited whom comes straight from the guild's own event log, so you don't need the
-addon to get paid. Payouts go out a week after the drive ends, see the site for your drive's progress.
+During a recruitment drive, invite new players to the guild as usual. Whoever brings in the most recruits who stay 7
+days and reach level 10 wins 1g, and ties each win 1g. Who invited whom comes straight from the guild's own event
+log, so you don't need the addon to win. Payouts go out a week after the drive ends; see the site for your drive's
+progress.
 
 If you can come to a raid but the group is full, type `/sq standby`. An officer approves it and you earn EP as if you
 were there.
@@ -149,7 +150,7 @@ The other Console tabs:
 | Loot | Bidding and awards, as above. If you aren't master looter, `/sq bid <item link>` opens bidding on any item. |
 | Roster | Reads the guild roster for the website and lists inactive members. |
 | Recruits | An Add recruit form that fills in your target, plus applicants and trials with yes/no votes from officers. |
-| Payouts | Recruitment drive gold owed to inviters, settled a week after each drive ends. Stand at a mailbox and click Mail to send it; nothing sends until then, and a row disappears once it's paid. |
+| Payouts | Recruitment drive winners and their prize, settled a week after each drive ends. Stand at a mailbox and click Mail to send it; nothing sends until then, and a row disappears once it's paid. |
 | Bank | Saves the open guild bank tab's log for the website. |
 | Announce | Posts a message to guild chat and every member's News tab, and to Discord if you tick the box. |
 | Sync | Shows what hasn't been sent to the website yet, with Export and Import buttons. **Update calendar** puts the site's upcoming events on the in-game guild calendar. |

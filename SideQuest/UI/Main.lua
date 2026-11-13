@@ -140,9 +140,9 @@ local ROLE_KINDS = { raid = true, dungeon = true, world_boss = true }
 -- Site NO_SIGNUP_KINDS (events.py): recruitment drives take no sign-up at all (the site rejects one); the Events
 -- tab shows the drive's dates and the recruiting rules line instead of answer buttons.
 local NO_SIGNUP_KINDS = { recruitment = true }
--- Copy.md "Rules line", shown in place of sign-up controls for a drive.
-local RECRUITMENT_RULES_LINE = "Invite new players to the guild. You earn 1g for each recruit who stays 7 days "
-    .. "and reaches level 10. Payouts go out a week after the drive ends."
+-- The site's rules line, shown in place of sign-up controls for a drive.
+local RECRUITMENT_RULES_LINE = "Invite new players to the guild. Whoever brings in the most recruits who stay 7 days "
+    .. "and reach level 10 wins 1g, and ties each win 1g. Payouts go out a week after the drive ends."
 
 local WINDOW_MIN_W, WINDOW_MIN_H = 700, 480
 local WINDOW_DEFAULT_W, WINDOW_DEFAULT_H = 860, 560
@@ -4773,9 +4773,9 @@ function UI.RefreshConsoleRecruits()
     setScrollContentHeight(chamber.scroll, 58 * #recruits)
 end
 
--- Payouts sub-view: recruitment drive gold owed per inviter (contract GameImportRecruitPayout), each mailed in
--- one click while standing at an open mailbox. A row disappears once mailed (Payouts.List() already excludes
--- anything this client has paid).
+-- Payouts sub-view: each settled drive's winner(s) and their 1g prize (contract GameImportRecruitPayout), each
+-- mailed in one click while standing at an open mailbox. A row disappears once mailed (Payouts.List() already
+-- excludes anything this client has paid).
 function UI.BuildConsolePayouts(panel)
     local sub = makeConsoleSub(panel, "Payouts")
     local chamber = createChamber(sub, "SideQuestConsolePayoutsChamber")
@@ -4785,8 +4785,8 @@ function UI.BuildConsolePayouts(panel)
     introLine:SetPoint("TOPLEFT", 14, -10)
     introLine:SetWidth(540)
     introLine:SetWordWrap(true)
-    introLine:SetText("Recruitment drive gold owed to inviters, settled a week after each drive ends. Stand at a "
-        .. "mailbox, then click Mail to send it; nothing sends until then.")
+    introLine:SetText("Recruitment drive winners, settled a week after each drive ends. Stand at a mailbox, then "
+        .. "click Mail to send the prize; nothing sends until then.")
     chamber.introLine = introLine
 
     local scroll, content = buildScroll(chamber.inner, -46)

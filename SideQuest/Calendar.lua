@@ -33,9 +33,10 @@ local KINDS = {
     recruitment = { label = "Recruitment", type = "Meeting" },
 }
 
--- Copy.md "Rules line": shown on the Events tab and in both calendar announcements for a drive.
-local RECRUITMENT_RULES_LINE = "Invite new players to the guild. You earn 1g for each recruit who stays 7 days "
-    .. "and reaches level 10. Payouts go out a week after the drive ends."
+-- The drive's rules, shortened from the site's rules line: the calendar's description holds 255 letters
+-- (Blizzard_Calendar.xml maxLetters) and the site link takes about 80 of them.
+local RECRUITMENT_RULES_LINE = "Most recruits who stay 7 days and reach level 10 wins 1g; ties each win 1g. "
+    .. "Paid a week after the drive ends."
 
 -- Enum.CalendarEventType values, for clients where the Enum table isn't filled in.
 local EVENT_TYPE_FALLBACK = { Raid = 0, Dungeon = 1, PvP = 2, Meeting = 3, Other = 4 }

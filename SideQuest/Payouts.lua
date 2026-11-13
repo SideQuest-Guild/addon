@@ -62,9 +62,10 @@ end
 local function mailBody(row)
     local recruits = row.recruits or {}
     if #recruits == 0 then
-        return "Thanks for recruiting for " .. tostring(row.title or "the drive") .. "."
+        return "You brought in the most recruits in " .. tostring(row.title or "the drive") .. ". Here's your prize!"
     end
-    return "Thanks for recruiting " .. table.concat(recruits, ", ") .. ". They each stayed 7 days!"
+    return "You brought in the most recruits in " .. tostring(row.title or "the drive") .. ": "
+        .. table.concat(recruits, ", ") .. ". Here's your prize!"
 end
 
 --------------------------------------------------------------------------
