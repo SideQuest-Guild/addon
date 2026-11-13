@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.16.0 (2026-11-13)
+
+### New
+
+- Officers get the site's newest data with a /reload: the addon reads it from SideQuest Companion's own SideQuest_Inbox addon instead of waiting for WoW to close
+
+
 ## v0.15.2 (2026-11-13)
 
 ### New
