@@ -47,3 +47,39 @@ To test the workflow without releasing, run it by hand with the tag left blank.
   follows them; don't invent numbers here.
 - Player-facing text says "SQL" for the loot system. Don't rename code, saved-variable keys or wire formats.
 - `AGENTS.md` is in the global gitignore; add it with `git add -f AGENTS.md`.
+
+## The Forever client (checked 2026-11-05 on live build 1.60.1.70790)
+Trust these, in this order, over blog posts and "AI prompt" guides, which lag the client:
+1. The installed game: `/Applications/World of Warcraft/_forever_/` (`Interface/AddOns/SideQuest` is a copy, not
+   a link; saved data is `WTF/Account/<id>/SavedVariables/SideQuest.lua`).
+2. Blizzard's UI source for the build: `Gethe/wow-ui-source`, branch `forever`. In
+   `Blizzard_APIDocumentationGenerated/`, `SecretReturns`, `SecretWhen*` and `HasRestrictions` mark what addons
+   can't read or use.
+3. The in-game global dump: `Ketho/BlizzardInterfaceResources`, branch `forever`, `Resources/GlobalAPI.lua`
+   (functions and Lua built-ins) and `FrameXML.lua`. If a name isn't there, it doesn't exist in game.
+4. warcraft.wiki.gg `Patch_1.60.1/API_changes` and its `/notes` page (Blizzard's notes to addon authors).
+
+Facts that matter here:
+- Interface `16001`. Game type `camelot`, with `forever` as an alias since build 70291. Forever is in the Mainline
+  family with Midnight: `_Mainline.toc` and `[Family]` match both, `_Forever.toc` and `[AllowLoadGameType forever]`
+  match Forever only. In Lua, `WOW_PROJECT_ID == WOW_PROJECT_CAMELOT` (18); it is not 1.
+- Lua 5.1 with `bit`. There is no `os` or `io` table: use `date()`, `time()` and `difftime()`, or
+  `GetServerTime()`. The tests run in LuaJIT, which has `os`, and luacheck's `lua51` std allows it, so neither
+  catches `os.date`.
+- Many old globals are gone without a fallback, among them `GetItemInfo`, `GetSpellInfo`, `InviteUnit`,
+  `ConvertToRaid`, `IsRaidLeader` and `IsPartyLeader` (use `C_Item`, `C_Spell`, `C_PartyInfo` and
+  `UnitIsGroupLeader`). Look a name up in `GlobalAPI.lua` before you use it. `wowstub.lua` fakes whatever we tell
+  it to, and `if InviteUnit then` on a name that doesn't exist turns the feature off without a word.
+- `SendChatMessage`, `ChatFrame_SendTell`, `ChatEdit_InsertLink` and `CombatLogGetCurrentEventInfo` still exist
+  only as Blizzard's deprecated aliases, which load while the CVar `loadDeprecationFallbacks` is 1 (the default).
+  New code uses `C_ChatInfo` and `ChatFrameUtil`.
+- Secrets: `UnitHealth` is always secret. `UnitName`, `UnitGUID`, `UnitClass`, power, auras and cooldowns are
+  secret whenever their restriction is on. Pass values through `SideQuest.Unsecret` (or `issecretvalue`) before you
+  compare, join, save or send them. Creature GUIDs carry scrambled server and spawn IDs (build 70425).
+- `COMBAT_LOG_EVENT_UNFILTERED` is restricted, and registering it from an addon is forbidden. Blizzard ships its
+  own damage meter, cooldown manager and, on Forever only, a swing timer.
+- Trial accounts can't send addon messages (70291). `SendChatMessage` to `SAY`, `YELL` or `EMOTE` needs a hardware
+  event (a click or key press) outside instances.
+- SavedVariables load since build 70009 and persist on live. Read them in `ADDON_LOADED`, never at file scope.
+- Lua errors are silent by default. When testing in game run `/console scriptErrors 1`;
+  `/dump select(4, GetBuildInfo())` and `/dump WOW_PROJECT_ID` show what the client reports.
