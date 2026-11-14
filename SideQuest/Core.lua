@@ -61,6 +61,11 @@ local function defaultDB()
         -- row whose reported elapsed time has grown. Survives `/sq export clear`
         -- (pending.bank doesn't); pruned at 120 days.
         bankSeen = {},
+        -- Bank.lua: per-character running totals of what each player put into and took out of the guild bank,
+        -- built from every log row this client captures. Never cleared by `/sq export clear`. `since` is the
+        -- earliest row counted; players[character] = { gold_in, gold_out, repairs, items_in, items_out,
+        -- last_at, items = { [item_id] = { given, taken } } } (copper for gold, counts for items).
+        bankContrib = { since = nil, players = {} },
         standby = {}, -- list of normalized "Name-Realm"
         settings = {
             officerRankIndex = nil, -- lowest guild rank that counts as officer; 0 is the Guild Master, like GetGuildInfo
