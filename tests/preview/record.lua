@@ -309,6 +309,20 @@ SideQuestDB.officerData.recruit_payouts = {
 SideQuestDB.pending.bank = {
     { id = "b1", at = WowStub.time, character = "Demo5-Whitemane", kind = "deposit", item_id = 1, item_name = "Demo Linen Cloth", count = 20, money = 0, tab = 1 },
 }
+-- Bank.lua running contributions: one gold-and-cloth giver (cloth priced by `prices` above), one gold-only
+-- giver who also repairs on the guild, one who has only taken.
+SideQuestDB.bankContrib = {
+    since = WowStub.time - 21 * 86400,
+    players = {
+        ["Demo5-Whitemane"] = { gold_in = 250000, gold_out = 0, repairs = 0, items_in = 60, items_out = 0,
+            last_at = WowStub.time - 3600,
+            items = { [14048] = { given = 40, taken = 0 }, [14256] = { given = 20, taken = 0 } } },
+        ["Demo2-Whitemane"] = { gold_in = 120000, gold_out = 0, repairs = 4550, items_in = 0, items_out = 0,
+            last_at = WowStub.time - 2 * 86400, items = {} },
+        ["Demo9-Whitemane"] = { gold_in = 0, gold_out = 30000, repairs = 0, items_in = 0, items_out = 12,
+            last_at = WowStub.time - 5 * 86400, items = { [12360] = { given = 0, taken = 12 } } },
+    },
+}
 SideQuestDB.pending.announcements = {
     { id = "ann-demo-1", text = "Flasks for Friday please", officer = "Demo1-Whitemane", at = WowStub.time - 5400, discord = true },
 }

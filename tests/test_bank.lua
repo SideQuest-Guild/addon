@@ -201,4 +201,113 @@ return function(h)
         h.assertTrue(chamber.rows[1]:IsShown(), "a row is shown")
         h.assertTrue(chamber.rows[1].text:GetText():find("deposit", 1, true) ~= nil, "row text shows the kind")
     end)
+
+    local LINEN_LINK = "|cffffffff|Hitem:2589:0:0:0:0:0:0:0:0:0:0|h[Linen Cloth]|h|r"
+
+    local function contributor(name)
+        for _, c in ipairs(SideQuest.Bank.Contributors()) do
+            if c.character == name then
+                return c
+            end
+        end
+    end
+
+    h.test("contributions: gold and items given and taken add up per player; tab moves and tab purchases count for no one", function()
+        reset()
+        WowStub.bankTransactions[1] = {
+            { kind = "deposit", name = "Alice", itemLink = ITEM_LINK, count = 20, year = 0, month = 0, day = 0, hour = 1 },
+            { kind = "deposit", name = "Alice", itemLink = ITEM_LINK, count = 5, year = 0, month = 0, day = 0, hour = 3 },
+            { kind = "deposit", name = "Alice", itemLink = LINEN_LINK, count = 10, year = 0, month = 0, day = 0, hour = 4 },
+            { kind = "withdraw", name = "Alice", itemLink = LINEN_LINK, count = 2, year = 0, month = 0, day = 0, hour = 5 },
+            { kind = "move", name = "Bob", itemLink = ITEM_LINK, count = 7, year = 0, month = 0, day = 0, hour = 1 },
+        }
+        WowStub.bankMoneyTransactions = {
+            { kind = "deposit", name = "Alice", amount = 10000, year = 0, month = 0, day = 0, hour = 1 },
+            { kind = "deposit", name = "Alice", amount = 2500, year = 0, month = 0, day = 1, hour = 0 },
+            { kind = "withdraw", name = "Alice", amount = 3000, year = 0, month = 0, day = 0, hour = 2 },
+            { kind = "repair", name = "Alice", amount = 400, year = 0, month = 0, day = 0, hour = 2 },
+            { kind = "buyTab", name = "Dave", amount = 100000, year = 0, month = 0, day = 0, hour = 4 },
+        }
+        SideQuest.Fire("GUILDBANKLOG_UPDATE")
+
+        local alice = contributor("Alice-Whitemane")
+        h.assertEq(alice.gold_in, 12500, "both gold deposits")
+        h.assertEq(alice.gold_out, 3000, "gold withdrawn")
+        h.assertEq(alice.repairs, 400, "guild-paid repairs kept apart from withdrawals")
+        h.assertEq(alice.items_in, 35, "every item deposited")
+        h.assertEq(alice.items_out, 2, "items withdrawn")
+        h.assertEq(alice.items[1].item_id, 14048, "most-given item first")
+        h.assertEq(alice.items[1].given, 25, "both Runecloth deposits on one item")
+        h.assertEq(alice.items[2].taken, 2, "Linen withdrawal on the Linen entry")
+        h.assertEq(contributor("Bob-Whitemane"), nil, "a tab-to-tab move is no one's contribution")
+        h.assertEq(contributor("Dave-Whitemane"), nil, "buying a tab is no one's contribution")
+        h.assertEq(SideQuest.Bank.ContributionsSince(), WowStub.time - 86400, "since = earliest row counted")
+    end)
+
+    h.test("contributions: kept through `/sq export clear`, and a re-captured row a day later isn't counted twice", function()
+        reset()
+        WowStub.bankTransactions[1] = {
+            { kind = "deposit", name = "Alice", itemLink = ITEM_LINK, count = 5, year = 0, month = 0, day = 2, hour = 5 },
+        }
+        WowStub.bankMoneyTransactions = {
+            { kind = "deposit", name = "Alice", amount = 10000, year = 0, month = 0, day = 2, hour = 5 },
+        }
+        SideQuest.Fire("GUILDBANKLOG_UPDATE")
+        SideQuest.Sync.ClearPending()
+
+        WowStub.Advance(DAY)
+        WowStub.bankTransactions[1][1].day = 3
+        WowStub.bankMoneyTransactions[1].day = 3
+        SideQuest.Fire("GUILDBANKLOG_UPDATE")
+
+        local alice = contributor("Alice-Whitemane")
+        h.assertEq(alice.items_in, 5, "same deposit, counted once")
+        h.assertEq(alice.gold_in, 10000, "same gold deposit, counted once")
+
+        WowStub.bankMoneyTransactions[2] = { kind = "deposit", name = "Alice", amount = 500, year = 0, month = 0, day = 0, hour = 0 }
+        SideQuest.Fire("GUILDBANKLOG_UPDATE")
+        h.assertEq(contributor("Alice-Whitemane").gold_in, 10500, "a new deposit after the clear still adds")
+    end)
+
+    h.test("contributions: ranked by gold given plus what given items fetch at the guild's AH prices", function()
+        reset()
+        SideQuestDB.prices = { [14048] = { p = 1000, q = 50, at = WowStub.time } } -- Runecloth 10s each
+        WowStub.bankTransactions[1] = {
+            { kind = "deposit", name = "Carl", itemLink = LINEN_LINK, count = 200, year = 0, month = 0, day = 0, hour = 1 }, -- no price
+            { kind = "deposit", name = "Alice", itemLink = ITEM_LINK, count = 30, year = 0, month = 0, day = 0, hour = 1 }, -- 3g
+        }
+        WowStub.bankMoneyTransactions = {
+            { kind = "deposit", name = "Bob", amount = 20000, year = 0, month = 0, day = 0, hour = 1 }, -- 2g
+        }
+        SideQuest.Fire("GUILDBANKLOG_UPDATE")
+
+        local order = {}
+        for _, c in ipairs(SideQuest.Bank.Contributors()) do
+            table.insert(order, c.character)
+        end
+        h.assertEq(table.concat(order, ","), "Alice-Whitemane,Bob-Whitemane,Carl-Whitemane",
+            "3g of priced cloth beats 2g of gold; unpriced items rank last")
+        h.assertEq(contributor("Alice-Whitemane").item_value, 30000, "item value = count x AH unit price")
+    end)
+
+    h.test("console Bank view: contributors stay listed after the captured rows have synced", function()
+        reset()
+        SideQuest.UI.main = nil
+        SideQuest.UI.Show()
+        SideQuest.UI.ShowTab("Console")
+        SideQuest.UI.ShowConsoleSub("Bank")
+        WowStub.bankMoneyTransactions = {
+            { kind = "deposit", name = "Alice", amount = 12345, year = 0, month = 0, day = 0, hour = 1 },
+        }
+        SideQuest.Fire("GUILDBANKLOG_UPDATE")
+        SideQuest.Sync.ClearPending()
+        SideQuest.UI.RefreshConsoleBank()
+
+        local chamber = SideQuest.UI.panels.Console.bankChamber
+        h.assertEq(chamber.emptyText:GetText(), "", "no 'open the guild bank' prompt while contributors are known")
+        h.assertTrue(chamber.contribRows[1]:IsShown(), "contributor row shown")
+        local meta = chamber.contribRows[1].metaText:GetText()
+        h.assertTrue(meta:find("Gave 1g 23s 45c", 1, true) ~= nil, "shows the gold given: " .. meta)
+        h.assertTrue(chamber.rows[1] == nil or not chamber.rows[1]:IsShown(), "no synced log rows left")
+    end)
 end

@@ -28,6 +28,13 @@
 -- timestamp across exports, keyed by its unchanging content, and a repeat
 -- capture matches against it within a tolerance that absorbs both the
 -- elapsed-hour rounding and the hour that passes between two captures.
+--
+-- Every new row is also credited to SideQuestDB.bankContrib, a running
+-- per-character tally of gold and items put in and taken out. Unlike
+-- pending.bank it is never cleared, so officers can see who has given what
+-- since this client started counting. It only knows the rows this client
+-- captured: the game keeps a short log per tab, so anything that scrolls
+-- off before an officer opens that tab is never counted.
 
 SideQuest = SideQuest or {}
 SideQuest.Bank = {}
@@ -123,6 +130,60 @@ local function recordIfNew(key, at, matchedThisPass)
     return true, id
 end
 
+local function newContributor()
+    return { gold_in = 0, gold_out = 0, repairs = 0, items_in = 0, items_out = 0, items = {} }
+end
+
+-- Adds one newly recorded log row to its character's running totals. Tab
+-- moves and tab purchases aren't anyone's contribution, so they're skipped.
+local function credit(row)
+    if row.character == "" then
+        return
+    end
+    local kind, ledger = row.kind, SideQuestDB.bankContrib
+    local isItem = kind == "deposit" or kind == "withdraw"
+    if not (isItem or kind == "deposit_money" or kind == "withdraw_money" or kind == "repair") then
+        return
+    end
+    local c = ledger.players[row.character]
+    if not c then
+        c = newContributor()
+        ledger.players[row.character] = c
+    end
+    if kind == "deposit_money" then
+        c.gold_in = c.gold_in + row.money
+    elseif kind == "withdraw_money" then
+        c.gold_out = c.gold_out + row.money
+    elseif kind == "repair" then
+        c.repairs = c.repairs + row.money
+    else
+        local count = row.count or 0
+        local item = row.item_id and c.items[row.item_id]
+        if row.item_id and not item then
+            item = { given = 0, taken = 0 }
+            c.items[row.item_id] = item
+        end
+        if kind == "deposit" then
+            c.items_in = c.items_in + count
+            if item then item.given = item.given + count end
+        else
+            c.items_out = c.items_out + count
+            if item then item.taken = item.taken + count end
+        end
+    end
+    if not c.last_at or row.at > c.last_at then
+        c.last_at = row.at
+    end
+    if not ledger.since or row.at < ledger.since then
+        ledger.since = row.at
+    end
+end
+
+local function record(row)
+    table.insert(SideQuestDB.pending.bank, row)
+    credit(row)
+end
+
 --- Capture a guild bank tab's item transaction log into pending.bank.
 -- Reads whatever QueryGuildBankLog(tab) has already delivered; call once
 -- GUILDBANKLOG_UPDATE has fired. Returns the number of new rows, or nil if
@@ -144,7 +205,7 @@ function Bank.CaptureItemLog(tabIndex)
             local at = estimateAt(years, months, days, hours)
             local isNew, id = recordIfNew(key, at, matchedThisPass)
             if isNew then
-                table.insert(SideQuestDB.pending.bank, {
+                record({
                     id = id,
                     at = at,
                     character = normalized(name),
@@ -196,7 +257,7 @@ function Bank.CaptureMoneyLog()
             local at = estimateAt(years, months, days, hours)
             local isNew, id = recordIfNew(key, at, matchedThisPass)
             if isNew then
-                table.insert(SideQuestDB.pending.bank, {
+                record({
                     id = id,
                     at = at,
                     character = normalized(name),
@@ -215,6 +276,69 @@ function Bank.CaptureMoneyLog()
         SideQuest.Fire("SQ_BANK_CAPTURED", added)
     end
     return added
+end
+
+-- What a character's deposited items would fetch at the guild's last
+-- imported auction prices (SideQuestDB.prices), in copper. Items with no
+-- known price add nothing.
+local function depositedItemValue(items)
+    local value = 0
+    for itemId, item in pairs(items) do
+        local price = SideQuest.Market.AuctionPrice(itemId)
+        if price and price.p then
+            value = value + price.p * item.given
+        end
+    end
+    return value
+end
+
+--- Everyone this client has seen use the guild bank, biggest contributor
+-- first: gold deposited plus the auction value of items deposited, then
+-- items deposited, then name. Each entry is { character, gold_in,
+-- gold_out, repairs, items_in, items_out, item_value, last_at, items },
+-- where items lists { item_id, given, taken }, most given first.
+function Bank.Contributors()
+    local list = {}
+    for character, c in pairs(SideQuestDB.bankContrib.players) do
+        local items = {}
+        for itemId, item in pairs(c.items) do
+            table.insert(items, { item_id = itemId, given = item.given, taken = item.taken })
+        end
+        table.sort(items, function(a, b)
+            if a.given ~= b.given then
+                return a.given > b.given
+            end
+            return a.item_id < b.item_id
+        end)
+        table.insert(list, {
+            character = character,
+            gold_in = c.gold_in,
+            gold_out = c.gold_out,
+            repairs = c.repairs,
+            items_in = c.items_in,
+            items_out = c.items_out,
+            item_value = depositedItemValue(c.items),
+            last_at = c.last_at,
+            items = items,
+        })
+    end
+    table.sort(list, function(a, b)
+        local av, bv = a.gold_in + a.item_value, b.gold_in + b.item_value
+        if av ~= bv then
+            return av > bv
+        end
+        if a.items_in ~= b.items_in then
+            return a.items_in > b.items_in
+        end
+        return a.character < b.character
+    end)
+    return list
+end
+
+--- When the earliest row this client has counted happened, or nil before
+-- any capture.
+function Bank.ContributionsSince()
+    return SideQuestDB.bankContrib.since
 end
 
 --- Ask the server for the item and money logs; results land asynchronously

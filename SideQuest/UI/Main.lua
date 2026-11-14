@@ -4945,7 +4945,8 @@ function UI.RefreshConsolePayouts()
     setScrollContentHeight(chamber.scroll, 46 * #rows)
 end
 
--- Bank ledger sub-view
+-- Bank sub-view: who has put what into the guild bank (Bank.Contributors, kept across syncs), then the log rows
+-- captured since the last sync.
 function UI.BuildConsoleBank(panel)
     local sub = makeConsoleSub(panel, "Bank")
     local chamber = createChamber(sub, "SideQuestConsoleBankChamber")
@@ -4957,9 +4958,56 @@ function UI.BuildConsoleBank(panel)
         SideQuest.Bank.RequestCapture()
     end)
 
-    local scroll, content = buildScroll(chamber.inner, -58)
-    chamber.scroll, chamber.content, chamber.rows = scroll, content, {}
+    local captureHint = makeFontString(chamber.inner, FONT_BODY_ITALIC, 10, C.mist2, "LEFT")
+    captureHint:SetPoint("TOPLEFT", captureBtn, "BOTTOMLEFT", 0, -4)
+    captureHint:SetWidth(540)
+    captureHint:SetText("The game only keeps each tab's latest entries. Open every tab now and then so no gift is missed.")
+
+    local scroll, content = buildScroll(chamber.inner, -78)
+    chamber.scroll, chamber.content, chamber.rows, chamber.contribRows = scroll, content, {}, {}
+    chamber.captureHint = captureHint
     panel.bankChamber = chamber
+end
+
+local BANK_TOP_ITEMS = 3
+
+-- "12g 30s and 45 items (~3g at AH)" for what a contributor gave.
+local function bankGaveText(c)
+    local parts = {}
+    if c.gold_in > 0 then
+        table.insert(parts, money(c.gold_in))
+    end
+    if c.items_in > 0 then
+        local value = c.item_value > 0 and (" (~" .. money(c.item_value) .. " at AH)") or ""
+        table.insert(parts, c.items_in .. (c.items_in == 1 and " item" or " items") .. value)
+    end
+    return #parts > 0 and table.concat(parts, " and ") or "nothing"
+end
+
+-- "2g, 50s in repairs and 5 items" for what a contributor took out.
+local function bankTookText(c)
+    local parts = {}
+    if c.gold_out > 0 then
+        table.insert(parts, money(c.gold_out))
+    end
+    if c.repairs > 0 then
+        table.insert(parts, money(c.repairs) .. " in repairs")
+    end
+    if c.items_out > 0 then
+        table.insert(parts, c.items_out .. (c.items_out == 1 and " item" or " items"))
+    end
+    return #parts > 0 and table.concat(parts, ", ") or "nothing"
+end
+
+local function bankTopItemsText(items)
+    local parts = {}
+    for _, item in ipairs(items) do
+        if item.given == 0 or #parts == BANK_TOP_ITEMS then
+            break
+        end
+        table.insert(parts, SideQuest.ItemName(item.item_id) .. " x" .. item.given)
+    end
+    return #parts > 0 and ("  Most given: " .. table.concat(parts, ", ") .. ".") or ""
 end
 
 function UI.RefreshConsoleBank()
@@ -4969,26 +5017,74 @@ function UI.RefreshConsoleBank()
     end
     local chamber = panel.bankChamber
     local rows = SideQuestDB.pending.bank or {}
+    local contributors = SideQuest.Bank.Contributors()
     for _, r in ipairs(chamber.rows) do
         r:Hide()
     end
-    if not SideQuest.Bank.IsAvailable() then
-        if not chamber.emptyText then
-            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
-            chamber.emptyText:SetPoint("TOPLEFT")
-        end
-        setStateText(chamber.emptyText, "Guild bank log API unavailable here; record deposits/withdrawals on the site.", true)
-        return
-    elseif #rows == 0 then
-        if not chamber.emptyText then
-            chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
-            chamber.emptyText:SetPoint("TOPLEFT")
-        end
-        setStateText(chamber.emptyText, "Open the guild bank to read its log; rows appear here automatically.", true)
-        return
-    elseif chamber.emptyText then
-        chamber.emptyText:SetText("")
+    for _, r in ipairs(chamber.contribRows) do
+        r:Hide()
     end
+    if chamber.contribHeading then
+        chamber.contribHeading:Hide()
+        chamber.pendingHeading:Hide()
+    end
+    if not chamber.emptyText then
+        chamber.emptyText = makeFontString(chamber.content, FONT_BODY, 12, C.mist2, "LEFT")
+        chamber.emptyText:SetPoint("TOPLEFT")
+    end
+    if not SideQuest.Bank.IsAvailable() then
+        setStateText(chamber.emptyText, "Guild bank log API unavailable here; record deposits/withdrawals on the site.", true)
+        setScrollContentHeight(chamber.scroll, 0)
+        return
+    elseif #rows == 0 and #contributors == 0 then
+        setStateText(chamber.emptyText, "Open the guild bank to read its log; rows appear here automatically.", true)
+        setScrollContentHeight(chamber.scroll, 0)
+        return
+    end
+    chamber.emptyText:SetText("")
+
+    if not chamber.contribHeading then
+        chamber.contribHeading = createSubHeading(chamber.content, "Contributors")
+        chamber.contribHeading:SetWidth(540)
+        chamber.pendingHeading = createSubHeading(chamber.content, "Waiting to sync")
+        chamber.pendingHeading:SetWidth(540)
+    end
+    local y = 0
+    local since = SideQuest.Bank.ContributionsSince()
+    chamber.contribHeading:ClearAllPoints()
+    chamber.contribHeading:SetPoint("TOPLEFT", 0, -y)
+    chamber.contribHeading.label:SetText(trackedCaps("Contributors (" .. #contributors .. ")"
+        .. (since and (" since " .. date("%Y-%m-%d", since)) or "")))
+    chamber.contribHeading:Show()
+    y = y + 20
+    for i, c in ipairs(contributors) do
+        local row = chamber.contribRows[i]
+        if not row then
+            row = CreateFrame("Frame", nil, chamber.content)
+            row:SetSize(540, 46)
+            row.titleText = makeFontString(row, FONT_BODY, 13, C.ink, "LEFT")
+            row.titleText:SetPoint("TOPLEFT")
+            row.metaText = makeFontString(row, FONT_BODY, 11, C.mist2, "LEFT")
+            row.metaText:SetPoint("TOPLEFT", row.titleText, "BOTTOMLEFT", 0, -2)
+            row.metaText:SetWidth(540)
+            row.metaText:SetWordWrap(true)
+            chamber.contribRows[i] = row
+        end
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -y)
+        row.titleText:SetText(displayName(c.character) .. "  --  last used the bank " .. ago(c.last_at))
+        row.metaText:SetText("Gave " .. bankGaveText(c) .. ". Took " .. bankTookText(c) .. "."
+            .. bankTopItemsText(c.items))
+        row:Show()
+        y = y + 50
+    end
+
+    y = y + 8
+    chamber.pendingHeading:ClearAllPoints()
+    chamber.pendingHeading:SetPoint("TOPLEFT", 0, -y)
+    chamber.pendingHeading.label:SetText(trackedCaps("Waiting to sync (" .. #rows .. ")"))
+    chamber.pendingHeading:Show()
+    y = y + 20
     for i, b in ipairs(rows) do
         local row = chamber.rows[i]
         if not row then
@@ -4998,11 +5094,14 @@ function UI.RefreshConsoleBank()
             row.text:SetPoint("LEFT")
             chamber.rows[i] = row
         end
-        row:SetPoint("TOPLEFT", 0, -20 * (i - 1))
-        row.text:SetText(b.kind .. "  " .. (b.item_name or "") .. " x" .. (b.count or 0) .. "  " .. displayName(b.character or ""))
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", 0, -y)
+        local what = b.money and b.money > 0 and money(b.money) or ((b.item_name or "") .. " x" .. (b.count or 0))
+        row.text:SetText(b.kind .. "  " .. what .. "  " .. displayName(b.character or ""))
         row:Show()
+        y = y + 20
     end
-    setScrollContentHeight(chamber.scroll, 20 * #rows)
+    setScrollContentHeight(chamber.scroll, y)
 end
 
 -- Announce sub-view: compose -> toast + guild chat + queued for Discord,

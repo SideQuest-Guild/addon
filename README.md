@@ -153,7 +153,7 @@ The other Console tabs:
 | Roster | Reads the guild roster for the website and lists inactive members. |
 | Recruits | An Add recruit form that fills in your target, plus applicants and trials with yes/no votes from officers. |
 | Payouts | Recruitment drive winners and their prize, settled a week after each drive ends. Stand at a mailbox and click Mail to send it; nothing sends until then, and a row disappears once it's paid. |
-| Bank | Saves the open guild bank tab's log for the website. |
+| Bank | Lists everyone who has used the guild bank, biggest giver first: gold and items put in (items valued at the guild's auction prices) and gold, repairs and items taken out. It also saves the open tab's log for the website. These totals only count what your own copy of the addon has read from the bank log; the website's Guild page adds up every officer's reads, counts each member's characters together, and shows the totals to all members. The game keeps only each tab's latest entries, so open every tab now and then. |
 | Announce | Posts a message to guild chat and every member's News tab, and to Discord if you tick the box. |
 | Sync | Shows what hasn't been sent to the website yet, with Export and Import buttons. **Update calendar** puts the site's upcoming events on the in-game guild calendar. |
 | Debug | Guild Master only. Lists what the game blocked SideQuest from doing and errors the addon caught, with a box to copy them. **View as** shows the windows as a non-member, member or officer sees them; **Back to my view**, closing the window or `/sq viewas off` ends it. |
