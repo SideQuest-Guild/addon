@@ -374,6 +374,34 @@ return function(h)
         h.assertEq(#Calendar.Plan(), 0, "nothing left to do")
     end)
 
+    h.test("calendar: a drive event SideQuest already saved isn't redone when the game reads it back unlocked", function()
+        reset()
+        local endsAt = utcAt(4, 19)
+        local p = realmDate(endsAt)
+        -- linked by an older version, which put it on unlocked
+        WowStub.calendar.events[1] = { calendarType = "GUILD_EVENT", title = "Ends: Spring Recruitment",
+            eventType = Enum.CalendarEventType.Other, year = p.year, month = p.month, day = p.day, hour = 19, minute = 0 }
+        SideQuestDB.calendarLinks["drive-1:end"] = { title = "Ends: Spring Recruitment", at = endsAt, year = p.year,
+            month = p.month, day = p.day, hour = 19, minute = 0 }
+        SideQuestDB.events = { { id = "drive-1", title = "Spring Recruitment", kind = "recruitment",
+            starts_at = WowStub.time - DAY, ends_at = endsAt } }
+        h.assertEq(#Calendar.Plan(), 1, "an older version's entry is fixed once")
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        local text = WowStub.activePopup and WowStub.activePopup.text or ""
+        h.assertTrue(text:find("needs updating", 1, true) ~= nil, "the prompt doesn't call it missing: " .. text)
+        WowStub.ClickPopupButton(1) -- opens it
+        SideQuest.Fire("CALENDAR_UPDATE_EVENT_LIST")
+        step() -- saves it
+
+        -- after a /reload (fresh prompt state), WoW: Forever still reads the saved event as unlocked
+        WowStub.activePopup = nil
+        Calendar.prompted, Calendar.promptSilenced = false, false
+        WowStub.calendar.events[1].isLocked = false
+        h.assertEq(#Calendar.Plan(), 0, "already saved with the site's settings: nothing to do")
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        h.assertEq(WowStub.activePopup, nil, "no prompt on every reload")
+    end)
+
     h.test("calendar: a raid someone made by hand as another type or unlocked is left alone", function()
         reset()
         local p = realmDate(utcAt(2, 19))

@@ -46,7 +46,9 @@ local function defaultDB()
         events = {},
         pastEvents = {}, -- the site's recent past events, newest first, as answer counts (Events.Load)
         eventsAt = 0, -- generated_at of the import/broadcast the events came from; 0 = never received any
-        calendarLinks = {}, -- site event id -> where Calendar.lua last saw its guild announcement (title, at, realm date/time)
+        -- Calendar.lua: link key -> where it last saw that site event on the guild calendar (title, at, realm
+        -- date/time); `saved` once SideQuest itself added or updated it there with the site's settings.
+        calendarLinks = {},
         -- GuildLog.lua: every invite/join/quit/remove row this client has ever captured (kind, actor, target, at),
         -- used only to dedupe a repeat QueryGuildEventLog capture against; pruned past 60 days.
         guildLogHistory = {},

@@ -179,7 +179,9 @@ local function findOnCalendar(place)
 end
 
 -- Whether a locked kind's entry went on unlocked or as another type (made by hand, or by an older version), so it
--- has to be opened and saved again with the right settings.
+-- has to be opened and saved again with the right settings. Only asked of entries SideQuest hasn't saved itself:
+-- the day list's isLocked isn't trustworthy (Blizzard's calendar reads the lock only from an opened event's
+-- GetEventInfo), and a saved drive event reading back unlocked had it redone on every reload.
 local function needsRedo(evt, slot)
     local kind = KINDS[evt.kind]
     if not (kind and kind.locked) then
@@ -230,6 +232,7 @@ function Calendar.Plan()
         local linkKey = w.linkKey
         seen[linkKey] = true
         local link = linked[linkKey]
+        local saved = link and link.saved and samePlace(link, w.place)
         local old = nil
         if link and not samePlace(link, w.place) and link.at and link.at >= cutoff then
             old = findOnCalendar(link)
@@ -248,10 +251,10 @@ function Calendar.Plan()
                 from = link }
         elseif not found then
             adds[#adds + 1] = { op = "add", event = w.event, place = w.place, linkKey = linkKey }
-        elseif needsRedo(w.event, found) then
+        elseif not saved and needsRedo(w.event, found) then
             edits[#edits + 1] = { op = "edit", linkKey = linkKey, event = w.event, place = w.place, slot = found,
                 from = w.place }
-        else
+        elseif not saved then
             linked[linkKey] = w.place
         end
     end
@@ -364,6 +367,7 @@ local function finishAdd(ok)
     end
     Calendar.pendingAdd = nil
     if ok then
+        p.place.saved = true -- on the calendar with the site's settings, as far as the game lets SideQuest set them
         links()[p.linkKey] = p.place
         SideQuest.Print(p.verb .. " " .. describePlace(p.place) .. (p.verb == "Added" and " to" or " on")
             .. " the guild calendar.")
@@ -609,7 +613,7 @@ StaticPopupDialogs["SIDEQUEST_CALENDAR_PENDING"] = {
         Calendar.Step()
         local actions = Calendar.Plan()
         if actions and #actions > 0 then
-            Calendar.ShowPrompt(#actions)
+            Calendar.ShowPrompt(actions)
         end
     end,
     OnCancel = function()
@@ -621,9 +625,23 @@ StaticPopupDialogs["SIDEQUEST_CALENDAR_PENDING"] = {
     preferredIndex = 3,
 }
 
-function Calendar.ShowPrompt(count)
-    local text = count == 1 and "1 site event isn't on the guild calendar yet."
-        or (count .. " site events aren't on the guild calendar yet.")
+--- The prompt for a plan: "isn't on the calendar yet" only when every change is an add, since an edit or removal is
+-- for an event that's already there.
+function Calendar.ShowPrompt(actions)
+    local count, adds = #actions, 0
+    for _, a in ipairs(actions) do
+        if a.op == "add" then
+            adds = adds + 1
+        end
+    end
+    local text
+    if adds < count then
+        text = count == 1 and "1 guild calendar event needs updating to match the site."
+            or (count .. " guild calendar changes are waiting to match the site.")
+    else
+        text = count == 1 and "1 site event isn't on the guild calendar yet."
+            or (count .. " site events aren't on the guild calendar yet.")
+    end
     StaticPopup_Show("SIDEQUEST_CALENDAR_PENDING", text)
 end
 
@@ -638,7 +656,7 @@ function Calendar.CheckPrompt()
         return
     end
     Calendar.prompted = true
-    Calendar.ShowPrompt(#actions)
+    Calendar.ShowPrompt(actions)
 end
 
 SideQuest.On("SQ_CALENDAR_CHANGED", Calendar.CheckPrompt) -- covers login, once the calendar list has loaded
