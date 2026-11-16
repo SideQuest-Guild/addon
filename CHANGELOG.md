@@ -1,11 +1,20 @@
 # Changelog
 
+## v0.18.0 (2026-11-16)
+
+### New
+
+- The Bank tab shows how much gold and how many items each player has put into and taken out of the guild bank
+
+### Fixed
+
+- The guild calendar prompt stops asking after every reload for a recruitment drive event SideQuest already saved, and says when a change is an update rather than a missing event
+
 ## v0.17.4 (2026-11-13)
 
 ### Fixed
 
 - Update calendar edits a moved or wrong-type event in place over two clicks, since WoW: Forever doesn't let an addon delete a guild event, and names a cancelled one for you to delete by hand
-
 
 ## v0.17.3 (2026-11-13)
 
@@ -13,13 +22,11 @@
 
 - Recruitment drives go on the guild calendar as locked Other events, and a drive event already there as Meeting or unlocked is put back right
 
-
 ## v0.17.2 (2026-11-13)
 
 ### Fixed
 
 - Update calendar puts site events on the guild calendar as guild events, since WoW: Forever has no guild announcements and refused every one
-
 
 ## v0.17.1 (2026-11-13)
 
@@ -27,13 +34,11 @@
 
 - Update calendar says Added only once the game confirms it, a refusal shows as one line naming the event, and each add starts from a clean slate like the game's own calendar
 
-
 ## v0.17.0 (2026-11-13)
 
 ### New
 
 - Every member's save file carries their own export, so SideQuest Companion uploads their sign-ups and directory entry on each /reload or logout, with no officer online
-
 
 ## v0.16.0 (2026-11-13)
 
@@ -41,13 +46,15 @@
 
 - Officers get the site's newest data with a /reload: the addon reads it from SideQuest Companion's own SideQuest_Inbox addon instead of waiting for WoW to close
 
-
 ## v0.15.2 (2026-11-13)
 
 ### New
 
 - The Events tab shows a recruitment drive's leaderboard with each inviter's potential recruits and every recruit's status, and keeps the drive listed until it ends
 
+### Fixed
+
+- The Events tab words a recruit with no recorded reason as having left during the week, like the site
 
 ## v0.15.1 (2026-11-13)
 
