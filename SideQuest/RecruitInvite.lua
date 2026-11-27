@@ -5,7 +5,8 @@
 --
 -- A post counts when it's yours and names the guild or says "recruit". The window stays open for WINDOW seconds
 -- after the latest such post. Anyone who can invite to the guild (CanGuildInvite) gets it, not only officers,
--- since recruitment drives pay members for their invites.
+-- since recruitment drives pay members for their invites. Someone you Skip is never offered again, on any of your
+-- characters: `SideQuestDB.recruitSkipped[key] = serverTime` (local only; the export never carries it).
 
 SideQuest = SideQuest or {}
 SideQuest.RecruitInvite = {}
@@ -87,6 +88,15 @@ local function indexOf(key)
     return nil
 end
 
+--- Whisperers you skipped (key -> server time), kept in the save file so they stay skipped after a relog.
+local function skipped()
+    if type(SideQuestDB) ~= "table" then
+        return {}
+    end
+    SideQuestDB.recruitSkipped = SideQuestDB.recruitSkipped or {}
+    return SideQuestDB.recruitSkipped
+end
+
 --- One of your own public chat lines: a recruiting post (re)opens the whisper window.
 function RecruitInvite.OnPost(text, sender, guid)
     if not isMe(sender, guid) or not RecruitInvite.IsRecruitmentPost(text) or not RecruitInvite.CanInvite() then
@@ -106,7 +116,8 @@ function RecruitInvite.OnWhisper(text, sender, flags)
         return
     end
     local key = SideQuest.CanonicalName(sender)
-    if not key or key == SideQuest.NormalizeUnit("player") or RecruitInvite.invited[key] or inGuild(key) then
+    if not key or key == SideQuest.NormalizeUnit("player") or RecruitInvite.invited[key] or skipped()[key]
+        or inGuild(key) then
         return
     end
     local row = {
@@ -145,8 +156,11 @@ function RecruitInvite.Invite(key)
     return true
 end
 
---- Drop a whisperer from the queue without inviting. A later whisper brings them back.
+--- Drop a whisperer from the queue without inviting, for good: their later whispers never come back.
 function RecruitInvite.Skip(key)
+    if key then
+        skipped()[key] = now()
+    end
     local i = indexOf(key)
     if i then
         table.remove(RecruitInvite.queue, i)
@@ -154,7 +168,7 @@ function RecruitInvite.Skip(key)
     end
 end
 
---- Empty the queue (the popup was closed).
+--- Empty the queue (the popup was closed). Unlike Skip, someone who whispers again shows up again.
 function RecruitInvite.Clear()
     if #RecruitInvite.queue > 0 then
         RecruitInvite.queue = {}

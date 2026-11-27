@@ -109,6 +109,16 @@ return function(h)
         SideQuest.UI.recruitPopup.closeBtn:GetScript("OnClick")(SideQuest.UI.recruitPopup.closeBtn)
         h.assertEq(#SideQuest.RecruitInvite.Queue(), 0, "close drops everyone left")
         h.assertEq(#WowStub.guildInvites, 0, "nobody invited")
+
+        -- A relog and a new recruiting post later: the skipped whisperer stays gone, the closed one comes back.
+        SideQuest.RecruitInvite.ResetState()
+        post("SideQuest recruiting again")
+        whisper("inv??", "Newbie-One")
+        h.assertTrue(not popupShown(), "someone you skipped never pops up again")
+        h.assertEq(#SideQuest.RecruitInvite.Queue(), 0)
+        whisper("still want in", "Newbie-Two")
+        h.assertEq(#SideQuest.RecruitInvite.Queue(), 1, "closing the popup isn't a skip: they can whisper again")
+        h.assertEq(SideQuest.RecruitInvite.Queue()[1].name, "Newbie-Two")
     end)
 
     h.test("recruit invite: a whisper in combat waits for combat to end", function()

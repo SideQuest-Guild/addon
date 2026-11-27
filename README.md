@@ -71,7 +71,8 @@ leaderboard as of the last site data; "potential" recruits joined and are still 
 When you post a recruiting message in Say, Yell or a numbered channel such as General or Trade (any message of yours
 that names the guild or says "recruit"), SideQuest watches your whispers for the next 15 minutes. Each whisper from
 someone outside the guild shows in a small popup with what they said, an **Invite** button and a **Skip** button.
-Nobody is invited until you click Invite. Closing the popup skips everyone in it. You only get the popup if your
+Nobody is invited until you click Invite. Someone you **Skip** never pops up again, on any of your characters.
+Closing the popup just clears it: anyone in it who whispers again shows up again. You only get the popup if your
 guild rank can invite.
 
 If you can come to a raid but the group is full, type `/sq standby`. An officer approves it and you earn EP as if you

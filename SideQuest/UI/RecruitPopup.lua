@@ -1,7 +1,7 @@
 -- SideQuest/UI/RecruitPopup.lua
 -- The whispers that came in after your recruiting post (RecruitInvite.lua), one row each with Invite and Skip
--- buttons. Invite is the only path to C_GuildInfo.Invite: nobody is invited without a click. Closing the popup
--- (Close or Escape) skips everyone still listed.
+-- buttons. Invite is the only path to C_GuildInfo.Invite: nobody is invited without a click. Skip is for good (they
+-- never come back); closing the popup (Close or Escape) only clears everyone still listed.
 
 SideQuest = SideQuest or {}
 SideQuest.UI = SideQuest.UI or {}
@@ -66,7 +66,7 @@ function UI.BuildRecruitPopup()
     popup:SetScript("OnDragStart", popup.StartMoving)
     popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
     popup:Hide()
-    -- Escape closes it; OnHide skips whoever is left, so it never reopens with stale rows.
+    -- Escape closes it; OnHide clears whoever is left, so it never reopens with stale rows.
     if UISpecialFrames then
         table.insert(UISpecialFrames, "SideQuestRecruitPopup")
     end
