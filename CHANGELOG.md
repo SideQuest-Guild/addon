@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.19.0 (2026-11-27)
+
+### New
+
+- After you post a recruiting message, whispers from people outside the guild pop up with an Invite button, and nobody is invited until you click it
+
+### Fixed
+
+- The guild calendar prompt no longer calls an event missing because the holidays loaded before the guild's events
+
 ## v0.18.0 (2026-11-16)
 
 ### New
