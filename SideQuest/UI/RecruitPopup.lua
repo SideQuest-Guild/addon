@@ -1,7 +1,10 @@
 -- SideQuest/UI/RecruitPopup.lua
 -- The whispers that came in after your recruiting post (RecruitInvite.lua), one row each with Invite and Skip
--- buttons. Invite is the only path to C_GuildInfo.Invite: nobody is invited without a click. Skip is for good (they
--- never come back); closing the popup (Close or Escape) only clears everyone still listed.
+-- buttons. Nobody is invited without a click. C_GuildInfo.Invite is protected, so Invite is a
+-- SecureActionButtonTemplate button whose macrotext is "/ginvite <name>": Blizzard's slash handler sends the invite
+-- from your click. A secure child makes the popup protected in combat (no Show, Hide or SetAttribute from addon
+-- code), so it is only ever touched out of combat: it hides as combat starts and comes back when it ends. Skip is
+-- for good (they never come back); closing the popup (Close or Escape) only clears everyone still listed.
 
 SideQuest = SideQuest or {}
 SideQuest.UI = SideQuest.UI or {}
@@ -25,8 +28,11 @@ local function buildRow(parent, index)
     row:SetSize(WIDTH - 32, ROW_H)
     row:SetPoint("TOPLEFT", 8, -(TOP_PAD + (index - 1) * ROW_H))
 
-    row.inviteBtn = UI.CreateButton(row, "primary", "Invite", 64, 22)
+    row.inviteBtn = UI.CreateButton(row, "primary", "Invite", 64, 22, "SecureActionButtonTemplate")
     row.inviteBtn:SetPoint("RIGHT", row, "RIGHT", -58, 0)
+    row.inviteBtn:RegisterForClicks("AnyUp")
+    row.inviteBtn:SetAttribute("useOnKeyDown", false) -- one run per click, on release, whatever ActionButtonUseKeyDown says
+    row.inviteBtn:SetAttribute("type", "macro")
     row.skipBtn = UI.CreateButton(row, "quiet", "Skip", 52, 22)
     row.skipBtn:SetPoint("RIGHT", row, "RIGHT", 0, 0)
 
@@ -40,8 +46,9 @@ local function buildRow(parent, index)
         row.msgText:SetWordWrap(false)
     end
 
-    row.inviteBtn:SetScript("OnClick", function()
-        SideQuest.RecruitInvite.Invite(row.key)
+    -- After the secure OnClick ran the /ginvite macro.
+    row.inviteBtn:SetScript("PostClick", function()
+        SideQuest.RecruitInvite.Invited(row.key)
     end)
     row.skipBtn:SetScript("OnClick", function()
         SideQuest.RecruitInvite.Skip(row.key)
@@ -71,7 +78,9 @@ function UI.BuildRecruitPopup()
         table.insert(UISpecialFrames, "SideQuestRecruitPopup")
     end
     popup:SetScript("OnHide", function()
-        SideQuest.RecruitInvite.Clear()
+        if not popup.combatHidden then
+            SideQuest.RecruitInvite.Clear()
+        end
     end)
     UI.CreateRibbon(popup, "Recruiting")
 
@@ -113,11 +122,13 @@ function UI.RefreshRecruitPopup()
         local entry = queue[i]
         if i <= shown then
             row.key = entry.key
+            row.inviteBtn:SetAttribute("macrotext", SideQuest.RecruitInvite.MacroText(entry.key))
             row.nameText:SetText(entry.name)
             row.msgText:SetText(entry.text ~= "" and ('"' .. entry.text .. '"') or "")
             row:Show()
         else
             row.key = nil
+            row.inviteBtn:SetAttribute("macrotext", nil)
             row:Hide()
         end
     end
@@ -133,6 +144,25 @@ end
 -- Never opens in combat: a whisper mid-fight waits until it ends.
 SideQuest.On("SQ_RECRUIT_INVITES_UPDATED", function()
     SideQuest.WhenOutOfCombat(UI.RefreshRecruitPopup)
+end)
+
+-- PLAYER_REGEN_DISABLED comes just before the combat lockdown: the last moment the popup (protected once it has a
+-- secure Invite button) can be hidden. It keeps its queue and comes back when combat ends.
+SideQuest.On("PLAYER_REGEN_DISABLED", function()
+    local popup = UI.recruitPopup
+    if popup and popup:IsShown() then
+        popup.combatHidden = true
+        popup:Hide()
+        popup.combatHidden = nil
+        popup.reopen = true
+    end
+end)
+SideQuest.On("PLAYER_REGEN_ENABLED", function()
+    local popup = UI.recruitPopup
+    if popup and popup.reopen then
+        popup.reopen = nil
+        UI.RefreshRecruitPopup()
+    end
 end)
 
 return UI

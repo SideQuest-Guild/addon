@@ -276,7 +276,12 @@ C_GuildInfo = {
         flags[22] = r.officer and true or false
         return flags
     end,
+    -- Protected on Forever: from addon code it's ADDON_ACTION_FORBIDDEN. Only a secure button's /ginvite
+    -- (SecureActionButtonTemplate, below) may call it.
     Invite = function(name)
+        if not WowStub.secureCall then
+            error("ADDON_ACTION_FORBIDDEN: AddOn tried to call the protected function 'Invite()'")
+        end
         table.insert(WowStub.guildInvites, name)
     end,
 }
@@ -1404,6 +1409,36 @@ function CreateFrame(kind, name, parent, template)
         icon:SetAllPoints(self)
         icon:SetAtlas("RedButton-Exit", true)
         self.Icon = icon
+    elseif template == "SecureActionButtonTemplate" then
+        -- Real template: a protected button whose OnClick runs its "type" attribute securely. Only type "macro"
+        -- with a "/ginvite <name>" macrotext is modelled (Blizzard's slash handler calls C_GuildInfo.Invite).
+        -- Like the client, attributes can't change in combat; Click runs OnClick then PostClick.
+        local attributes = {}
+        self.SetAttribute = function(_, key, value)
+            if WowStub.inCombat then
+                error("ADDON_ACTION_BLOCKED: SetAttribute on a protected frame in combat")
+            end
+            attributes[key] = value
+        end
+        self.GetAttribute = function(_, key) return attributes[key] end
+        self.IsProtected = function() return true, true end
+        self:SetScript("OnClick", function()
+            local text = attributes.type == "macro" and attributes.macrotext
+            local invitee = type(text) == "string" and text:match("^/ginvite (.+)$")
+            if invitee then
+                WowStub.secureCall = true
+                local ok, err = pcall(C_GuildInfo.Invite, invitee)
+                WowStub.secureCall = nil
+                assert(ok, err)
+            end
+        end)
+        self.Click = function(btn, button)
+            btn:GetScript("OnClick")(btn, button or "LeftButton", false)
+            local post = btn:GetScript("PostClick")
+            if post then
+                post(btn, button or "LeftButton", false)
+            end
+        end
     elseif template == "UIPanelScrollFrameTemplate" then
         -- Real template: a Slider (UIPanelScrollBarTemplate) beside the
         -- frame with up/down arrow buttons and a thumb texture. The engine

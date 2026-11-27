@@ -349,9 +349,11 @@ local function setSliceTexture(slices, texName)
     end)
 end
 
-local function createButton(parent, kind, text, width, height)
+-- `template` (optional) is passed to CreateFrame, e.g. "SecureActionButtonTemplate" for a button whose click runs a
+-- protected action; the skin only sets mouse-over and press scripts, never OnClick.
+local function createButton(parent, kind, text, width, height, template)
     kind = (kind == "primary") and "primary" or "quiet"
-    local btn = CreateFrame("Button", nil, parent)
+    local btn = CreateFrame("Button", nil, parent, template)
     btn:SetSize(width or 90, height or 24)
     local slices = sliceThreeSliceH(btn, BTN_TEX[kind], BTN_TEX_W, BTN_CAP_PX, "BACKGROUND", nil, BTN_V)
     local glow = sliceThreeSliceH(btn, "ButtonGlow", BTN_TEX_W, BTN_CAP_PX, "ARTWORK", nil, BTN_V)

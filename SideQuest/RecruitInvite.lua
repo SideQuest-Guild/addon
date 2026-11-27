@@ -1,7 +1,7 @@
 -- SideQuest/RecruitInvite.lua
 -- After you post a recruiting message in a public channel (Say, Yell, or a numbered channel like General or
 -- Trade), whispers from people outside the guild queue up in a popup with an Invite button for each. Nothing is
--- invited until you click: C_GuildInfo.Invite runs only from that button.
+-- invited until you click: the button is a secure macro button running Blizzard's /ginvite (MacroText).
 --
 -- A post counts when it's yours and names the guild or says "recruit". The window stays open for WINDOW seconds
 -- after the latest such post. Anyone who can invite to the guild (CanGuildInvite) gets it, not only officers,
@@ -138,20 +138,27 @@ function RecruitInvite.OnWhisper(text, sender, flags)
     SideQuest.Fire("SQ_RECRUIT_INVITES_UPDATED")
 end
 
---- Send the guild invite for a queued whisperer. Only the popup's Invite button calls this.
-function RecruitInvite.Invite(key)
+--- The macro the popup's Invite button runs for a queued whisperer: "/ginvite <name>", or nil when they're gone.
+-- C_GuildInfo.Invite is protected on Forever (ADDON_ACTION_FORBIDDEN from addon code), so the invite goes through
+-- Blizzard's own /ginvite on a SecureActionButtonTemplate button, which only runs on your click.
+function RecruitInvite.MacroText(key)
+    local i = indexOf(key)
+    if not i then
+        return nil
+    end
+    local slash = type(_G.SLASH_GUILD_INVITE1) == "string" and _G.SLASH_GUILD_INVITE1 or "/ginvite"
+    return slash .. " " .. RecruitInvite.queue[i].name
+end
+
+--- After the Invite button's click ran /ginvite: drop them from the queue and never offer them again this session.
+-- The game itself says whether the invite went out.
+function RecruitInvite.Invited(key)
     local i = indexOf(key)
     if not i then
         return false
     end
-    if not (C_GuildInfo and C_GuildInfo.Invite) then
-        SideQuest.Print("This client has no guild invite call (C_GuildInfo.Invite).")
-        return false
-    end
-    local row = table.remove(RecruitInvite.queue, i)
-    C_GuildInfo.Invite(row.name)
+    table.remove(RecruitInvite.queue, i)
     RecruitInvite.invited[key] = true
-    SideQuest.Print("Guild invite sent to " .. row.name .. ".")
     SideQuest.Fire("SQ_RECRUIT_INVITES_UPDATED")
     return true
 end

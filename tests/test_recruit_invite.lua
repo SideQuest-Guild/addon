@@ -45,7 +45,8 @@ return function(h)
         h.assertEq(row.nameText:GetText(), "Newbie-Fresh", "row names the whisperer")
         h.assertTrue(row.msgText:GetText():find("inv pls", 1, true) ~= nil, "row shows what they said")
 
-        row.inviteBtn:GetScript("OnClick")(row.inviteBtn)
+        h.assertEq(row.inviteBtn:GetAttribute("macrotext"), "/ginvite Newbie-Fresh", "the button's macro")
+        row.inviteBtn:Click() -- the secure /ginvite (stub: C_GuildInfo.Invite from addon code is forbidden)
         h.assertEq(#WowStub.guildInvites, 1, "one invite sent")
         h.assertEq(WowStub.guildInvites[1], "Newbie-Fresh", "invited the whisperer")
         h.assertTrue(not popupShown(), "popup closes once nobody is left")
@@ -130,5 +131,22 @@ return function(h)
         WowStub.inCombat = false
         WowStub.FireEvent("PLAYER_REGEN_ENABLED")
         h.assertTrue(popupShown(), "popup once combat ends")
+    end)
+
+    h.test("recruit invite: the popup hides as combat starts, keeps its queue, and comes back after", function()
+        setup()
+        post("SideQuest recruiting")
+        whisper("inv", "Newbie-Fresh")
+        h.assertTrue(popupShown())
+        -- PLAYER_REGEN_DISABLED fires just before the lockdown; the protected popup can still be hidden then.
+        WowStub.FireEvent("PLAYER_REGEN_DISABLED")
+        WowStub.inCombat = true
+        h.assertTrue(not popupShown(), "no protected popup left up in combat")
+        h.assertEq(#SideQuest.RecruitInvite.Queue(), 1, "hiding for combat isn't closing: the whisperer waits")
+        whisper("hello?", "Newbie-Two") -- mid-fight: no SetAttribute until it ends
+        WowStub.inCombat = false
+        WowStub.FireEvent("PLAYER_REGEN_ENABLED")
+        h.assertTrue(popupShown(), "back once combat ends")
+        h.assertEq(SideQuest.UI.recruitPopup.rows[2].inviteBtn:GetAttribute("macrotext"), "/ginvite Newbie-Two")
     end)
 end
