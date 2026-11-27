@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.19.1 (2026-11-27)
+
+### New
+
+- Recruitment drive rules say the winner gets 10g, matching the site
+
 ## v0.19.0 (2026-11-27)
 
 ### New
