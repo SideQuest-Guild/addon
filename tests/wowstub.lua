@@ -28,6 +28,8 @@ WowStub = {
     realm = "Whitemane",
     lootItems = {},
     invites = {},
+    canGuildInvite = true, -- CanGuildInvite()
+    guildInvites = {}, -- names passed to C_GuildInfo.Invite, in order
     whispers = {}, -- list of ChatFrameUtil.SendTell targets
     isGroupLeader = true, -- UnitIsGroupLeader("player") while in a group
     convertToRaidCalls = 0,
@@ -274,10 +276,17 @@ C_GuildInfo = {
         flags[22] = r.officer and true or false
         return flags
     end,
+    Invite = function(name)
+        table.insert(WowStub.guildInvites, name)
+    end,
 }
 
 function IsInGuild()
     return WowStub.inGuild and true or false
+end
+
+function CanGuildInvite()
+    return WowStub.canGuildInvite and true or false
 end
 
 function GetGuildInfo(unit)

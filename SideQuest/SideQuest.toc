@@ -39,6 +39,7 @@ Sheet.lua
 Crafters.lua
 Announce.lua
 Recruits.lua
+RecruitInvite.lua
 Payouts.lua
 Bank.lua
 Battlegrounds.lua
@@ -49,5 +50,6 @@ UI\Skin.lua
 UI\Main.lua
 UI\Tooltip.lua
 UI\BidPopup.lua
+UI\RecruitPopup.lua
 UI\MinimapButton.lua
 UI\Options.lua

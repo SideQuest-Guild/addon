@@ -1375,6 +1375,17 @@ SideQuest.Whisper("Demo2-Whitemane")
 emit("whisper", UI.whisperFrame, 380, 112, 1)
 emit("whisper-064", UI.whisperFrame, 380, 112, 0.64)
 
+-- the recruiting popup: whispers after your own recruiting post, each with Invite/Skip
+WowStub.canGuildInvite = true
+SideQuest.RecruitInvite.OnPost("<SideQuest> is recruiting all levels, /w me for an invite!", "Demo1-Whitemane",
+    "Player-1-DEMO0001")
+SideQuest.RecruitInvite.OnWhisper("inv pls", "DemoRecruit1-Whitemane", "")
+SideQuest.RecruitInvite.OnWhisper("hi, are you still recruiting? I'm a level 12 hunter, happy to raid later on",
+    "DemoRecruit2-Whitemane", "")
+SideQuest.RecruitInvite.OnWhisper("invite please", "DemoRecruit3-Whitemane", "")
+emit("recruitpopup", UI.recruitPopup, 380, 248, 1)
+emit("recruitpopup-064", UI.recruitPopup, 380, 248, 0.64)
+
 local galleryItems = {}
 for _, n in ipairs(ALL_NAMES) do
     table.insert(galleryItems, string.format(

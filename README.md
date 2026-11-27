@@ -68,6 +68,12 @@ days and reach level 10 wins 1g, and ties each win 1g. Who invited whom comes st
 log, so you don't need the addon to win. Payouts go out a week after the drive ends. The Events tab shows the drive's
 leaderboard as of the last site data; "potential" recruits joined and are still inside their 7 days.
 
+When you post a recruiting message in Say, Yell or a numbered channel such as General or Trade (any message of yours
+that names the guild or says "recruit"), SideQuest watches your whispers for the next 15 minutes. Each whisper from
+someone outside the guild shows in a small popup with what they said, an **Invite** button and a **Skip** button.
+Nobody is invited until you click Invite. Closing the popup skips everyone in it. You only get the popup if your
+guild rank can invite.
+
 If you can come to a raid but the group is full, type `/sq standby`. An officer approves it and you earn EP as if you
 were there.
 

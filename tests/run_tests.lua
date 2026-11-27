@@ -128,6 +128,9 @@ local function resetAddon()
     SideQuest.GuildLog.lastRequestAt = nil
     SideQuest.Payouts.mailboxOpen = false
     SideQuest.Payouts.pendingSend = nil
+    SideQuest.RecruitInvite.ResetState()
+    WowStub.canGuildInvite = true
+    WowStub.guildInvites = {}
 end
 
 --------------------------------------------------------------------------

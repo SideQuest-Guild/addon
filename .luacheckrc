@@ -37,7 +37,7 @@ read_globals = {
     "StaticPopup_Show", "StaticPopup_Hide",
     -- v2: roster, professions, bank, prep, group placement
     "GetNumGuildMembers", "GetGuildRosterInfo", "GetGuildRosterLastOnline",
-    "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName",
+    "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName", "CanGuildInvite",
     "C_TradeSkillUI", "GetProfessions", "GetProfessionInfo",
     "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo", "QueryGuildRecipes",
     -- recruitment drives: guild event log (invite/join/quit/remove) + mailbox payouts
@@ -90,7 +90,7 @@ files["tests/wowstub.lua"] = {
         "C_Item", "ConvertToRaid", "InviteUnit", "Enum", "C_ChatInfo",
         "C_Timer", "CreateFrame", "UIParent", "DEFAULT_CHAT_FRAME",
         "GetNumGuildMembers", "GetGuildRosterInfo", "GetGuildRosterLastOnline", "C_TradeSkillUI",
-        "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName",
+        "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName", "CanGuildInvite",
         "GetProfessions", "GetProfessionInfo", "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo",
         "QueryGuildRecipes", "GetAverageItemLevel",
         "GetNumGuildEvents", "GetGuildEventInfo", "QueryGuildEventLog",
@@ -207,6 +207,10 @@ files["tests/test_ui_events.lua"] = {
 
 files["tests/test_recruits.lua"] = {
     globals = { "WowStub", "SideQuestDB" },
+}
+
+files["tests/test_recruit_invite.lua"] = {
+    globals = { "WowStub" },
 }
 
 files["tests/test_ui_guild_rows.lua"] = {
