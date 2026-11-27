@@ -142,7 +142,7 @@ local ROLE_KINDS = { raid = true, dungeon = true, world_boss = true }
 local NO_SIGNUP_KINDS = { recruitment = true }
 -- The site's rules line, shown in place of sign-up controls for a drive.
 local RECRUITMENT_RULES_LINE = "Invite new players to the guild. Whoever brings in the most recruits who stay 7 days "
-    .. "and reach level 10 wins 1g, and ties each win 1g. Payouts go out a week after the drive ends."
+    .. "and reach level 10 wins 10g, and ties each win 10g. Payouts go out a week after the drive ends."
 -- Why a drive recruit doesn't count (site DriveRecruitReason), as the site's drive page words it.
 local DRIVE_REASON_TEXT = {
     returning = "was in the guild before", own_alt = "inviter's own alt", left = "left during the week",
@@ -4860,7 +4860,7 @@ function UI.RefreshConsoleRecruits()
     setScrollContentHeight(chamber.scroll, 58 * #recruits)
 end
 
--- Payouts sub-view: each settled drive's winner(s) and their 1g prize (contract GameImportRecruitPayout), each
+-- Payouts sub-view: each settled drive's winner(s) and their 10g prize (contract GameImportRecruitPayout), each
 -- mailed in one click while standing at an open mailbox. A row disappears once mailed (Payouts.List() already
 -- excludes anything this client has paid).
 function UI.BuildConsolePayouts(panel)

@@ -64,7 +64,7 @@ Companion uploads them straight away. Without it, your sign-ups still reach the 
 syncs.
 
 During a recruitment drive, invite new players to the guild as usual. Whoever brings in the most recruits who stay 7
-days and reach level 10 wins 1g, and ties each win 1g. Who invited whom comes straight from the guild's own event
+days and reach level 10 wins 10g, and ties each win 10g. Who invited whom comes straight from the guild's own event
 log, so you don't need the addon to win. Payouts go out a week after the drive ends. The Events tab shows the drive's
 leaderboard as of the last site data; "potential" recruits joined and are still inside their 7 days.
 

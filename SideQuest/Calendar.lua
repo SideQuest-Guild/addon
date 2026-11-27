@@ -38,7 +38,7 @@ local KINDS = {
 
 -- The drive's rules, shortened from the site's rules line: the calendar's description holds 255 letters
 -- (Blizzard_Calendar.xml maxLetters) and the site link takes about 80 of them.
-local RECRUITMENT_RULES_LINE = "Most recruits who stay 7 days and reach level 10 wins 1g; ties each win 1g. "
+local RECRUITMENT_RULES_LINE = "Most recruits who stay 7 days and reach level 10 wins 10g; ties each win 10g. "
     .. "Paid a week after the drive ends."
 
 -- Enum.CalendarEventType values, for clients where the Enum table isn't filled in.
