@@ -34,7 +34,7 @@ read_globals = {
     -- Forever client identity (no realms, First-Surname)
     "RegionalUniqueNamesEnabled", "WOW_PROJECT_ID", "WOW_PROJECT_CAMELOT", "C_NameUtil", "Constants",
     "issecretvalue", "DEFAULT_CHAT_FRAME",
-    "StaticPopup_Show", "StaticPopup_Hide",
+    "StaticPopup_Show", "StaticPopup_Hide", "StaticPopup_Visible",
     -- v2: roster, professions, bank, prep, group placement
     "GetNumGuildMembers", "GetGuildRosterInfo", "GetGuildRosterLastOnline",
     "IsInGuild", "GuildControlGetNumRanks", "GuildControlGetRankName", "CanGuildInvite",
@@ -106,7 +106,7 @@ files["tests/wowstub.lua"] = {
         "SetRaidSubgroup", "SwapRaidSubgroup", "GetItemInfo",
         "C_Texture", "NineSliceUtil", "CreateColor", "ColorMixin",
         "strmatch", "securecallfunction", "Settings", "SettingsPanel",
-        "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide",
+        "StaticPopupDialogs", "StaticPopup_Show", "StaticPopup_Hide", "StaticPopup_Visible",
         "ChatFrame_SendTell", "WOW_PROJECT_CAMELOT", "WOW_PROJECT_ID", "RegionalUniqueNamesEnabled",
         "Constants", "C_NameUtil", "C_PartyInfo", "ChatFrameUtil", "UnitIsGroupLeader",
         "TooltipDataProcessor", "C_AddOns", "ReloadUI", "debugstack", "SlashCmdList", "UISpecialFrames",

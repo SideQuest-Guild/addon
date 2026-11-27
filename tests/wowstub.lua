@@ -1046,6 +1046,14 @@ function StaticPopup_Hide(which)
     end
 end
 
+function StaticPopup_Visible(which)
+    local popup = WowStub.activePopup
+    if popup and popup.which == which then
+        return popup
+    end
+    return nil
+end
+
 function WowStub.ClickPopupButton(buttonNum)
     local popup = WowStub.activePopup
     if not popup then

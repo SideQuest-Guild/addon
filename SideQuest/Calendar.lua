@@ -48,8 +48,8 @@ Calendar.busyUntil = 0
 Calendar.lastRequestAt = nil
 Calendar.firstRequestAt = nil
 -- Whether the calendar's contents can be trusted. Until then the calendar may read as empty, and planning against it
--- would add every event a second time. Set by CALENDAR_UPDATE_EVENT_LIST, by entries showing up in this month, or
--- by SETTLE_SECONDS passing since the first request (see Calendar.IsLoaded).
+-- would add every event a second time. Set by CALENDAR_UPDATE_EVENT_LIST, by guild entries showing up in this month,
+-- or by SETTLE_SECONDS passing since the first request (see Calendar.IsLoaded).
 Calendar.loaded = false
 
 local function now()
@@ -501,22 +501,27 @@ function Calendar.Step()
     SideQuest.Fire("SQ_CALENDAR_CHANGED")
 end
 
---- Whether anything shows in the month the calendar has open (holidays, resets and guild events all count).
-local function monthHasEntries()
+--- Whether a guild event shows in the month the calendar has open. Holidays and resets don't count: the client has
+-- those itself the moment the month opens, before the server's guild events arrive, and planning then reads every
+-- site event as missing (the login prompt for an event already on the calendar).
+local function monthHasGuildEntries()
     local info = C_Calendar.GetMonthInfo and C_Calendar.GetMonthInfo(0)
     for day = 1, (info and info.numDays) or 31 do
-        if C_Calendar.GetNumDayEvents(0, day) > 0 then
-            return true
+        for index = 1, C_Calendar.GetNumDayEvents(0, day) do
+            local e = C_Calendar.GetDayEvent(0, day, index)
+            if e and GUILD_KINDS[e.calendarType] then
+                return true
+            end
         end
     end
     return false
 end
 
---- Whether the calendar's contents can be planned against: the server has answered, the month shows entries, or a
--- request has had SETTLE_SECONDS to land.
+--- Whether the calendar's contents can be planned against: the server has answered, the month shows guild events,
+-- or a request has had SETTLE_SECONDS to land.
 function Calendar.IsLoaded()
     if not Calendar.loaded and Calendar.firstRequestAt
-        and (monthHasEntries() or now() - Calendar.firstRequestAt >= SETTLE_SECONDS) then
+        and (monthHasGuildEntries() or now() - Calendar.firstRequestAt >= SETTLE_SECONDS) then
         Calendar.loaded = true
     end
     return Calendar.loaded
@@ -646,8 +651,16 @@ function Calendar.ShowPrompt(actions)
 end
 
 --- Offer an officer who can edit the calendar a one-click way to catch it up, at most once per login or import.
--- "Later" (or Esc) silences it until the next import arrives. Members never see it.
+-- "Later" (or Esc) silences it until the next import arrives. Members never see it. A prompt still showing when the
+-- calendar turns out to match after all (the guild's events arrived after it was asked) closes itself.
 function Calendar.CheckPrompt()
+    if Calendar.prompted and StaticPopup_Visible and StaticPopup_Visible("SIDEQUEST_CALENDAR_PENDING") then
+        local actions = Calendar.Plan()
+        if actions and #actions == 0 then
+            StaticPopup_Hide("SIDEQUEST_CALENDAR_PENDING")
+        end
+        return
+    end
     if Calendar.prompted or Calendar.promptSilenced or not SideQuest.IsOfficer() then
         return
     end

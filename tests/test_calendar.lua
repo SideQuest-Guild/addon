@@ -64,16 +64,53 @@ return function(h)
         h.assertEq(#WowStub.calendar.events, 1, "adds once the client's calendar has had time to fill")
     end)
 
-    h.test("calendar: entries already in this month mean the calendar is in", function()
+    h.test("calendar: guild events already in this month mean the calendar is in", function()
         reset()
         Calendar.loaded = false
         local today = date("!*t", WowStub.time + WowStub.calendar.realmOffset)
-        table.insert(WowStub.calendar.events, { title = "Fishing Extravaganza", calendarType = "HOLIDAY",
+        table.insert(WowStub.calendar.events, { title = "Guild Meeting", calendarType = "GUILD_EVENT",
             year = today.year, month = today.month, day = today.day, hour = 14, minute = 0 })
         SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
-        Calendar.Step() -- asks; the holiday shows the month is filled
+        Calendar.Step() -- asks; a guild event shows the server's list is in
         Calendar.Step()
         h.assertEq(#WowStub.calendar.events, 2, "the site event goes on without waiting")
+    end)
+
+    h.test("calendar: holidays alone don't mean the guild's events are in, so login doesn't call a saved one missing",
+        function()
+            reset()
+            Calendar.loaded = false
+            WowStub.calendar.realmOffset = -6 * HOUR
+            local endsAt = WowStub.time + 2 * HOUR
+            local p = realmDate(endsAt)
+            -- the client has its holidays the moment the month opens; the server's guild events come after
+            table.insert(WowStub.calendar.events, { title = "Fishing Extravaganza", calendarType = "HOLIDAY",
+                year = p.year, month = p.month, day = p.day, hour = 14, minute = 0 })
+            SideQuestDB.calendarLinks["drive-1:end"] = { title = "Ends: Recruitment Drive", at = endsAt, year = p.year,
+                month = p.month, day = p.day, hour = p.hour, minute = p.min }
+            SideQuestDB.events = { { id = "drive-1", title = "Recruitment Drive", kind = "recruitment",
+                starts_at = WowStub.time - 14 * DAY, ends_at = endsAt } }
+            Calendar.prompted, Calendar.promptSilenced = false, false
+            SideQuest.Fire("SQ_CALENDAR_CHANGED") -- login: asks the server
+            SideQuest.Fire("SQ_CALENDAR_CHANGED")
+            h.assertEq(WowStub.activePopup, nil, "no prompt while only holidays are in")
+            table.insert(WowStub.calendar.events, { title = "Ends: Recruitment Drive", calendarType = "GUILD_EVENT",
+                eventType = Enum.CalendarEventType.Other, isLocked = true, year = p.year, month = p.month, day = p.day,
+                hour = p.hour, minute = p.min })
+            SideQuest.Fire("CALENDAR_UPDATE_EVENT_LIST")
+            h.assertEq(WowStub.activePopup, nil, "the drive's end is on the calendar: nothing to ask")
+        end)
+
+    h.test("calendar: a prompt that turns out stale closes itself once the calendar matches", function()
+        reset()
+        local p = realmDate(utcAt(2, 19))
+        SideQuestDB.events = { { id = "evt-1", title = "Molten Core", kind = "raid", starts_at = utcAt(2, 19) } }
+        SideQuest.Fire("SQ_IMPORT_APPLIED")
+        h.assertTrue(WowStub.activePopup ~= nil, "asked while the event looked missing")
+        table.insert(WowStub.calendar.events, { title = "Molten Core", calendarType = "GUILD_EVENT",
+            year = p.year, month = p.month, day = p.day, hour = 19, minute = 0 })
+        SideQuest.Fire("CALENDAR_UPDATE_EVENT_LIST")
+        h.assertEq(WowStub.activePopup, nil, "the event arrived: the prompt goes away")
     end)
 
     h.test("calendar: a site event goes on as a guild event at the realm's local time", function()
