@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.20.0 (2026-11-27)
+
+### New
+
+- Someone you skip in the recruiting popup never pops up again, on any of your characters
+
 ## v0.19.1 (2026-11-27)
 
 ### New
