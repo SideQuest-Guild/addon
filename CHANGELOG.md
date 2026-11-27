@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.20.1 (2026-11-27)
+
+### Fixed
+
+- The recruiting popup's Invite button sends the guild invite instead of a "protected function" error
+
 ## v0.20.0 (2026-11-27)
 
 ### New
